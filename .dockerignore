@@ -1,0 +1,8 @@
+docker_cache
+.github
+__pycache__
+images
+.vscode
+.mypy_cache
+target
+build
