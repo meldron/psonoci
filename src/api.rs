@@ -12,6 +12,8 @@ use uuid::Uuid;
 
 use crate::crypto::{open_secret_box, parse_secret_key};
 
+pub const USER_AGENT_NAME: &str = "psonoci";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SecretType {
     Website,
@@ -372,15 +374,11 @@ where
     T: Serialize,
     U: DeserializeOwned,
 {
-    let url = format!(
-        "{}/{}",
-        settings.server_url,
-        request.endpoint.as_str().to_owned()
-    );
+    let url = format!("{}/{}", settings.server_url, request.endpoint.as_str());
     let url_parsed = Url::parse(&url).context("url parsing error")?;
 
     let response = attohttpc::post(url_parsed)
-        .header("user-agent", "psonoci")
+        .header("user-agent", USER_AGENT_NAME)
         .timeout(Duration::from_secs(settings.timeout))
         .json(&request.body)
         .context("call body json serialization failed")?
