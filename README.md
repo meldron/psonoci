@@ -98,7 +98,9 @@ ARGS:
 
 ## CI/CD Usage Example
 
-See [ci.sh](./examples/ci.sh) for an example script on how to use `psonoci` during your CI/CD process.
+TODO
+
+<!-- See [ci.sh](./examples/ci.sh) for an example script on how to use `psonoci` during your CI/CD process. -->
 
 ## Build
 
