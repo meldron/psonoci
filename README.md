@@ -1,2 +1,0 @@
-# psonoci
-psono ci client
