@@ -96,6 +96,14 @@ ARGS:
                       gpg_key_private, gpg_key_public]
 ```
 
+Supported secret types:
+
+-   Website
+-   Application
+-   Note
+-   GPGKey
+-   Bookmark
+
 ## CI/CD Usage Example
 
 TODO
@@ -123,7 +131,7 @@ Cleanup:
 
 ```
 $> file build/psono
-build/psono: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, stripped
+build/psonoci: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, stripped
 ```
 
 This way is also used to create the `psonoci` releases.
