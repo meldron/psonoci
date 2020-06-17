@@ -48,6 +48,7 @@ pub enum SecretValue {
     gpg_key_name,
     gpg_key_private,
     gpg_key_public,
+    secret_type,
 }
 }
 
@@ -65,6 +66,7 @@ impl SecretValue {
             &SecretValue::gpg_key_name => "gpg_key_name",
             &SecretValue::gpg_key_private => "gpg_key_private",
             &SecretValue::gpg_key_public => "gpg_key_public",
+            &SecretValue::secret_type => "type",
         }
     }
 }
@@ -210,6 +212,7 @@ impl Secret {
             SecretValue::gpg_key_name => self.gpg_key_name,
             SecretValue::gpg_key_private => self.gpg_key_private,
             SecretValue::gpg_key_public => self.gpg_key_public,
+            SecretValue::secret_type => Some(self.secret_type.as_str().to_owned()),
         }
     }
 
