@@ -73,6 +73,9 @@ impl SecretValue {
     }
 }
 
+const PARSE_URL_ERROR_INVALID_SCHEME: &str =
+    "Url has unsupported scheme (only http & https schemes are supported)";
+
 fn parse_url(src: &str) -> Result<Url> {
     let url = Url::parse(src)?;
 
@@ -80,11 +83,7 @@ fn parse_url(src: &str) -> Result<Url> {
     match url.scheme() {
         "http" => {}
         "https" => {}
-        _ => {
-            return Err(anyhow!(
-                "Url has unsupported scheme (only http & https schemes are supported)"
-            ))
-        }
+        _ => return Err(anyhow!(PARSE_URL_ERROR_INVALID_SCHEME)),
     };
     url.host().ok_or(anyhow!("Url has invalid host)"))?;
     url.port_or_known_default()
@@ -421,4 +420,50 @@ pub fn get_secret(secret_id: &Uuid, settings: &ApiSettings) -> Result<Secret> {
         .context("get secret decryption failed")?;
 
     Ok(secret)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn parse_url__valid__url() {
+        let result = parse_url("https://psono.pw/server");
+
+        assert!(result.is_ok());
+
+        let url = result.unwrap();
+
+        assert_eq!(url.scheme(), "https");
+        assert_eq!(url.host_str(), Some("psono.pw"));
+        assert_eq!(url.port(), None);
+        assert_eq!(url.path(), "/server");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn parse_url__invalid_scheme() {
+        let result = parse_url("ftp://psono.pw/server");
+
+        assert!(result.is_err());
+
+        assert_eq!(
+            result.unwrap_err().to_string().as_str(),
+            PARSE_URL_ERROR_INVALID_SCHEME
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn parse_url__invalid_port() {
+        let result = parse_url("https://psono.pw:66000/server");
+
+        assert!(result.is_err());
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            url::ParseError::InvalidPort.to_string()
+        );
+    }
 }
