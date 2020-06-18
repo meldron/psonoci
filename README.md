@@ -1,6 +1,6 @@
 # psonoci
 
-[PSONO](https://psono.com/) console client.
+[PSONO](https://psono.com/) CI client.
 
 PSONO is a secure Open Source Password Manager, which can be self hosted by anyone so you have to trust no one.
 
