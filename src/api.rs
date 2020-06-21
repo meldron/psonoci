@@ -1,8 +1,15 @@
+use std::fs::File;
+use std::io::Read;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
-use attohttpc::Method;
+// use attohttpc::Method;
 use clap::arg_enum;
+use reqwest::blocking::{Client, ClientBuilder};
+use reqwest::redirect::Policy;
+use reqwest::Certificate;
+use reqwest::Method;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -12,7 +19,7 @@ use uuid::Uuid;
 
 use crate::crypto::{open_secret_box, parse_secret_key};
 
-pub const USER_AGENT_NAME: &str = "psonoci";
+static USER_AGENT_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SecretType {
@@ -92,8 +99,14 @@ fn parse_url(src: &str) -> Result<Url> {
     Ok(url)
 }
 
+enum CertificateEncoding {
+    DER,
+    PEM,
+}
+
 #[derive(StructOpt, Debug)]
 pub struct ApiSettings {
+    // psono server options
     #[structopt(long, env = "PSONO_CI_API_KEY_ID", help = "Api key as uuid")]
     pub api_key_id: Uuid,
     #[structopt(
@@ -110,6 +123,8 @@ pub struct ApiSettings {
         help = "Url of the psono backend server"
     )]
     pub server_url: Url,
+
+    // http(s) request options
     #[structopt(
         long,
         env = "PSONO_CI_TIMEOUT",
@@ -117,6 +132,36 @@ pub struct ApiSettings {
         help = "Connection timeout in seconds"
     )]
     pub timeout: u64,
+    #[structopt(
+        long,
+        env = "PSONO_CI_MAX_REDIRECTS",
+        default_value = "0",
+        help = "Maximum numbers of redirects"
+    )]
+    pub max_redirects: u8,
+
+    // TLS options and flags
+    #[structopt(
+        long,
+        help = "Use native TLS implementation (on linux a vendored openssl version is used)"
+    )]
+    pub use_native_tls: bool,
+    #[structopt(long, help = "Controls the use of hostname verification.")]
+    pub danger_accept_invalid_hostnames: bool,
+    #[structopt(long, help = "Controls the use of certificate verification.")]
+    pub danger_accept_invalid_certs: bool,
+    #[structopt(
+        long,
+        parse(from_os_str),
+        help = "Path to a DER encoded root certificate which should be added to the trust store"
+    )]
+    pub add_der_root_certificate: Option<PathBuf>,
+    #[structopt(
+        long,
+        parse(from_os_str),
+        help = "Path to a pem encoded root certificate which should be added to the trust store"
+    )]
+    pub add_pem_root_certificate: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -322,7 +367,7 @@ impl Secret {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Request<T> {
+pub struct Route<T> {
     pub method: Method,
     pub endpoint: Endpoint,
     pub body: T,
@@ -368,24 +413,84 @@ impl SecretResponse {
     }
 }
 
-pub fn call<T, U>(settings: &ApiSettings, request: Request<T>) -> Result<U>
+fn load_root_certificate(encoding: CertificateEncoding, path: &PathBuf) -> Result<Certificate> {
+    let mut buf = Vec::new();
+    File::open(path)
+        .context("could not open certificate")?
+        .read_to_end(&mut buf)
+        .context("could not read certificate")?;
+
+    let cert_result = match encoding {
+        CertificateEncoding::DER => Certificate::from_der(&buf),
+        CertificateEncoding::PEM => Certificate::from_pem(&buf),
+    };
+
+    let cert = cert_result.context("could not decode certificate")?;
+
+    Ok(cert)
+}
+
+pub fn call<T, U>(settings: &ApiSettings, route: Route<T>) -> Result<U>
 where
     T: Serialize,
     U: DeserializeOwned,
 {
-    let url = format!("{}/{}", settings.server_url, request.endpoint.as_str());
+    let url = format!("{}/{}", settings.server_url, route.endpoint.as_str());
     let url_parsed = Url::parse(&url).context("url parsing error")?;
 
-    let response = attohttpc::post(url_parsed)
-        .header("user-agent", USER_AGENT_NAME)
-        .timeout(Duration::from_secs(settings.timeout))
-        .json(&request.body)
-        .context("call body json serialization failed")?
-        .send()
-        .context("http(s) request failed")?;
+    let redirect_policy: Policy = match settings.max_redirects {
+        0 => Policy::none(),
+        _ => Policy::limited(settings.max_redirects as usize),
+    };
 
-    if !response.is_success() {
-        return Err(anyhow!("{}", response.status()));
+    let mut client_builder: ClientBuilder = Client::builder()
+        .user_agent(USER_AGENT_NAME)
+        .redirect(redirect_policy)
+        .timeout(Duration::from_secs(settings.timeout));
+
+    if settings.add_der_root_certificate.is_some() {
+        let cert_der_path = settings.add_der_root_certificate.as_ref().unwrap();
+        let cert_der = load_root_certificate(CertificateEncoding::DER, cert_der_path)
+            .context("adding DER root certificate failed")?;
+        client_builder = client_builder.add_root_certificate(cert_der);
+    }
+
+    if settings.add_pem_root_certificate.is_some() {
+        let cert_pem_path = settings.add_pem_root_certificate.as_ref().unwrap();
+        let cert_pem = load_root_certificate(CertificateEncoding::PEM, cert_pem_path)
+            .context("adding PEM root certificate failed")?;
+        client_builder = client_builder.add_root_certificate(cert_pem);
+    }
+
+    // we always use native-tls for making dangerous calls
+    // because right now rust-tls cannot handle all of them
+    if settings.use_native_tls
+        || settings.danger_accept_invalid_certs
+        || settings.danger_accept_invalid_hostnames
+    {
+        client_builder = client_builder
+            .use_native_tls()
+            .danger_accept_invalid_certs(settings.danger_accept_invalid_certs)
+            .danger_accept_invalid_hostnames(settings.danger_accept_invalid_hostnames);
+    } else {
+        client_builder = client_builder.use_rustls_tls();
+    }
+
+    let client = client_builder
+        .build()
+        .context("building reqwest client failed")?;
+
+    let response = client
+        .request(route.method, url_parsed)
+        .json(&route.body)
+        .send()
+        .context("request failed")?;
+
+    let status = response.status();
+
+    if !status.is_success() {
+        let reason = status.canonical_reason().unwrap_or("unknown").to_owned();
+        return Err(anyhow!("{}: {}", response.status(), reason));
     }
 
     let body_raw = response.bytes().context("read response body failed")?;
@@ -406,7 +511,7 @@ pub fn get_secret(secret_id: &Uuid, settings: &ApiSettings) -> Result<Secret> {
         secret_id: secret_id.to_hyphenated().to_string().to_lowercase(),
     };
 
-    let request = Request {
+    let request = Route {
         method: Method::POST,
         endpoint: Endpoint::ApiKeyAccessSecret,
         body,
