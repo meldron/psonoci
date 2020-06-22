@@ -7,6 +7,7 @@ use anyhow::{anyhow, Context, Result};
 // use attohttpc::Method;
 use clap::arg_enum;
 use reqwest::blocking::{Client, ClientBuilder};
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, USER_AGENT};
 use reqwest::redirect::Policy;
 use reqwest::Certificate;
 use reqwest::Method;
@@ -20,6 +21,10 @@ use uuid::Uuid;
 use crate::crypto::{open_secret_box, parse_secret_key};
 
 static USER_AGENT_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+
+static CERTIFICATE_ERROR_DECODE: &str = "could not decode certificate";
+static CERTIFICATE_ERROR_OPEN: &str = "could not open certificate";
+static CERTIFICATE_ERROR_READ: &str = "could not read certificate";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SecretType {
@@ -152,16 +157,18 @@ pub struct ApiSettings {
     pub danger_accept_invalid_certs: bool,
     #[structopt(
         long,
+        env = "PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH",
         parse(from_os_str),
         help = "Path to a DER encoded root certificate which should be added to the trust store"
     )]
-    pub add_der_root_certificate: Option<PathBuf>,
+    pub der_root_certificate_path: Option<PathBuf>,
     #[structopt(
         long,
+        env = "PSONO_CI_ADD_PEM_ROOT_CERTIFICATE_PATH",
         parse(from_os_str),
         help = "Path to a pem encoded root certificate which should be added to the trust store"
     )]
-    pub add_pem_root_certificate: Option<PathBuf>,
+    pub pem_root_certificate_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -416,47 +423,47 @@ impl SecretResponse {
 fn load_root_certificate(encoding: CertificateEncoding, path: &PathBuf) -> Result<Certificate> {
     let mut buf = Vec::new();
     File::open(path)
-        .context("could not open certificate")?
+        .context(CERTIFICATE_ERROR_OPEN)?
         .read_to_end(&mut buf)
-        .context("could not read certificate")?;
+        .context(CERTIFICATE_ERROR_READ)?;
 
     let cert_result = match encoding {
         CertificateEncoding::DER => Certificate::from_der(&buf),
         CertificateEncoding::PEM => Certificate::from_pem(&buf),
     };
 
-    let cert = cert_result.context("could not decode certificate")?;
+    let cert = cert_result.context(CERTIFICATE_ERROR_DECODE)?;
 
     Ok(cert)
 }
 
-pub fn call<T, U>(settings: &ApiSettings, route: Route<T>) -> Result<U>
-where
-    T: Serialize,
-    U: DeserializeOwned,
-{
-    let url = format!("{}/{}", settings.server_url, route.endpoint.as_str());
-    let url_parsed = Url::parse(&url).context("url parsing error")?;
-
+pub fn make_request(
+    settings: &ApiSettings,
+    url: Url,
+    method: Method,
+    json_body: Option<String>,
+) -> Result<Vec<u8>> {
     let redirect_policy: Policy = match settings.max_redirects {
         0 => Policy::none(),
         _ => Policy::limited(settings.max_redirects as usize),
     };
 
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_NAME));
+
     let mut client_builder: ClientBuilder = Client::builder()
-        .user_agent(USER_AGENT_NAME)
         .redirect(redirect_policy)
         .timeout(Duration::from_secs(settings.timeout));
 
-    if settings.add_der_root_certificate.is_some() {
-        let cert_der_path = settings.add_der_root_certificate.as_ref().unwrap();
+    if settings.der_root_certificate_path.is_some() {
+        let cert_der_path = settings.der_root_certificate_path.as_ref().unwrap();
         let cert_der = load_root_certificate(CertificateEncoding::DER, cert_der_path)
             .context("adding DER root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_der);
     }
 
-    if settings.add_pem_root_certificate.is_some() {
-        let cert_pem_path = settings.add_pem_root_certificate.as_ref().unwrap();
+    if settings.pem_root_certificate_path.is_some() {
+        let cert_pem_path = settings.pem_root_certificate_path.as_ref().unwrap();
         let cert_pem = load_root_certificate(CertificateEncoding::PEM, cert_pem_path)
             .context("adding PEM root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_pem);
@@ -480,9 +487,15 @@ where
         .build()
         .context("building reqwest client failed")?;
 
-    let response = client
-        .request(route.method, url_parsed)
-        .json(&route.body)
+    let mut request_builder = client.request(method, url);
+
+    if json_body.is_some() {
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        request_builder = request_builder.body(json_body.unwrap());
+    }
+
+    let response = request_builder
+        .headers(headers)
         .send()
         .context("request failed")?;
 
@@ -495,7 +508,25 @@ where
 
     let body_raw = response.bytes().context("read response body failed")?;
 
-    let body: U = serde_json::from_slice(body_raw.as_ref())
+    let vec = body_raw.to_vec();
+
+    Ok(vec)
+}
+
+fn call_route<T, U>(settings: &ApiSettings, route: Route<T>) -> Result<U>
+where
+    T: Serialize,
+    U: DeserializeOwned,
+{
+    let url = format!("{}/{}", settings.server_url, route.endpoint.as_str());
+    let url_parsed = Url::parse(&url).context("url parsing error")?;
+
+    let body = serde_json::to_string(&route.body)?;
+
+    let response_raw: Vec<u8> = make_request(settings, url_parsed, route.method, Some(body))
+        .context("make request failed")?;
+
+    let body: U = serde_json::from_slice(response_raw.as_ref())
         .context("response body json deserialization failed")?;
 
     Ok(body)
@@ -518,7 +549,7 @@ pub fn get_secret(secret_id: &Uuid, settings: &ApiSettings) -> Result<Secret> {
     };
 
     let secret_response: SecretResponse =
-        call(settings, request).context("get secret api call failed")?;
+        call_route(settings, request).context("get secret api call failed")?;
 
     let secret = secret_response
         .open(&settings.api_secret_key_hex)
@@ -530,6 +561,28 @@ pub fn get_secret(secret_id: &Uuid, settings: &ApiSettings) -> Result<Secret> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    static BAD_SSL_UNTRUSTED_ROOT_URL: &str = "https://untrusted-root.badssl.com/";
+    static BAD_SSL_EXPIRED_URL: &str = "https://expired.badssl.com/";
+
+    static BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH: &str = "test_files/untrusted-root.badssl.com_ca.pem";
+
+    pub fn debug_api_settings() -> ApiSettings {
+        ApiSettings {
+            api_key_id: Uuid::parse_str("d65eda03-2362-498e-b9d6-8b34025572ab")
+                .expect("debug uuid parsing failed"),
+            api_secret_key_hex: "dc6e4d49390041e6ac6e96493aac300fa7327f9d6d71b58cd161ea17da164fbf"
+                .to_string(),
+            danger_accept_invalid_certs: false,
+            danger_accept_invalid_hostnames: false,
+            der_root_certificate_path: None,
+            max_redirects: 0,
+            pem_root_certificate_path: None,
+            server_url: Url::parse("https://psono.pw/server").expect("debug url parsing failed"),
+            timeout: 60,
+            use_native_tls: false,
+        }
+    }
 
     #[test]
     #[allow(non_snake_case)]
@@ -570,5 +623,82 @@ mod tests {
             result.unwrap_err().to_string(),
             url::ParseError::InvalidPort.to_string()
         );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn load_root_certificate__pem_success() {
+        let mut cert_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        cert_path.push(BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH);
+
+        let result = load_root_certificate(CertificateEncoding::PEM, &cert_path);
+
+        assert!(result.is_ok())
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn load_root_certificate__request_der_supply_pem() {
+        let mut cert_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        cert_path.push(BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH);
+
+        let result = load_root_certificate(CertificateEncoding::DER, &cert_path);
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            CERTIFICATE_ERROR_DECODE.to_string()
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn make_request__untrusted_root_with_supplied_ca__success() {
+        let mut cert_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        cert_path.push(BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH);
+
+        let url = Url::parse(BAD_SSL_UNTRUSTED_ROOT_URL).expect("parsing url failed");
+        let mut settings = debug_api_settings();
+
+        settings.pem_root_certificate_path = Some(cert_path);
+
+        let result = make_request(&settings, url, Method::GET, None);
+
+        assert!(result.is_ok())
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn make_request__untrusted_root__failure() {
+        let url = Url::parse(BAD_SSL_UNTRUSTED_ROOT_URL).expect("parsing url failed");
+        let settings = debug_api_settings();
+
+        let result = make_request(&settings, url, Method::GET, None);
+
+        assert!(result.is_err())
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn make_request__expired__failure() {
+        let url = Url::parse(BAD_SSL_EXPIRED_URL).expect("parsing url failed");
+        let settings = debug_api_settings();
+
+        let result = make_request(&settings, url, Method::GET, None);
+
+        assert!(result.is_err())
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn make_request__expired_with_danger_accept_invalid_certs__success() {
+        let url = Url::parse(BAD_SSL_EXPIRED_URL).expect("parsing url failed");
+        let mut settings = debug_api_settings();
+
+        settings.danger_accept_invalid_certs = true;
+
+        let result = make_request(&settings, url, Method::GET, None);
+
+        assert!(result.is_ok())
     }
 }
