@@ -40,6 +40,8 @@ SUBCOMMANDS:
 
 These options must be specified before the subcommand:
 
+<!-- TODO UPDATE with new options -->
+
 | Option                   | Env var                     | Type               | Required | Default | Description                                                               |
 | ------------------------ | --------------------------- | ------------------ | -------- | ------- | ------------------------------------------------------------------------- |
 | --api_key_id             | PSONO_CI_API_KEY_ID         | UUID               | yes      | None    | The UUID of your API key                                                  |
