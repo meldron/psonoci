@@ -112,24 +112,14 @@ enum CertificateEncoding {
 #[derive(StructOpt, Debug)]
 pub struct ApiSettings {
     // psono server options
-    #[structopt(long, env = "PSONO_CI_API_KEY_ID", help = "Api key as uuid")]
-    pub api_key_id: Uuid,
-    #[structopt(
-        long,
-        env = "PSONO_CI_API_SECRET_KEY_HEX",
-        parse(try_from_str = parse_secret_key),
-        help = "Api secret key as 64 byte hex string"
-    )]
-    pub api_secret_key_hex: String,
-    #[structopt(
-        long,
-        env = "PSONO_CI_SERVER_URL",
-        parse(try_from_str = parse_url),
-        help = "Url of the psono backend server"
-    )]
-    pub server_url: Url,
+    #[structopt(flatten)]
+    pub psono_settings: PsonoSettings,
+    #[structopt(flatten)]
+    pub http_options: HttpOptions,
+}
 
-    // http(s) request options
+#[derive(StructOpt, Debug)]
+pub struct HttpOptions {
     #[structopt(
         long,
         env = "PSONO_CI_TIMEOUT",
@@ -148,13 +138,14 @@ pub struct ApiSettings {
     // TLS options and flags
     #[structopt(
         long,
-        help = "Use native TLS implementation (on linux a vendored openssl version is used)"
+        help = "Use native TLS implementation (for linux musel builds a vendored openssl 1.1.1g is used)"
     )]
     pub use_native_tls: bool,
-    #[structopt(long, help = "Controls the use of hostname verification.")]
-    pub danger_accept_invalid_hostnames: bool,
-    #[structopt(long, help = "Controls the use of certificate verification.")]
-    pub danger_accept_invalid_certs: bool,
+    #[structopt(
+        long,
+        help = "DANGER: completely disables all TLS (common name and certificate) verification. You should not use this. A better approach is just using plain http so there's no false sense of security"
+    )]
+    pub danger_disable_tls_verification: bool,
     #[structopt(
         long,
         env = "PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH",
@@ -169,6 +160,26 @@ pub struct ApiSettings {
         help = "Path to a pem encoded root certificate which should be added to the trust store"
     )]
     pub pem_root_certificate_path: Option<PathBuf>,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct PsonoSettings {
+    #[structopt(long, env = "PSONO_CI_API_KEY_ID", help = "Api key as uuid")]
+    pub api_key_id: Uuid,
+    #[structopt(
+        long,
+        env = "PSONO_CI_API_SECRET_KEY_HEX",
+        parse(try_from_str = parse_secret_key),
+        help = "Api secret key as 64 byte hex string"
+    )]
+    pub api_secret_key_hex: String,
+    #[structopt(
+        long,
+        env = "PSONO_CI_SERVER_URL",
+        parse(try_from_str = parse_url),
+        help = "Url of the psono backend server"
+    )]
+    pub server_url: Url,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -438,14 +449,14 @@ fn load_root_certificate(encoding: CertificateEncoding, path: &PathBuf) -> Resul
 }
 
 pub fn make_request(
-    settings: &ApiSettings,
+    http_options: &HttpOptions,
     url: Url,
     method: Method,
     json_body: Option<String>,
 ) -> Result<Vec<u8>> {
-    let redirect_policy: Policy = match settings.max_redirects {
+    let redirect_policy: Policy = match http_options.max_redirects {
         0 => Policy::none(),
-        _ => Policy::limited(settings.max_redirects as usize),
+        _ => Policy::limited(http_options.max_redirects as usize),
     };
 
     let mut headers = HeaderMap::new();
@@ -453,17 +464,17 @@ pub fn make_request(
 
     let mut client_builder: ClientBuilder = Client::builder()
         .redirect(redirect_policy)
-        .timeout(Duration::from_secs(settings.timeout));
+        .timeout(Duration::from_secs(http_options.timeout));
 
-    if settings.der_root_certificate_path.is_some() {
-        let cert_der_path = settings.der_root_certificate_path.as_ref().unwrap();
+    if http_options.der_root_certificate_path.is_some() {
+        let cert_der_path = http_options.der_root_certificate_path.as_ref().unwrap();
         let cert_der = load_root_certificate(CertificateEncoding::DER, cert_der_path)
             .context("adding DER root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_der);
     }
 
-    if settings.pem_root_certificate_path.is_some() {
-        let cert_pem_path = settings.pem_root_certificate_path.as_ref().unwrap();
+    if http_options.pem_root_certificate_path.is_some() {
+        let cert_pem_path = http_options.pem_root_certificate_path.as_ref().unwrap();
         let cert_pem = load_root_certificate(CertificateEncoding::PEM, cert_pem_path)
             .context("adding PEM root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_pem);
@@ -471,14 +482,11 @@ pub fn make_request(
 
     // we always use native-tls for making dangerous calls
     // because right now rust-tls cannot handle all of them
-    if settings.use_native_tls
-        || settings.danger_accept_invalid_certs
-        || settings.danger_accept_invalid_hostnames
-    {
+    if http_options.use_native_tls || http_options.danger_disable_tls_verification {
         client_builder = client_builder
             .use_native_tls()
-            .danger_accept_invalid_certs(settings.danger_accept_invalid_certs)
-            .danger_accept_invalid_hostnames(settings.danger_accept_invalid_hostnames);
+            .danger_accept_invalid_certs(http_options.danger_disable_tls_verification)
+            .danger_accept_invalid_hostnames(http_options.danger_disable_tls_verification);
     } else {
         client_builder = client_builder.use_rustls_tls();
     }
@@ -513,17 +521,17 @@ pub fn make_request(
     Ok(vec)
 }
 
-fn call_route<T, U>(settings: &ApiSettings, route: Route<T>) -> Result<U>
+fn call_route<T, U>(server_url: &Url, http_options: &HttpOptions, route: Route<T>) -> Result<U>
 where
     T: Serialize,
     U: DeserializeOwned,
 {
-    let url = format!("{}/{}", settings.server_url, route.endpoint.as_str());
+    let url = format!("{}/{}", server_url, route.endpoint.as_str());
     let url_parsed = Url::parse(&url).context("url parsing error")?;
 
     let body = serde_json::to_string(&route.body)?;
 
-    let response_raw: Vec<u8> = make_request(settings, url_parsed, route.method, Some(body))
+    let response_raw: Vec<u8> = make_request(http_options, url_parsed, route.method, Some(body))
         .context("make request failed")?;
 
     let body: U = serde_json::from_slice(response_raw.as_ref())
@@ -535,6 +543,7 @@ where
 pub fn get_secret(secret_id: &Uuid, settings: &ApiSettings) -> Result<Secret> {
     let body = SecretRequestBody {
         api_key_id: settings
+            .psono_settings
             .api_key_id
             .to_hyphenated()
             .to_string()
@@ -548,11 +557,15 @@ pub fn get_secret(secret_id: &Uuid, settings: &ApiSettings) -> Result<Secret> {
         body,
     };
 
-    let secret_response: SecretResponse =
-        call_route(settings, request).context("get secret api call failed")?;
+    let secret_response: SecretResponse = call_route(
+        &settings.psono_settings.server_url,
+        &settings.http_options,
+        request,
+    )
+    .context("get secret api call failed")?;
 
     let secret = secret_response
-        .open(&settings.api_secret_key_hex)
+        .open(&settings.psono_settings.api_secret_key_hex)
         .context("get secret decryption failed")?;
 
     Ok(secret)
@@ -567,20 +580,32 @@ mod tests {
 
     static BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH: &str = "test_files/untrusted-root.badssl.com_ca.pem";
 
-    pub fn debug_api_settings() -> ApiSettings {
-        ApiSettings {
+    pub fn debug_psono_settings() -> PsonoSettings {
+        PsonoSettings {
             api_key_id: Uuid::parse_str("d65eda03-2362-498e-b9d6-8b34025572ab")
                 .expect("debug uuid parsing failed"),
             api_secret_key_hex: "dc6e4d49390041e6ac6e96493aac300fa7327f9d6d71b58cd161ea17da164fbf"
                 .to_string(),
-            danger_accept_invalid_certs: false,
-            danger_accept_invalid_hostnames: false,
+            server_url: Url::parse("https://psono.pw/server").expect("debug url parsing failed"),
+        }
+    }
+
+    pub fn debug_http_options() -> HttpOptions {
+        HttpOptions {
+            danger_disable_tls_verification: false,
             der_root_certificate_path: None,
             max_redirects: 0,
             pem_root_certificate_path: None,
-            server_url: Url::parse("https://psono.pw/server").expect("debug url parsing failed"),
             timeout: 60,
             use_native_tls: false,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn debug_api_settings() -> ApiSettings {
+        ApiSettings {
+            psono_settings: debug_psono_settings(),
+            http_options: debug_http_options(),
         }
     }
 
@@ -658,11 +683,11 @@ mod tests {
         cert_path.push(BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH);
 
         let url = Url::parse(BAD_SSL_UNTRUSTED_ROOT_URL).expect("parsing url failed");
-        let mut settings = debug_api_settings();
+        let mut options = debug_http_options();
 
-        settings.pem_root_certificate_path = Some(cert_path);
+        options.pem_root_certificate_path = Some(cert_path);
 
-        let result = make_request(&settings, url, Method::GET, None);
+        let result = make_request(&options, url, Method::GET, None);
 
         assert!(result.is_ok())
     }
@@ -671,9 +696,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn make_request__untrusted_root__failure() {
         let url = Url::parse(BAD_SSL_UNTRUSTED_ROOT_URL).expect("parsing url failed");
-        let settings = debug_api_settings();
+        let options = debug_http_options();
 
-        let result = make_request(&settings, url, Method::GET, None);
+        let result = make_request(&options, url, Method::GET, None);
 
         assert!(result.is_err())
     }
@@ -682,9 +707,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn make_request__expired__failure() {
         let url = Url::parse(BAD_SSL_EXPIRED_URL).expect("parsing url failed");
-        let settings = debug_api_settings();
+        let options = debug_http_options();
 
-        let result = make_request(&settings, url, Method::GET, None);
+        let result = make_request(&options, url, Method::GET, None);
 
         assert!(result.is_err())
     }
@@ -693,11 +718,11 @@ mod tests {
     #[allow(non_snake_case)]
     fn make_request__expired_with_danger_accept_invalid_certs__success() {
         let url = Url::parse(BAD_SSL_EXPIRED_URL).expect("parsing url failed");
-        let mut settings = debug_api_settings();
+        let mut options = debug_http_options();
 
-        settings.danger_accept_invalid_certs = true;
+        options.danger_disable_tls_verification = true;
 
-        let result = make_request(&settings, url, Method::GET, None);
+        let result = make_request(&options, url, Method::GET, None);
 
         assert!(result.is_ok())
     }
