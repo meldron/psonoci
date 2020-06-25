@@ -1,0 +1,6 @@
+FROM alpine:3.12
+
+
+RUN apk --no-cache add wget=1.20.3-r1 gnupg==2.2.20-r0 && \
+    wget http://localhost:8000/psonoci.asc && \\
+    wget http://localhost:8000/psonoci
