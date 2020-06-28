@@ -44,11 +44,11 @@ jobs:
 
             - name: Pull docker image used by cross
               if: matrix.target != 'x86_64-pc-windows-gnu'
-              run: docker pull ${{ builder_image }}:${{ matrix.target }} || true
+              run: docker pull $builder_image:${{ matrix.target }} || true
 
             - name: Build docker image used by cross
               if: matrix.target != 'x86_64-pc-windows-gnu'
-              run: docker build build_files --cache-from ${{ builder_image }}:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag ${{ builder_image }}:${{ matrix.target }}
+              run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
             - uses: actions-rs/cargo@v1
               with:
