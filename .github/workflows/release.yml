@@ -32,7 +32,7 @@ jobs:
             SHA8: $(git rev-parse --short=8 ${{ github.sha }})
         strategy:
             matrix:
-                build: [linux, linux-arm, linux-aarch64, macos, win-gnu]
+                build: [linux, linux-armv7, linux-aarch64, macos, win-gnu]
                 include:
                     - build: linux
                       os: ubuntu-18.04
