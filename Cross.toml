@@ -3,13 +3,13 @@ passthrough = [
     "RUSTFLAGS",
 ]
 [target.armv7-unknown-linux-musleabihf]
-image = "psonoci-armv7-unknown-linux-musleabihf"
+image = "meldron/psonoci_builder:armv7-unknown-linux-musleabihf"
 
 [target.aarch64-unknown-linux-musl]
-image = "psonoci-aarch64-unknown-linux-musl"
+image = "meldron/psonoci_builder:aarch64-unknown-linux-musl"
 
 [target.aarch64-unknown-linux-gnu]
-image = "psonoci-aarch64-unknown-linux-gnu"
+image = "meldron/psonoci_builder:aarch64-unknown-linux-gnu"
 
 [target.x86_64-unknown-linux-musl]
-image = "psonoci-x86_64-unknown-linux-musl"
+image = "meldron/psonoci_builder:x86_64-unknown-linux-musl"
