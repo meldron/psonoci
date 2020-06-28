@@ -25,6 +25,7 @@ jobs:
         runs-on: ubuntu-latest
         env:
             builder_image: meldron/psonoci_builder
+            SHA8: ${GITHUB_SHA::8}
         strategy:
             matrix:
                 target:
@@ -46,9 +47,9 @@ jobs:
               if: matrix.target != 'x86_64-pc-windows-gnu'
               run: docker pull $builder_image:${{ matrix.target }} || true
 
-            - name: Build docker image used by cross
-              if: matrix.target != 'x86_64-pc-windows-gnu'
-              run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
+            # - name: Build docker image used by cross
+            #   if: matrix.target != 'x86_64-pc-windows-gnu'
+            #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
             - uses: actions-rs/cargo@v1
               with:
@@ -59,13 +60,13 @@ jobs:
             - uses: actions/upload-artifact@v2
               if: matrix.target != 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${GITHUB_SHA::8}-${{ matrix.target }}
+                  name: psonoci-$SHA8-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci
 
             - uses: actions/upload-artifact@v2
               if: matrix.target == 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${GITHUB_SHA::8}-${{ matrix.target }}
+                  name: psonoci-$SHA8-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci.exe
             # - uses: actions-rs/cargo@v1
             #   with:
