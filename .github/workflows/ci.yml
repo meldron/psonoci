@@ -60,13 +60,13 @@ jobs:
             - uses: actions/upload-artifact@v2
               if: matrix.target != 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${SHA8}-${{ matrix.target }}
+                  name: psonoci-${{SHA8}}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci
 
             - uses: actions/upload-artifact@v2
               if: matrix.target == 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${SHA8}-${{ matrix.target }}
+                  name: psonoci-${{SHA8}}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci.exe
             # - uses: actions-rs/cargo@v1
             #   with:
