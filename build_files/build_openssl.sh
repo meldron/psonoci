@@ -43,7 +43,7 @@ main() {
       --prefix=/openssl \
       no-dso \
       "$os" \
-      -fPIC "$disable_secure_memory" \
+      -fPIC $disable_secure_memory \
       "${@:3}"
     nice make -j"$(nproc)"
     make install
