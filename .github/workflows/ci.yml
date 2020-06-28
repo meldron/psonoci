@@ -1,35 +1,37 @@
 on: push
 
-name: Continuous integration
+name: Build
 
 jobs:
-    ci-macos:
-        runs-on: macos-latest
-        steps:
-            - uses: actions/checkout@v2
+    # build-macos:
+    #     runs-on: macos-latest
+    #     steps:
+    #         - uses: actions/checkout@v2
 
-            - uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: stable
+    #         - uses: actions-rs/toolchain@v1
+    #           with:
+    #               toolchain: stable
 
-            - uses: actions-rs/cargo@v1
-              with:
-                  command: build
-                  args: --release
+    #         - uses: actions-rs/cargo@v1
+    #           with:
+    #               command: build
+    #               args: --release
 
-            - uses: actions/upload-artifact@v2
-              with:
-                  name: psonoci-${{ steps.vars.outputs.sha_short }}-x86_64-apple-darwin
-                  path: target/release/psonoci
-    ci:
+    #         - uses: actions/upload-artifact@v2
+    #           with:
+    #               name: psonoci-${GITHUB_SHA::8}-x86_64-apple-darwin
+    #               path: target/release/psonoci
+    build:
         runs-on: ubuntu-latest
+        env:
+            builder_image: meldron/psonoci_builder
         strategy:
             matrix:
                 target:
-                    - aarch64-unknown-linux-musl
-                    - armv7-unknown-linux-musleabihf
                     - x86_64-unknown-linux-musl
-                    - x86_64-pc-windows-gnu
+                    # - aarch64-unknown-linux-musl
+                    # - armv7-unknown-linux-musleabihf
+                    # - x86_64-pc-windows-gnu
 
         steps:
             - uses: actions/checkout@v2
@@ -40,9 +42,13 @@ jobs:
                   target: ${{ matrix.target }}
                   override: true
 
-            - name: Build the tagged Docker image
+            - name: Pull docker image used by cross
               if: matrix.target != 'x86_64-pc-windows-gnu'
-              run: docker build build_files --file build_files/Dockerfile-${{ matrix.target }} --tag psonoci-${{ matrix.target }}
+              run: docker pull ${{ builder_image }}:${{ matrix.target }} || true
+
+            - name: Build docker image used by cross
+              if: matrix.target != 'x86_64-pc-windows-gnu'
+              run: docker build build_files --cache-from ${{ builder_image }}:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag ${{ builder_image }}:${{ matrix.target }}
 
             - uses: actions-rs/cargo@v1
               with:
@@ -53,13 +59,13 @@ jobs:
             - uses: actions/upload-artifact@v2
               if: matrix.target != 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${{ steps.vars.outputs.sha_short }}-${{ matrix.target }}
+                  name: psonoci-${GITHUB_SHA::8}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci
 
             - uses: actions/upload-artifact@v2
               if: matrix.target == 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${{ steps.vars.outputs.sha_short }}-${{ matrix.target }}
+                  name: psonoci-${GITHUB_SHA::8}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci.exe
             # - uses: actions-rs/cargo@v1
             #   with:
