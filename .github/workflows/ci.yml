@@ -25,7 +25,7 @@ jobs:
         runs-on: ubuntu-latest
         env:
             builder_image: meldron/psonoci_builder
-            SHA8: ${GITHUB_SHA::8}
+            SHA8: $(git rev-parse --short=8 ${{ github.sha }})
         strategy:
             matrix:
                 target:
@@ -45,7 +45,7 @@ jobs:
 
             - name: Pull docker image used by cross
               if: matrix.target != 'x86_64-pc-windows-gnu'
-              run: docker pull $builder_image:${{ matrix.target }} || true
+              run: docker pull $builder_image:${{ matrix.target }}
 
             # - name: Build docker image used by cross
             #   if: matrix.target != 'x86_64-pc-windows-gnu'
@@ -60,13 +60,13 @@ jobs:
             - uses: actions/upload-artifact@v2
               if: matrix.target != 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-$SHA8-${{ matrix.target }}
+                  name: psonoci-${SHA8}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci
 
             - uses: actions/upload-artifact@v2
               if: matrix.target == 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-$SHA8-${{ matrix.target }}
+                  name: psonoci-${SHA8}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci.exe
             # - uses: actions-rs/cargo@v1
             #   with:
