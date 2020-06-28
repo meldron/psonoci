@@ -40,31 +40,36 @@ jobs:
             #   if: matrix.target != 'x86_64-pc-windows-gnu'
             #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
-            - uses: actions-rs/cargo@v1
+            - name: cargo fmt
+              uses: actions-rs/cargo@v1
               with:
                   use-cross: false
                   command: fmt
                   args: --all -- --check
 
-            - uses: actions-rs/cargo@v1
+            - name: cargo test
+              uses: actions-rs/cargo@v1
               with:
                   use-cross: true
                   command: test
                   args: --release --target ${{ matrix.target }}
 
-            - uses: actions-rs/cargo@v1
+            - name: cargo build
+              uses: actions-rs/cargo@v1
               with:
                   use-cross: true
                   command: build
                   args: --release --target ${{ matrix.target }}
 
-            - uses: actions/upload-artifact@v2
+            - name: upload unix artifact
+              uses: actions/upload-artifact@v2
               if: matrix.target != 'x86_64-pc-windows-gnu'
               with:
                   name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci
 
-            - uses: actions/upload-artifact@v2
+            - name: upload windows artifact
+              uses: actions/upload-artifact@v2
               if: matrix.target == 'x86_64-pc-windows-gnu'
               with:
                   name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
