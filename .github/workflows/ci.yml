@@ -3,6 +3,24 @@ on: push
 name: Continuous integration
 
 jobs:
+    ci-macos:
+        runs-on: macos-latest
+        steps:
+            - uses: actions/checkout@v2
+
+            - uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: stable
+
+            - uses: actions-rs/cargo@v1
+              with:
+                  command: build
+                  args: --release
+
+            - uses: actions/upload-artifact@v2
+              with:
+                  name: psonoci-${{ steps.vars.outputs.sha_short }}-x86_64-apple-darwin
+                  path: target/release/psonoci
     ci:
         runs-on: ubuntu-latest
         strategy:
@@ -35,13 +53,13 @@ jobs:
             - uses: actions/upload-artifact@v2
               if: matrix.target != 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${{ matrix.target }}
+                  name: psonoci-${{ steps.vars.outputs.sha_short }}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci
 
             - uses: actions/upload-artifact@v2
               if: matrix.target == 'x86_64-pc-windows-gnu'
               with:
-                  name: psonoci-${{ matrix.target }}.exe
+                  name: psonoci-${{ steps.vars.outputs.sha_short }}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci.exe
             # - uses: actions-rs/cargo@v1
             #   with:
