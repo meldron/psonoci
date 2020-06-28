@@ -35,6 +35,10 @@ jobs:
                     # - x86_64-pc-windows-gnu
 
         steps:
+            - name: Get the version
+              id: get_version
+              run: echo "::set-env name=SHA8::$(echo ${GITHUB_SHA} | cut -c1-8)"
+
             - uses: actions/checkout@v2
 
             - uses: actions-rs/toolchain@v1
