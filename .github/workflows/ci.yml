@@ -1,0 +1,46 @@
+on: push
+
+name: Continuous integration
+
+jobs:
+    ci:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                target:
+                    - aarch64-unknown-linux-musl
+                    - armv7-unknown-linux-musleabihf
+                    - x86_64-unknown-linux-musl
+
+        steps:
+            - uses: actions/checkout@v2
+
+            - uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: stable
+                  target: ${{ matrix.target }}
+                  override: true
+
+            - name: Build the tagged Docker image
+              run: docker build build_files --file build_files/Dockerfile-${{ matrix.target }} --tag psonoci-${{ matrix.target }}
+
+            - uses: actions-rs/cargo@v1
+              with:
+                  use-cross: true
+                  command: build
+                  args: --target ${{ matrix.target }}
+            # - uses: actions-rs/cargo@v1
+            #   with:
+            #       use-cross: true
+            #       command: test
+            #       args: --target ${{ matrix.target }}
+            # - uses: actions-rs/cargo@v1
+            #   with:
+            #       use-cross: true
+            #       command: fmt
+            #       args: --target ${{ matrix.target }} --all -- --check
+            # - uses: actions-rs/cargo@v1
+            #   with:
+            #       use-cross: true
+            #       command: clippy
+            #       args: --target ${{ matrix.target }} -- -D warnings
