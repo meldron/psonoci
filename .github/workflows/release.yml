@@ -86,7 +86,7 @@ jobs:
                   override: true
 
             - name: Pull docker image used by cross
-              if: matrix.target != 'x86_64-pc-windows-gnu' && matrix.target != 'x86_64-apple-darwin'
+              if: matrix.os == 'ubuntu-18.04'
               run: docker pull $builder_image:${{ matrix.target }}
 
             # - name: Build docker image used by cross
