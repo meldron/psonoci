@@ -11,6 +11,9 @@ jobs:
         name: create-release
         runs-on: ubuntu-latest
         steps:
+            - name: Inject slug/short variables
+              uses: rlespinasse/github-slug-action@v2.x
+
             - name: Create artifacts directory
               run: mkdir artifacts
 
@@ -20,8 +23,8 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  tag_name: ${{ github.ref }}
-                  release_name: Release ${{ github.ref }}
+                  tag_name: ${{ env.GITHUB_REF_SLUG }}
+                  release_name: Release ${{ env.GITHUB_REF_SLUG }}
                   draft: false
                   prerelease: false
 
@@ -29,7 +32,7 @@ jobs:
               run: echo "${{ steps.create_release.outputs.upload_url }}" > artifacts/release-upload-url
 
             - name: Save version number to artifact
-              run: echo "${{ github.ref }}" > artifacts/release-version
+              run: echo "${{ env.GITHUB_REF_SLUG }}" > artifacts/release-version
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v1
@@ -45,23 +48,32 @@ jobs:
             builder_image: meldron/psonoci_builder
         strategy:
             matrix:
-                build: [linux, linux-armv7, linux-aarch64, macos, win-gnu]
+                build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
                 include:
                     - build: linux
                       os: ubuntu-18.04
                       target: x86_64-unknown-linux-musl
+                      target_type: unix
                     - build: linux-armv7
                       os: ubuntu-18.04
                       target: armv7-unknown-linux-musleabihf
+                      target_type: unix
                     - build: linux-aarch64
                       os: ubuntu-18.04
                       target: aarch64-unknown-linux-musl
+                      target_type: unix
                     - build: macos
                       os: macos-latest
                       target: x86_64-apple-darwin
+                      target_type: unix
                     - build: win-gnu
-                      os: ubuntu-18.04
+                      os: windows-2019
                       target: x86_64-pc-windows-gnu
+                      target_type: windows
+                    - build: win-msvc
+                      os: windows-2019
+                      target: x86_64-pc-windows-msvc
+                      target_type: windows
 
         steps:
             - uses: actions/checkout@v2
@@ -118,7 +130,7 @@ jobs:
               run: |
                   staging="psonoci-${{ env.RELEASE_VERSION }}-${{ matrix.target }}"
                   mkdir -p "$staging"
-                  if [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ]; then
+                  if [ "${{ target_type }}" = "windows" ]; then
                     cp "target/${{ matrix.target }}/release/psonoci.exe" "$staging/"
                     7z a "$staging.zip" "$staging"
                     echo "::set-env name=ASSET::$staging.zip"
