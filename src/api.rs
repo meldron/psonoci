@@ -38,11 +38,11 @@ pub enum SecretType {
 impl SecretType {
     pub fn as_str(&self) -> &str {
         match self {
-            &SecretType::Website => "website",
-            &SecretType::Application => "application",
-            &SecretType::Note => "note",
-            &SecretType::GPGKey => "gpg_key",
-            &SecretType::Bookmark => "bookmark",
+            SecretType::Website => "website",
+            SecretType::Application => "application",
+            SecretType::Note => "note",
+            SecretType::GPGKey => "gpg_key",
+            SecretType::Bookmark => "bookmark",
         }
     }
 }
@@ -69,18 +69,18 @@ pub enum SecretValue {
 impl SecretValue {
     pub fn as_str(&self) -> &str {
         match self {
-            &SecretValue::json => "json",
-            &SecretValue::notes => "notes",
-            &SecretValue::password => "password",
-            &SecretValue::title => "title",
-            &SecretValue::url => "url",
-            &SecretValue::url_filter => "url_filter",
-            &SecretValue::username => "username",
-            &SecretValue::gpg_key_email => "gpg_key_email",
-            &SecretValue::gpg_key_name => "gpg_key_name",
-            &SecretValue::gpg_key_private => "gpg_key_private",
-            &SecretValue::gpg_key_public => "gpg_key_public",
-            &SecretValue::secret_type => "type",
+            SecretValue::json => "json",
+            SecretValue::notes => "notes",
+            SecretValue::password => "password",
+            SecretValue::title => "title",
+            SecretValue::url => "url",
+            SecretValue::url_filter => "url_filter",
+            SecretValue::username => "username",
+            SecretValue::gpg_key_email => "gpg_key_email",
+            SecretValue::gpg_key_name => "gpg_key_name",
+            SecretValue::gpg_key_private => "gpg_key_private",
+            SecretValue::gpg_key_public => "gpg_key_public",
+            SecretValue::secret_type => "type",
         }
     }
 }
@@ -97,9 +97,9 @@ fn parse_url(src: &str) -> Result<Url> {
         "https" => {}
         _ => return Err(anyhow!(PARSE_URL_ERROR_INVALID_SCHEME)),
     };
-    url.host().ok_or(anyhow!("Url has invalid host)"))?;
+    url.host().ok_or_else(|| anyhow!("Url has invalid host)"))?;
     url.port_or_known_default()
-        .ok_or(anyhow!("Url is missing a port"))?;
+        .ok_or_else(|| anyhow!("Url is missing a port"))?;
 
     Ok(url)
 }
@@ -190,7 +190,7 @@ pub enum Endpoint {
 impl Endpoint {
     pub fn as_str(&self) -> &str {
         match self {
-            &Endpoint::ApiKeyAccessSecret => "/api-key-access/secret/",
+            Endpoint::ApiKeyAccessSecret => "/api-key-access/secret/",
         }
     }
 }
@@ -412,8 +412,7 @@ impl SecretResponse {
             &self.secret_key_nonce,
             api_key_secret_key_hex,
         )
-        .context("decrypting secret key failed")?
-        .to_owned();
+        .context("decrypting secret key failed")?;
 
         let encryption_key = std::str::from_utf8(&encryption_key_raw)
             .context("decrypted secret key is not valid utf-8")?;
@@ -497,9 +496,9 @@ pub fn make_request(
 
     let mut request_builder = client.request(method, url);
 
-    if json_body.is_some() {
+    if let Some(body) = json_body {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        request_builder = request_builder.body(json_body.unwrap());
+        request_builder = request_builder.body(body);
     }
 
     let response = request_builder
