@@ -1,31 +1,15 @@
-on: push
-
 name: Build
+on:
+    pull_request:
+    push:
+        branches:
+            - master
 
 jobs:
-    # build-macos:
-    #     runs-on: macos-latest
-    #     steps:
-    #         - uses: actions/checkout@v2
-
-    #         - uses: actions-rs/toolchain@v1
-    #           with:
-    #               toolchain: stable
-
-    #         - uses: actions-rs/cargo@v1
-    #           with:
-    #               command: build
-    #               args: --release
-
-    #         - uses: actions/upload-artifact@v2
-    #           with:
-    #               name: psonoci-${GITHUB_SHA::8}-x86_64-apple-darwin
-    #               path: target/release/psonoci
     build:
         runs-on: ubuntu-latest
         env:
             builder_image: meldron/psonoci_builder
-            SHA8: $(git rev-parse --short=8 ${{ github.sha }})
         strategy:
             matrix:
                 target:
@@ -51,6 +35,7 @@ jobs:
               if: matrix.target != 'x86_64-pc-windows-gnu'
               run: docker pull $builder_image:${{ matrix.target }}
 
+            # # right now do not build image every time to save github actions quota
             # - name: Build docker image used by cross
             #   if: matrix.target != 'x86_64-pc-windows-gnu'
             #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
@@ -60,6 +45,22 @@ jobs:
                   use-cross: true
                   command: build
                   args: --release --target ${{ matrix.target }}
+
+            - uses: actions-rs/cargo@v1
+              with:
+                  use-cross: true
+                  command: test
+                  args: --target ${{ matrix.target }}
+            - uses: actions-rs/cargo@v1
+              with:
+                  use-cross: true
+                  command: fmt
+                  args: --target ${{ matrix.target }} --all -- --check
+            - uses: actions-rs/cargo@v1
+              with:
+                  use-cross: true
+                  command: clippy
+                  args: --target ${{ matrix.target }} -- -D warnings
 
             - uses: actions/upload-artifact@v2
               if: matrix.target != 'x86_64-pc-windows-gnu'
@@ -72,18 +73,3 @@ jobs:
               with:
                   name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
                   path: target/${{ matrix.target }}/release/psonoci.exe
-            # - uses: actions-rs/cargo@v1
-            #   with:
-            #       use-cross: true
-            #       command: test
-            #       args: --target ${{ matrix.target }}
-            # - uses: actions-rs/cargo@v1
-            #   with:
-            #       use-cross: true
-            #       command: fmt
-            #       args: --target ${{ matrix.target }} --all -- --check
-            # - uses: actions-rs/cargo@v1
-            #   with:
-            #       use-cross: true
-            #       command: clippy
-            #       args: --target ${{ matrix.target }} -- -D warnings
