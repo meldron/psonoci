@@ -130,7 +130,7 @@ jobs:
               run: |
                   staging="psonoci-${{ env.RELEASE_VERSION }}-${{ matrix.target }}"
                   mkdir -p "$staging"
-                  if [ "${{ target_type }}" = "windows" ]; then
+                  if [ "${{ matrix.target_type }}" = "windows" ]; then
                     cp "target/${{ matrix.target }}/release/psonoci.exe" "$staging/"
                     7z a "$staging.zip" "$staging"
                     echo "::set-env name=ASSET::$staging.zip"
