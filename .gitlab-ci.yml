@@ -6,15 +6,16 @@ stages:
   - deploy
 
 
-build-aarch64-unknown-linux-gnu:
+build-x86_64-unknown-linux-musl:
   except:
     - schedules
   stage: build
   image: psono-docker.jfrog.io/ubuntu:20.04
   variables:
-    build_env: aarch64-unknown-linux-gnu
+    BUILD_ENV: x86_64-unknown-linux-musl
     RUST_TOOLCHAIN: stable
     DOCKER_HOST: 'tcp://docker:2375'
+    CROSS_DOCKER_IN_DOCKER: 'true'
   services:
     - docker:18-dind
   script:
@@ -25,7 +26,7 @@ build-aarch64-unknown-linux-gnu:
 #    - echo $CI_BUILD_TOKEN | docker login --username=gitlab-ci-token --password-stdin registry.gitlab.com
 #    - echo $artifactory_credentials | docker login --username=gitlab --password-stdin psono-docker.jfrog.io
 #    - echo $docker_hub_credentials | docker login --username=psonogitlab --password-stdin
-    - docker build -f "build_files/Dockerfile-${build_env}" -t "psonoci_builder:${build_env}" --pull build_files
+    - docker build -f "build_files/Dockerfile-${BUILD_ENV}" -t "psonoci_builder:${BUILD_ENV}" --pull build_files
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     - source /root/.cargo/env
     # Install toolchain
@@ -35,8 +36,8 @@ build-aarch64-unknown-linux-gnu:
     - cargo --version
     - cargo install cross
     - cross --version
-    - cross test --release --target "${build_env}"
-    - cross build --release --target "${build_env}"
+    - cross test --release --target "${BUILD_ENV}"
+    - cross build --release --target "${BUILD_ENV}"
     - ls -la target
   only:
     - branches@psono/psono-ci
