@@ -1,0 +1,41 @@
+
+stages:
+  - build
+  - test
+  - release
+  - deploy
+
+
+build-aarch64-unknown-linux-gnu:
+  except:
+    - schedules
+  stage: build
+  image: psono-docker.jfrog.io/ubuntu:20.04
+  variables:
+    build_env: aarch64-unknown-linux-gnu
+    RUST_TOOLCHAIN: stable
+    DOCKER_HOST: 'tcp://docker:2375'
+  script:
+    - apt-get update
+    - apt-get install -y curl build-essential
+    - curl -fSL "https://download.docker.com/linux/static/stable/x86_64/docker-17.12.0-ce.tgz" -o docker.tgz && echo "692e1c72937f6214b1038def84463018d8e320c8eaf8530546c84c2f8f9c767d *docker.tgz" | sha256sum -c - && tar -xzvf docker.tgz && mv docker/* /usr/local/bin/
+    - docker info
+#    - echo $CI_BUILD_TOKEN | docker login --username=gitlab-ci-token --password-stdin registry.gitlab.com
+#    - echo $artifactory_credentials | docker login --username=gitlab --password-stdin psono-docker.jfrog.io
+#    - echo $docker_hub_credentials | docker login --username=psonogitlab --password-stdin
+    - docker build -f "build_files/Dockerfile-${build_env}" -t "psonoci_builder:${build_env}" --pull build_files
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    - source /root/.cargo/env
+    # Install toolchain
+    - rustup --version
+    - rustup toolchain install "${RUST_TOOLCHAIN}"
+    - rustup default "${RUST_TOOLCHAIN}"
+    - cargo --version
+    - cargo install cross
+    - cross --version
+    - cross test --release --target "${build_env}"
+    - cross build --release --target "${build_env}"
+    - ls -la target
+  only:
+    - branches@psono/psono-ci
+    - tags@psono/psono-ci
