@@ -15,6 +15,8 @@ build-aarch64-unknown-linux-gnu:
     build_env: aarch64-unknown-linux-gnu
     RUST_TOOLCHAIN: stable
     DOCKER_HOST: 'tcp://docker:2375'
+  services:
+    - docker:18-dind
   script:
     - apt-get update
     - apt-get install -y curl build-essential
