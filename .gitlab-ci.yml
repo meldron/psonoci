@@ -53,22 +53,22 @@ variables:
   DOCKER_HOST: 'tcp://docker:2375'
 
 ## PREBUILD
-#
-#.prebuild: &prebuild
-#  stage: prebuild
-#  image:
-#    name: gcr.io/kaniko-project/executor:debug
-#    entrypoint: [""]
-#  before_script:
-#    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-#  script:
-#    - /kaniko/executor --cache=true --build-arg RUST_VERSION=$RUST_VERSION --context $CI_PROJECT_DIR/build_files --dockerfile $CI_PROJECT_DIR/build_files/Dockerfile-${BUILD_ENV} --destination $CI_REGISTRY_IMAGE:rust${RUST_VERSION}-${BUILD_ENV}
-#
-#prebuild-x86_64-unknown-linux-musl:
-#  <<: *prebuild
-#  variables:
-#    BUILD_ENV: x86_64-unknown-linux-musl
-#
+
+.prebuild: &prebuild
+  stage: prebuild
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  before_script:
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+  script:
+    - /kaniko/executor --cache=true --build-arg RUST_VERSION=$RUST_VERSION --context $CI_PROJECT_DIR/build_files --dockerfile $CI_PROJECT_DIR/build_files/Dockerfile-${BUILD_ENV} --destination $CI_REGISTRY_IMAGE:rust${RUST_VERSION}-${BUILD_ENV}
+
+prebuild-x86_64-unknown-linux-musl:
+  <<: *prebuild
+  variables:
+    BUILD_ENV: x86_64-unknown-linux-musl
+
 
 ## BUILD
 
@@ -76,14 +76,13 @@ variables:
   except:
     - schedules
   stage: build
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
-  before_script:
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+  image: psono-docker.jfrog.io/ubuntu:20.04
+  services:
+    - docker:18-dind
   script:
     - apt-get update
     - apt-get install -y curl build-essential
+    - curl -fSL "https://download.docker.com/linux/static/stable/x86_64/docker-17.12.0-ce.tgz" -o docker.tgz && echo "692e1c72937f6214b1038def84463018d8e320c8eaf8530546c84c2f8f9c767d *docker.tgz" | sha256sum -c - && tar -xzvf docker.tgz && mv docker/* /usr/local/bin/
     - docker info
 #    - echo $CI_BUILD_TOKEN | docker login --username=gitlab-ci-token --password-stdin registry.gitlab.com
 #    - echo $artifactory_credentials | docker login --username=gitlab --password-stdin psono-docker.jfrog.io
