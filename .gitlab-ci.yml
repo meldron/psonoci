@@ -104,3 +104,35 @@ build-x86_64-pc-windows-gnu:
   <<: *build
   variables:
     BUILD_ENV: x86_64-pc-windows-gnu
+
+
+
+release-artifacts:
+  except:
+    - schedules
+  stage: release
+  image: psono-docker.jfrog.io/ubuntu:20.04
+  script:
+    - apt-get update
+    - apt-get install -y curl
+    - curl -fL https://getcli.jfrog.io | sh
+    - ./jfrog rt c rt-server-1 --url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials
+    - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/x86_64-unknown-linux-musl/psonoci" psono/ci/latest/x86_64-unknown-linux-musl/
+    - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/armv7-unknown-linux-musleabihf/psonoci" psono/ci/latest/armv7-unknown-linux-musleabihf/
+    - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/aarch64-unknown-linux-musl/psonoci" psono/ci/latest/aarch64-unknown-linux-musl/
+    - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/x86_64-pc-windows-gnu/psonoci" psono/ci/latest/x86_64-pc-windows-gnu/
+  only:
+    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+
+deploy-changelog:
+  except:
+    - schedules
+  stage: deploy
+  image: psono-docker.jfrog.io/ubuntu:20.04
+  script:
+    - sh ./var/deploy_changelog.sh
+  environment:
+    name: static.psono.com
+    url: https://static.psono.com/gitlab.com/psono/psono-client/changelog.json
+  only:
+    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
