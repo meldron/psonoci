@@ -44,31 +44,12 @@
 #    - tags@psono/psono-ci
 
 stages:
-  - prebuild
   - build
 
 variables:
   RUST_VERSION: '1.45'
   RUST_TOOLCHAIN: stable
   DOCKER_HOST: 'tcp://docker:2375'
-
-## PREBUILD
-
-.prebuild: &prebuild
-  stage: prebuild
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
-  before_script:
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-  script:
-    - /kaniko/executor --cache=true --build-arg RUST_VERSION=$RUST_VERSION --context $CI_PROJECT_DIR/build_files --dockerfile $CI_PROJECT_DIR/build_files/Dockerfile-${BUILD_ENV} --destination $CI_REGISTRY_IMAGE:rust${RUST_VERSION}-${BUILD_ENV}
-
-prebuild-x86_64-unknown-linux-musl:
-  <<: *prebuild
-  variables:
-    BUILD_ENV: x86_64-unknown-linux-musl
-
 
 ## BUILD
 
@@ -84,14 +65,9 @@ prebuild-x86_64-unknown-linux-musl:
     - apt-get install -y curl build-essential
     - curl -fSL "https://download.docker.com/linux/static/stable/x86_64/docker-17.12.0-ce.tgz" -o docker.tgz && echo "692e1c72937f6214b1038def84463018d8e320c8eaf8530546c84c2f8f9c767d *docker.tgz" | sha256sum -c - && tar -xzvf docker.tgz && mv docker/* /usr/local/bin/
     - docker info
-#    - echo $CI_BUILD_TOKEN | docker login --username=gitlab-ci-token --password-stdin registry.gitlab.com
-#    - echo $artifactory_credentials | docker login --username=gitlab --password-stdin psono-docker.jfrog.io
-#    - echo $docker_hub_credentials | docker login --username=psonogitlab --password-stdin
-    - docker pull "${CI_REGISTRY_IMAGE}:rust${RUST_VERSION}-${BUILD_ENV}"
-    - docker tag "${CI_REGISTRY_IMAGE}:rust${RUST_VERSION}-${BUILD_ENV}" "psonoci_builder:${BUILD_ENV}"
+    - docker build -f "build_files/Dockerfile-${BUILD_ENV}" -t "psonoci_builder:${BUILD_ENV}" --pull build_files
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     - source /root/.cargo/env
-    # Install toolchain
     - rustup --version
     - rustup toolchain install "${RUST_TOOLCHAIN}"
     - rustup default "${RUST_TOOLCHAIN}"
@@ -100,7 +76,7 @@ prebuild-x86_64-unknown-linux-musl:
     - cross --version
     - cross test --release --target "${BUILD_ENV}"
     - cross build --release --target "${BUILD_ENV}"
-    - ls -la target
+    - ls -la "target/${BUILD_ENV}/release/psonoci"
   only:
     - branches@psono/psono-ci
     - tags@psono/psono-ci
@@ -109,3 +85,18 @@ build-x86_64-unknown-linux-musl:
   <<: *build
   variables:
     BUILD_ENV: x86_64-unknown-linux-musl
+
+build-armv7-unknown-linux-musleabihf:
+  <<: *build
+  variables:
+    BUILD_ENV: armv7-unknown-linux-musleabihf
+
+build-aarch64-unknown-linux-musl:
+  <<: *build
+  variables:
+    BUILD_ENV: aarch64-unknown-linux-musl
+
+build-x86_64-pc-windows-gnu:
+  <<: *build
+  variables:
+    BUILD_ENV: x86_64-pc-windows-gnu
