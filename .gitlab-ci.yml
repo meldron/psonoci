@@ -45,6 +45,8 @@
 
 stages:
   - build
+  - release
+  - deploy
 
 variables:
   RUST_VERSION: '1.45'
