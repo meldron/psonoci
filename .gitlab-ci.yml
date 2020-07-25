@@ -89,11 +89,11 @@ deploy-artifacts:
   script:
     - sh ./var/login_gcp.sh
     - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-unknown-linux-musl/psonoci --output psonoci-x86_64-unknown-linux-musl
-    - gsutil cp psonoci-x86_64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/x86_64-unknown-linux-musl/psonoci
+    - gsutil cp psonoci-x86_64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/x86_64-linux/psonoci
     - curl https://psono.jfrog.io/psono/psono/ci/master/armv7-unknown-linux-musleabihf/psonoci --output psonoci-armv7-unknown-linux-musleabihf
-    - gsutil cp psonoci-armv7-unknown-linux-musleabihf gs://get.psono.com/$CI_PROJECT_PATH/armv7-unknown-linux-musleabihf/psonoci
+    - gsutil cp psonoci-armv7-unknown-linux-musleabihf gs://get.psono.com/$CI_PROJECT_PATH/armv7-linux/psonoci
     - curl https://psono.jfrog.io/psono/psono/ci/master/aarch64-unknown-linux-musl/psonoci --output psonoci-aarch64-unknown-linux-musl
-    - gsutil cp psonoci-aarch64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/aarch64-unknown-linux-musl/psonoci
+    - gsutil cp psonoci-aarch64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/aarch64-linux/psonoci
 #    - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-pc-windows-gnu/psonoci.exe --output psonoci-x86_64-pc-windows-gnu.exe
 #    - gsutil cp psonoci-x86_64-pc-windows-gnu.exe gs://get.psono.com/$CI_PROJECT_PATH/x86_64-pc-windows-gnu/psonoci.exe
   only:
