@@ -4,8 +4,7 @@ stages:
   - deploy
 
 variables:
-  RUST_VERSION: '1.44'
-  RUST_TOOLCHAIN: '1.44'
+  RUST_TOOLCHAIN: '1.44.1'
   DOCKER_HOST: 'tcp://docker:2375'
 
 ## BUILD
