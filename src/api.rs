@@ -126,14 +126,14 @@ pub struct HttpOptions {
         default_value = "60",
         help = "Connection timeout in seconds"
     )]
-    pub timeout: u64,
+    pub timeout: usize,
     #[structopt(
         long,
         env = "PSONO_CI_MAX_REDIRECTS",
         default_value = "0",
         help = "Maximum numbers of redirects"
     )]
-    pub max_redirects: u8,
+    pub max_redirects: usize,
 
     // TLS options and flags
     #[structopt(
@@ -463,7 +463,7 @@ pub fn make_request(
 
     let mut client_builder: ClientBuilder = Client::builder()
         .redirect(redirect_policy)
-        .timeout(Duration::from_secs(http_options.timeout));
+        .timeout(Duration::from_secs(http_options.timeout as u64));
 
     if http_options.der_root_certificate_path.is_some() {
         let cert_der_path = http_options.der_root_certificate_path.as_ref().unwrap();
