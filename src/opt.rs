@@ -25,7 +25,7 @@ pub enum SecretCommand {
     Get {
         #[structopt(required = true, help = "The secret's uuid")]
         secret_id: Uuid,
-        #[structopt(required = true, possible_values = &SecretValue::variants(), case_insensitive = true, help = "Which secret value to return ('json' returns all values in a json object)")]
+        #[structopt(required = true, possible_values = &SecretValue::variants(), case_insensitive = true, help = "Which secret value-type to return ('json' returns all value-types in a json object)")]
         secret_value: SecretValue,
     },
 }

@@ -27,7 +27,7 @@ static CERTIFICATE_ERROR_OPEN: &str = "could not open certificate";
 static CERTIFICATE_ERROR_READ: &str = "could not read certificate";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SecretType {
+pub enum SecretValueType {
     Website,
     Application,
     Note,
@@ -35,14 +35,14 @@ pub enum SecretType {
     Bookmark,
 }
 
-impl SecretType {
+impl SecretValueType {
     pub fn as_str(&self) -> &str {
         match self {
-            SecretType::Website => "website",
-            SecretType::Application => "application",
-            SecretType::Note => "note",
-            SecretType::GPGKey => "gpg_key",
-            SecretType::Bookmark => "bookmark",
+            SecretValueType::Website => "website",
+            SecretValueType::Application => "application",
+            SecretValueType::Note => "note",
+            SecretValueType::GPGKey => "gpg_key",
+            SecretValueType::Bookmark => "bookmark",
         }
     }
 }
@@ -236,7 +236,7 @@ pub struct Secret {
     pub username: Option<String>,
     pub url: Option<String>,
     pub title: Option<String>,
-    pub secret_type: SecretType,
+    pub secret_type: SecretValueType,
 
     pub gpg_key_private: Option<String>,
     pub gpg_key_public: Option<String>,
@@ -293,7 +293,7 @@ impl Secret {
                 gpg_key_public: None,
                 notes: s.application_password_notes,
                 password: s.application_password_password,
-                secret_type: SecretType::Application,
+                secret_type: SecretValueType::Application,
                 title: s.application_password_title,
                 url: None,
                 url_filter: None,
@@ -315,7 +315,7 @@ impl Secret {
                 gpg_key_public: None,
                 notes: s.website_password_notes,
                 password: s.website_password_password,
-                secret_type: SecretType::Website,
+                secret_type: SecretValueType::Website,
                 title: s.website_password_title,
                 url: s.website_password_url,
                 url_filter: s.website_password_url_filter,
@@ -335,7 +335,7 @@ impl Secret {
                 gpg_key_public: None,
                 notes: s.bookmark_notes,
                 password: None,
-                secret_type: SecretType::Bookmark,
+                secret_type: SecretValueType::Bookmark,
                 title: s.bookmark_title,
                 url: s.bookmark_url,
                 url_filter: s.bookmark_url_filter,
@@ -351,7 +351,7 @@ impl Secret {
                 gpg_key_public: None,
                 notes: s.note_notes,
                 password: None,
-                secret_type: SecretType::Note,
+                secret_type: SecretValueType::Note,
                 title: s.note_title,
                 url: None,
                 url_filter: None,
@@ -372,7 +372,7 @@ impl Secret {
                 gpg_key_public: s.mail_gpg_own_key_public,
                 notes: None,
                 password: None,
-                secret_type: SecretType::GPGKey,
+                secret_type: SecretValueType::GPGKey,
                 title: s.mail_gpg_own_key_title,
                 url: None,
                 url_filter: None,
