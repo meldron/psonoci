@@ -1,115 +1,112 @@
 stages:
-  - build
-  - release
-  - deploy
+    - build
+    - release
+    - deploy
 
 variables:
-  RUST_TOOLCHAIN: '1.44.1'
-  DOCKER_HOST: 'tcp://docker:2375'
+    RUST_TOOLCHAIN: "1.50.0"
+    DOCKER_HOST: "tcp://docker:2375"
 
 ## BUILD
 
 .build: &build
-  except:
-    - schedules
-  stage: build
-  image: psono-docker.jfrog.io/ubuntu:20.04
-  services:
-    - docker:18-dind
-  script:
-    - apt-get update
-    - apt-get install -y curl build-essential
-    - curl -fL https://getcli.jfrog.io | sh
-    - ./jfrog rt c rt-server-1 --url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials
-    - curl -fSL "https://download.docker.com/linux/static/stable/x86_64/docker-17.12.0-ce.tgz" -o docker.tgz && echo "692e1c72937f6214b1038def84463018d8e320c8eaf8530546c84c2f8f9c767d *docker.tgz" | sha256sum -c - && tar -xzvf docker.tgz && mv docker/* /usr/local/bin/ && rm -Rf docker && rm docker.tgz
-    - docker info
-    - docker build -f "build_files/Dockerfile-${BUILD_ENV}" -t "psonoci_builder:${BUILD_ENV}" --pull build_files
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    - source /root/.cargo/env
-    - rustup --version
-    - rustup toolchain install "${RUST_TOOLCHAIN}"
-    - rustup default "${RUST_TOOLCHAIN}"
-    - cargo --version
-    - cargo install cross
-    - cross --version
-    - cross test --release --target "${BUILD_ENV}"
-    - cross build --release --target "${BUILD_ENV}"
-    - ls -la "target/${BUILD_ENV}/release/psonoci"
-    - ./jfrog rt u --props="CI_BUILD_REF_NAME=$CI_BUILD_REF_NAME;CI_COMMIT_SHA=$CI_COMMIT_SHA;CI_COMMIT_URL=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA;CI_PROJECT_ID=$CI_PROJECT_ID;CI_PROJECT_NAME=$CI_PROJECT_NAME;CI_PROJECT_NAMESPACE=$CI_PROJECT_NAMESPACE;CI_PROJECT_URL=$CI_PROJECT_URL;CI_PIPELINE_ID=$CI_PIPELINE_ID;CI_PIPELINE_URL=$CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID;CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME;CI_JOB_ID=$CI_JOB_ID;CI_JOB_URL=$CI_PROJECT_URL/-/jobs/$CI_JOB_ID;CI_JOB_NAME=$CI_JOB_NAME;CI_JOB_STAGE=$CI_JOB_STAGE;CI_RUNNER_ID=$CI_RUNNER_ID;GITLAB_USER_ID=$GITLAB_USER_ID;CI_SERVER_VERSION=$CI_SERVER_VERSION" "target/${BUILD_ENV}/release/psonoci" "psono/ci/${CI_BUILD_REF_NAME}/${BUILD_ENV}/psonoci"
-    - ./jfrog rt sp "psono/ci/${CI_BUILD_REF_NAME}/${BUILD_ENV}/psonoci" "CI_COMMIT_TAG=$CI_COMMIT_TAG" || true
-  only:
-    - branches@psono/psono-ci
-    - tags@psono/psono-ci
+    except:
+        - schedules
+    stage: build
+    image: psono-docker.jfrog.io/ubuntu:20.04
+    services:
+        - docker:18-dind
+    script:
+        - apt-get update
+        - apt-get install -y curl build-essential
+        - curl -fL https://getcli.jfrog.io | sh
+        - ./jfrog rt c rt-server-1 --url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials
+        - curl -fSL "https://download.docker.com/linux/static/stable/x86_64/docker-17.12.0-ce.tgz" -o docker.tgz && echo "692e1c72937f6214b1038def84463018d8e320c8eaf8530546c84c2f8f9c767d *docker.tgz" | sha256sum -c - && tar -xzvf docker.tgz && mv docker/* /usr/local/bin/ && rm -Rf docker && rm docker.tgz
+        - docker info
+        - docker build -f "build_files/Dockerfile-${BUILD_ENV}" -t "psonoci_builder:${BUILD_ENV}" --pull build_files
+        - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        - source /root/.cargo/env
+        - rustup --version
+        - rustup toolchain install "${RUST_TOOLCHAIN}"
+        - rustup default "${RUST_TOOLCHAIN}"
+        - cargo --version
+        - cargo install cross
+        - cross --version
+        - cross test --release --target "${BUILD_ENV}"
+        - cross build --release --target "${BUILD_ENV}"
+        - ls -la "target/${BUILD_ENV}/release/psonoci"
+        - ./jfrog rt u --props="CI_BUILD_REF_NAME=$CI_BUILD_REF_NAME;CI_COMMIT_SHA=$CI_COMMIT_SHA;CI_COMMIT_URL=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA;CI_PROJECT_ID=$CI_PROJECT_ID;CI_PROJECT_NAME=$CI_PROJECT_NAME;CI_PROJECT_NAMESPACE=$CI_PROJECT_NAMESPACE;CI_PROJECT_URL=$CI_PROJECT_URL;CI_PIPELINE_ID=$CI_PIPELINE_ID;CI_PIPELINE_URL=$CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID;CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME;CI_JOB_ID=$CI_JOB_ID;CI_JOB_URL=$CI_PROJECT_URL/-/jobs/$CI_JOB_ID;CI_JOB_NAME=$CI_JOB_NAME;CI_JOB_STAGE=$CI_JOB_STAGE;CI_RUNNER_ID=$CI_RUNNER_ID;GITLAB_USER_ID=$GITLAB_USER_ID;CI_SERVER_VERSION=$CI_SERVER_VERSION" "target/${BUILD_ENV}/release/psonoci" "psono/ci/${CI_BUILD_REF_NAME}/${BUILD_ENV}/psonoci"
+        - ./jfrog rt sp "psono/ci/${CI_BUILD_REF_NAME}/${BUILD_ENV}/psonoci" "CI_COMMIT_TAG=$CI_COMMIT_TAG" || true
+    only:
+        - branches@psono/psono-ci
+        - tags@psono/psono-ci
 
 build-x86_64-unknown-linux-musl:
-  <<: *build
-  variables:
-    BUILD_ENV: x86_64-unknown-linux-musl
+    <<: *build
+    variables:
+        BUILD_ENV: x86_64-unknown-linux-musl
 
 build-armv7-unknown-linux-musleabihf:
-  <<: *build
-  variables:
-    BUILD_ENV: armv7-unknown-linux-musleabihf
+    <<: *build
+    variables:
+        BUILD_ENV: armv7-unknown-linux-musleabihf
 
 build-aarch64-unknown-linux-musl:
-  <<: *build
-  variables:
-    BUILD_ENV: aarch64-unknown-linux-musl
+    <<: *build
+    variables:
+        BUILD_ENV: aarch64-unknown-linux-musl
 
 #build-x86_64-pc-windows-gnu:
 #  <<: *build
 #  variables:
 #    BUILD_ENV: x86_64-pc-windows-gnu
 
-
 release-artifacts:
-  except:
-    - schedules
-  stage: release
-  image: psono-docker.jfrog.io/ubuntu:20.04
-  script:
-    - apt-get update
-    - apt-get install -y curl
-    - curl -fL https://getcli.jfrog.io | sh
-    - ./jfrog rt c rt-server-1 --url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials
-    - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/x86_64-unknown-linux-musl/psonoci" psono/ci/latest/x86_64-unknown-linux-musl/
-    - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/armv7-unknown-linux-musleabihf/psonoci" psono/ci/latest/armv7-unknown-linux-musleabihf/
-    - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/aarch64-unknown-linux-musl/psonoci" psono/ci/latest/aarch64-unknown-linux-musl/
-    # - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/x86_64-pc-windows-gnu/psonoci" psono/ci/latest/x86_64-pc-windows-gnu/
-  only:
-    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
-
+    except:
+        - schedules
+    stage: release
+    image: psono-docker.jfrog.io/ubuntu:20.04
+    script:
+        - apt-get update
+        - apt-get install -y curl
+        - curl -fL https://getcli.jfrog.io | sh
+        - ./jfrog rt c rt-server-1 --url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials
+        - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/x86_64-unknown-linux-musl/psonoci" psono/ci/latest/x86_64-unknown-linux-musl/
+        - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/armv7-unknown-linux-musleabihf/psonoci" psono/ci/latest/armv7-unknown-linux-musleabihf/
+        - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/aarch64-unknown-linux-musl/psonoci" psono/ci/latest/aarch64-unknown-linux-musl/
+        # - ./jfrog rt cp --flat "psono/ci/${CI_BUILD_REF_NAME}/x86_64-pc-windows-gnu/psonoci" psono/ci/latest/x86_64-pc-windows-gnu/
+    only:
+        - /^v[0-9]*\.[0-9]*\.[0-9]*$/
 
 deploy-artifacts:
-  except:
-    - schedules
-  stage: deploy
-  image: psono-docker.jfrog.io/ubuntu:20.04
-  script:
-    - sh ./var/login_gcp.sh
-    - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-unknown-linux-musl/psonoci --output psonoci-x86_64-unknown-linux-musl
-    - gsutil cp psonoci-x86_64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/x86_64-linux/psonoci
-    - curl https://psono.jfrog.io/psono/psono/ci/master/armv7-unknown-linux-musleabihf/psonoci --output psonoci-armv7-unknown-linux-musleabihf
-    - gsutil cp psonoci-armv7-unknown-linux-musleabihf gs://get.psono.com/$CI_PROJECT_PATH/armv7-linux/psonoci
-    - curl https://psono.jfrog.io/psono/psono/ci/master/aarch64-unknown-linux-musl/psonoci --output psonoci-aarch64-unknown-linux-musl
-    - gsutil cp psonoci-aarch64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/aarch64-linux/psonoci
-#    - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-pc-windows-gnu/psonoci.exe --output psonoci-x86_64-pc-windows-gnu.exe
-#    - gsutil cp psonoci-x86_64-pc-windows-gnu.exe gs://get.psono.com/$CI_PROJECT_PATH/x86_64-pc-windows-gnu/psonoci.exe
-  only:
-    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
-
+    except:
+        - schedules
+    stage: deploy
+    image: psono-docker.jfrog.io/ubuntu:20.04
+    script:
+        - sh ./var/login_gcp.sh
+        - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-unknown-linux-musl/psonoci --output psonoci-x86_64-unknown-linux-musl
+        - gsutil cp psonoci-x86_64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/x86_64-linux/psonoci
+        - curl https://psono.jfrog.io/psono/psono/ci/master/armv7-unknown-linux-musleabihf/psonoci --output psonoci-armv7-unknown-linux-musleabihf
+        - gsutil cp psonoci-armv7-unknown-linux-musleabihf gs://get.psono.com/$CI_PROJECT_PATH/armv7-linux/psonoci
+        - curl https://psono.jfrog.io/psono/psono/ci/master/aarch64-unknown-linux-musl/psonoci --output psonoci-aarch64-unknown-linux-musl
+        - gsutil cp psonoci-aarch64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/aarch64-linux/psonoci
+    #    - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-pc-windows-gnu/psonoci.exe --output psonoci-x86_64-pc-windows-gnu.exe
+    #    - gsutil cp psonoci-x86_64-pc-windows-gnu.exe gs://get.psono.com/$CI_PROJECT_PATH/x86_64-pc-windows-gnu/psonoci.exe
+    only:
+        - /^v[0-9]*\.[0-9]*\.[0-9]*$/
 
 deploy-changelog:
-  except:
-    - schedules
-  stage: deploy
-  image: psono-docker.jfrog.io/ubuntu:20.04
-  script:
-    - sh ./var/login_gcp.sh
-    - "curl -H \"PRIVATE-TOKEN: $GITLAB_PERSONAL_ACCESS_TOKEN\" \"https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/repository/tags\" --output changelog.json"
-    - gsutil cp changelog.json gs://static.psono.com/gitlab.com/$CI_PROJECT_PATH/changelog.json
-  environment:
-    name: static.psono.com
-    url: https://static.psono.com/gitlab.com/psono/psono-client/changelog.json
-  only:
-    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+    except:
+        - schedules
+    stage: deploy
+    image: psono-docker.jfrog.io/ubuntu:20.04
+    script:
+        - sh ./var/login_gcp.sh
+        - 'curl -H "PRIVATE-TOKEN: $GITLAB_PERSONAL_ACCESS_TOKEN" "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/repository/tags" --output changelog.json'
+        - gsutil cp changelog.json gs://static.psono.com/gitlab.com/$CI_PROJECT_PATH/changelog.json
+    environment:
+        name: static.psono.com
+        url: https://static.psono.com/gitlab.com/psono/psono-client/changelog.json
+    only:
+        - /^v[0-9]*\.[0-9]*\.[0-9]*$/
