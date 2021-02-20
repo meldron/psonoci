@@ -1,4 +1,4 @@
 target
 build
 docker_cache
-.vscode
+.vscode/
