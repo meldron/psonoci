@@ -74,12 +74,12 @@ jobs:
                   command: fmt
                   args: --all -- --check
 
-            - name: cargo test
-              uses: actions-rs/cargo@v1
-              with:
-                  use-cross: ${{ matrix.use_cross }}
-                  command: test
-                  args: --release --target ${{ matrix.target }}
+            # - name: cargo test
+            #   uses: actions-rs/cargo@v1
+            #   with:
+            #       use-cross: ${{ matrix.use_cross }}
+            #       command: test
+            #       args: --release --target ${{ matrix.target }}
 
             - name: cargo build
               uses: actions-rs/cargo@v1
