@@ -59,12 +59,12 @@ jobs:
                   override: true
 
             - name: Pull docker image used by cross
-              if: matrix.os == 'ubuntu-18.04'
+              if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
               run: docker pull $builder_image:${{ matrix.target }}
 
             # # right now do not build image every time to save github actions quota
             - name: Build docker image used by cross
-              if: matrix.os == 'ubuntu-18.04'
+              if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
               run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
             - name: cargo fmt
