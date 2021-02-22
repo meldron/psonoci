@@ -2,21 +2,23 @@ use anyhow::{anyhow, Context, Result};
 use structopt::StructOpt;
 
 mod api;
+mod config;
 mod crypto;
 mod opt;
 
-use api::get_secret;
-use opt::{Command, Opt, SecretCommand};
+use api::{api_key_get_secrets, api_key_info, get_secret};
+use config::{Config, ConfigSaveFormat};
+use opt::{ApiKeyCommand, Command, ConfigCommand, ConfigSource, Opt, SecretCommand};
 
-fn run_secret_command(opt: &Opt, command: &SecretCommand) -> Result<()> {
+fn run_secret_command(config: Config, command: SecretCommand) -> Result<()> {
     match command {
         SecretCommand::Get {
             secret_id,
             secret_value,
         } => {
-            let secret = get_secret(&secret_id, &opt.api_settings).context("get_secret failed")?;
+            let secret = get_secret(&secret_id, &config).context("get_secret failed")?;
             let secret_type = secret.secret_type.clone();
-            let value: Option<String> = secret.get_value(secret_value);
+            let value: Option<String> = secret.get_value(&secret_value);
 
             if value.is_none() {
                 return Err(anyhow!(
@@ -33,11 +35,67 @@ fn run_secret_command(opt: &Opt, command: &SecretCommand) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let opt = Opt::from_args();
+fn run_inspect_command(config: Config, command: ApiKeyCommand) -> Result<()> {
+    match command {
+        ApiKeyCommand::Info => {
+            let api_key_info = api_key_info(&config).context("api key info failed")?;
+            let api_key_info_json = serde_json::to_string_pretty(&api_key_info)
+                .context("serializing api key info as json failed")?;
+            println!("{}", api_key_info_json);
+        }
+        ApiKeyCommand::Secrets => {
+            let secrets = api_key_get_secrets(&config).context("api key secrets failed")?;
+            let secrets_json = serde_json::to_string_pretty(&secrets)
+                .context("serializing api key secrets as json failed")?;
+            println!("{}", secrets_json);
+        }
+    }
 
-    match &opt.command {
-        Command::Secret { 0: secret_command } => run_secret_command(&opt, secret_command)?,
+    Ok(())
+}
+
+fn run_config_command(
+    config_source: ConfigSource,
+    config: Config,
+    command: ConfigCommand,
+) -> Result<()> {
+    match command {
+        ConfigCommand::Pack => {
+            println!(
+                "{}",
+                config
+                    .to_string(ConfigSaveFormat::MessagePackBase58)
+                    .context("packing as bincode base58 encoded failed")?
+            );
+        }
+        ConfigCommand::Save { overwrite, path } => {
+            config
+                .save(&path, ConfigSaveFormat::TOML, overwrite)
+                .context("saving config failed")?;
+        }
+        ConfigCommand::Show => {
+            eprintln!("# The config is loaded from {}\n", config_source);
+            let c = config
+                .to_string(ConfigSaveFormat::TOML)
+                .context("serializing config to toml failed")?;
+            println!("{}", c);
+        }
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    let opt: Opt = Opt::from_args();
+
+    let (config_source, config) = opt.raw_config.as_config()?;
+
+    match opt.command {
+        Command::Secret { 0: secret_command } => run_secret_command(config, secret_command)?,
+        Command::ApiKey { 0: api_key_command } => run_inspect_command(config, api_key_command)?,
+        Command::Config { 0: config_command } => {
+            run_config_command(config_source, config, config_command)?;
+        }
     }
 
     Ok(())
