@@ -35,14 +35,15 @@ jobs:
                       target_type: unix
                       use_cross: false
                     - build: win-gnu
-                      os: windows-2019
+                      os: ubuntu-18.04
                       target: x86_64-pc-windows-gnu
                       target_type: windows
-                      use_cross: false
+                      use_cross: true
                     - build: win-msvc
                       os: windows-2019
                       target: x86_64-pc-windows-msvc
                       target_type: windows
+                      use_cross: false
 
         steps:
             - name: Get the version
