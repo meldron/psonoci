@@ -14,6 +14,8 @@ use uuid::Uuid;
 
 use crate::crypto::parse_secret_key;
 
+static CONFIG_LOADER_BASE58_ERROR: &str = "decoding base58 failed";
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "version")]
 pub enum ConfigLoader {
@@ -21,18 +23,22 @@ pub enum ConfigLoader {
     V1(ConfigV1),
 }
 
+static CONFIG_DESERIALIZING_MESSAGE_PACK_FAILED: &str = "deserializing message pack failed";
+
 pub fn deserialize_message_pack<O: DeserializeOwned>(raw: &[u8]) -> Result<O> {
     let cursor = Cursor::new(raw);
     let mut d = MessagePackDeserializer::new(cursor);
-    Deserialize::deserialize(&mut d).context("deserializing message pack failed")
+    Deserialize::deserialize(&mut d).context(CONFIG_DESERIALIZING_MESSAGE_PACK_FAILED)
 }
+
+static CONFIG_SERIALIZING_MESSAGE_PACK_FAILED: &str = "serializing to messgagepack failed";
 
 pub fn serialize_message_pack<I: Serialize>(input: I) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     let mut s = MessagePackSerializer::new(&mut buf);
     input
         .serialize(&mut s)
-        .context("serializing to messgagepack failed")?;
+        .context(CONFIG_SERIALIZING_MESSAGE_PACK_FAILED)?;
 
     Ok(buf)
 }
@@ -47,7 +53,7 @@ impl ConfigLoader {
             ConfigSaveFormat::MessagePackBase58 => {
                 let raw: Vec<u8> = bs58::decode(s)
                     .into_vec()
-                    .context("decoding base58 failed")?;
+                    .context(CONFIG_LOADER_BASE58_ERROR)?;
                 deserialize_message_pack(&raw)?
             }
         };
@@ -249,6 +255,42 @@ mod tests {
         let config_loader_result = config_loader_result.unwrap();
 
         assert_eq!(config_loader_result, target_config);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn parse_config_v1_with_config_loader_from_base58_message_pack__base58_illegal_char_error() {
+        // I is an illegal base58 char
+        let input_debug_config_v1 = "IXLZ6owS4rtdgFxsBmWbpxeNhScHsMHJZAaXDrrcTxQK7f1vyomg4jiRW6yoAt1qUzE1qdNzGtMw64hi2kG6qXc4aTHrpikZkYiJLAGe5L1HWfo8deWx761CZapVpkqRT5tZM2jAJjLpbdD74A5XaJoNQq4dGX5LhBpUB8Pi7";
+
+        let config_loader_result =
+            ConfigLoader::from_str(input_debug_config_v1, ConfigSaveFormat::MessagePackBase58);
+        assert!(config_loader_result.is_err());
+
+        let config_loader_error = config_loader_result.unwrap_err();
+
+        assert_eq!(config_loader_error.to_string(), CONFIG_LOADER_BASE58_ERROR);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn parse_config_v1_with_config_loader_from_base58_message_pack__message_pack_deserialize_error()
+    {
+        // random data encoded as base58 string
+        let input_debug_config_v1 =
+            "2HUhVoziURdMHEhHpwF5DAx7mdToMn5V2a8DzCNKmCAjVTEAxTzfHKJwPz2RCzEqEUfYR";
+
+        let config_loader_result =
+            ConfigLoader::from_str(input_debug_config_v1, ConfigSaveFormat::MessagePackBase58);
+        assert!(config_loader_result.is_err());
+
+        let config_loader_error = config_loader_result.unwrap_err();
+
+        println!("{}", config_loader_error);
+        assert_eq!(
+            config_loader_error.to_string(),
+            CONFIG_DESERIALIZING_MESSAGE_PACK_FAILED
+        );
     }
 }
 
