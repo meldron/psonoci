@@ -13,6 +13,7 @@ bs58 = "0.4.0"
 clap = "2.33.3"
 const_format = "0.2.13"
 hex = "0.4.2"
+lazy_static = "1.4.0"
 rayon = "1.5.0"
 reqwest = {version = "0.11.1", default-features = false, features = ["blocking", "native-tls", "rustls-tls", "json"]}
 rmp = "0.8.10"

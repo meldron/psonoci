@@ -855,6 +855,7 @@ dependencies = [
  "clap",
  "const_format",
  "hex",
+ "lazy_static",
  "rayon",
  "reqwest",
  "rmp",
