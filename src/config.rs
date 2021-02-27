@@ -64,7 +64,7 @@ impl ConfigLoader {
     }
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize, Clone)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ConfigV1 {
     // psono server options
     #[structopt(flatten)]
@@ -133,7 +133,7 @@ fn default_as_false() -> bool {
     false
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize, Clone)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct HttpOptions {
     #[structopt(
         long,
@@ -160,7 +160,7 @@ pub struct HttpOptions {
     pub use_native_tls: bool,
     #[structopt(
         long,
-        help = "DANGER: completely disables all TLS (common name and certificate) verification. You should not use this. A better approach is just using plain http so there's no false sense of security"
+        help = "DANGER: completely disables all TLS (common name and certificate) verification. You should not use this. A better approach is just using plain http so there's no false sense of security (Psono secrets are still authenticated)"
     )]
     #[serde(default = "default_as_false")]
     pub danger_disable_tls_verification: bool,
@@ -193,7 +193,7 @@ impl Default for HttpOptions {
     }
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize, Clone)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct PsonoSettings {
     pub api_key_id: Uuid,
     #[serde(deserialize_with = "deserialize_secret_key")]
@@ -208,6 +208,48 @@ where
     let buf = String::deserialize(deserializer)?;
 
     parse_secret_key(&buf).map_err(serde::de::Error::custom)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    fn debug_config_v1() -> ConfigV1 {
+        ConfigV1 {
+            psono_settings: PsonoSettings {
+                api_key_id: Uuid::from_str("0e1ed23d-cac8-4a04-868b-275bf43b81cd")
+                    .expect("api_key_id error"),
+                api_secret_key_hex:
+                    "acf25040d90e3c73abf1c395e7262bc3b5f9b1e35b96c74dcf72faba4663e98b".to_string(),
+                server_url: Url::from_str("https://www.psono.pw/server").expect("serer_url error"),
+            },
+            http_options: HttpOptions {
+                timeout: 60,
+                max_redirects: 0,
+                use_native_tls: false,
+                danger_disable_tls_verification: false,
+                der_root_certificate_path: None,
+                pem_root_certificate_path: None,
+            },
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn parse_config_v1_with_config_loader_from_base58_message_pack__success() {
+        let input_debug_config_v1 = "XLZ6owS4rtdgFxsBmWbpxeNhScHsMHJZAaXDrrcTxQK7f1vyomg4jiRW6yoAt1qUzE1qdNzGtMw64hi2kG6qXc4aTHrpikZkYiJLAGe5L1HWfo8deWx761CZapVpkqRT5tZM2jAJjLpbdD74A5XaJoNQq4dGX5LhBpUB8Pi7";
+        let target_config = debug_config_v1();
+
+        let config_loader_result =
+            ConfigLoader::from_str(input_debug_config_v1, ConfigSaveFormat::MessagePackBase58);
+        assert!(config_loader_result.is_ok());
+
+        let config_loader_result = config_loader_result.unwrap();
+
+        assert_eq!(config_loader_result, target_config);
+    }
 }
 
 // impl PsonoSettings {
