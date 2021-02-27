@@ -607,13 +607,18 @@ pub fn api_key_get_secrets(config: &Config) -> Result<HashMap<Uuid, Secret>> {
 
 #[cfg(test)]
 mod tests {
+    use lazy_static::lazy_static;
+
     use super::*;
     use crate::config::PsonoSettings;
 
     static BAD_SSL_UNTRUSTED_ROOT_URL: &str = "https://untrusted-root.badssl.com/";
     static BAD_SSL_EXPIRED_URL: &str = "https://expired.badssl.com/";
 
-    static BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH: &str = "test_files/untrusted-root.badssl.com_ca.pem";
+    lazy_static! {
+        static ref BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATHS: Vec<&'static str> =
+            vec!["test_files", "untrusted-root.badssl.com_ca.pem"];
+    }
 
     pub fn debug_psono_settings() -> PsonoSettings {
         PsonoSettings {
@@ -634,6 +639,16 @@ mod tests {
             timeout: 60,
             use_native_tls: false,
         }
+    }
+
+    pub fn get_bad_ssl_cert_path() -> PathBuf {
+        let mut cert_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+        BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATHS
+            .iter()
+            .for_each(|p| cert_path.push(*p));
+
+        cert_path
     }
 
     #[allow(dead_code)]
@@ -688,8 +703,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn load_root_certificate__pem_success() {
-        let mut cert_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cert_path.push(BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH);
+        let cert_path = get_bad_ssl_cert_path();
 
         let result = load_root_certificate(CertificateEncoding::PEM, &cert_path);
 
@@ -699,8 +713,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn load_root_certificate__request_der_supply_pem() {
-        let mut cert_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cert_path.push(BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH);
+        let cert_path = get_bad_ssl_cert_path();
 
         let result = load_root_certificate(CertificateEncoding::DER, &cert_path);
 
@@ -714,8 +727,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn make_request__untrusted_root_with_supplied_ca__success() {
-        let mut cert_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cert_path.push(BAD_SSL_UNTRUSTED_CA_PEM_CERT_PATH);
+        let cert_path = get_bad_ssl_cert_path();
 
         let url = Url::parse(BAD_SSL_UNTRUSTED_ROOT_URL).expect("parsing url failed");
         let mut options = debug_http_options();
