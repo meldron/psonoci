@@ -6,7 +6,7 @@ mod config;
 mod crypto;
 mod opt;
 
-use api::{api_key_get_secrets, api_key_info, get_secret};
+use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
 use config::{Config, ConfigSaveFormat};
 use opt::{ApiKeyCommand, Command, ConfigCommand, ConfigSource, Opt, SecretCommand};
 
@@ -14,9 +14,9 @@ fn run_secret_command(config: Config, command: SecretCommand) -> Result<()> {
     match command {
         SecretCommand::Get {
             secret_id,
-            secret_value,
+            secret_value_type: secret_value,
         } => {
-            let secret = get_secret(&secret_id, &config).context("get_secret failed")?;
+            let (secret, _) = get_secret(&secret_id, &config).context("get_secret failed")?;
             let secret_type = secret.secret_type.clone();
             let value: Option<String> = secret.get_value(&secret_value);
 
@@ -29,6 +29,21 @@ fn run_secret_command(config: Config, command: SecretCommand) -> Result<()> {
             }
 
             print!("{}", value.unwrap());
+        }
+        SecretCommand::Set {
+            secret_id,
+            secret_value_type,
+            secret_new_value,
+        } => {
+            let (mut secret, secret_key_hex) = get_secret(&secret_id, &config)
+                .context("set_secret loading secret from store failed")?;
+
+            secret
+                .set_value(&secret_value_type, secret_new_value)
+                .context("set secret value failed")?;
+
+            set_secret(&secret_id, &config, &secret, &secret_key_hex)
+                .context("set secret api call failed")?;
         }
     }
 

@@ -20,7 +20,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::config::{Config, HttpOptions};
-use crate::crypto::open_secret_box;
+use crate::crypto::{create_nonce_hex, open_secret_box, seal_secret_box_hex};
 
 static USER_AGENT_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
@@ -28,8 +28,10 @@ static CERTIFICATE_ERROR_DECODE: &str = "could not decode certificate";
 static CERTIFICATE_ERROR_OPEN: &str = "could not open certificate";
 static CERTIFICATE_ERROR_READ: &str = "could not read certificate";
 
+static SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED: &str = "setting with JSON is not yet supported";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SecretValueType {
+pub enum SecretType {
     Website,
     Application,
     Note,
@@ -37,14 +39,14 @@ pub enum SecretValueType {
     Bookmark,
 }
 
-impl SecretValueType {
+impl SecretType {
     pub fn as_str(&self) -> &str {
         match self {
-            SecretValueType::Website => "website",
-            SecretValueType::Application => "application",
-            SecretValueType::Note => "note",
-            SecretValueType::GPGKey => "gpg_key",
-            SecretValueType::Bookmark => "bookmark",
+            SecretType::Website => "website",
+            SecretType::Application => "application",
+            SecretType::Note => "note",
+            SecretType::GPGKey => "gpg_key",
+            SecretType::Bookmark => "bookmark",
         }
     }
 }
@@ -52,7 +54,7 @@ impl SecretValueType {
 arg_enum! {
     #[derive(Debug)]
     #[allow(non_camel_case_types)]
-pub enum SecretValue {
+pub enum SecretValueType {
     json,
     notes,
     password,
@@ -68,21 +70,21 @@ pub enum SecretValue {
 }
 }
 
-impl SecretValue {
+impl SecretValueType {
     pub fn as_str(&self) -> &str {
         match self {
-            SecretValue::json => "json",
-            SecretValue::notes => "notes",
-            SecretValue::password => "password",
-            SecretValue::title => "title",
-            SecretValue::url => "url",
-            SecretValue::url_filter => "url_filter",
-            SecretValue::username => "username",
-            SecretValue::gpg_key_email => "gpg_key_email",
-            SecretValue::gpg_key_name => "gpg_key_name",
-            SecretValue::gpg_key_private => "gpg_key_private",
-            SecretValue::gpg_key_public => "gpg_key_public",
-            SecretValue::secret_type => "type",
+            SecretValueType::json => "json",
+            SecretValueType::notes => "notes",
+            SecretValueType::password => "password",
+            SecretValueType::title => "title",
+            SecretValueType::url => "url",
+            SecretValueType::url_filter => "url_filter",
+            SecretValueType::username => "username",
+            SecretValueType::gpg_key_email => "gpg_key_email",
+            SecretValueType::gpg_key_name => "gpg_key_name",
+            SecretValueType::gpg_key_private => "gpg_key_private",
+            SecretValueType::gpg_key_public => "gpg_key_public",
+            SecretValueType::secret_type => "type",
         }
     }
 }
@@ -149,7 +151,7 @@ pub struct EncryptedResponse {
 }
 
 impl EncryptedResponse {
-    pub fn open<I, O>(&self, api_key_secret_key_hex: &str) -> Result<O>
+    pub fn open<I, O>(&self, api_key_secret_key_hex: &str) -> Result<(O, String)>
     where
         I: DeserializeOwned,
         O: DataTransform<I, O>,
@@ -172,7 +174,7 @@ impl EncryptedResponse {
 
         let output = O::transform(input).context("transforming input into output failed")?;
 
-        Ok(output)
+        Ok((output, encryption_key.to_owned()))
     }
 }
 
@@ -266,10 +268,9 @@ pub fn make_request(
     Ok(vec)
 }
 
-fn call_route<T, U>(server_url: &Url, http_options: &HttpOptions, route: Route<T>) -> Result<U>
+fn call_route<T>(server_url: &Url, http_options: &HttpOptions, route: Route<T>) -> Result<Vec<u8>>
 where
     T: Serialize,
-    U: DeserializeOwned,
 {
     let url = format!("{}/{}", server_url, route.endpoint.as_str());
     let url_parsed = Url::parse(&url).context("url parsing error")?;
@@ -279,6 +280,19 @@ where
     let response_raw: Vec<u8> = make_request(http_options, url_parsed, route.method, Some(body))
         .context("make request failed")?;
 
+    Ok(response_raw)
+}
+
+fn call_route_deserialize_response<T, U>(
+    server_url: &Url,
+    http_options: &HttpOptions,
+    route: Route<T>,
+) -> Result<U>
+where
+    T: Serialize,
+    U: DeserializeOwned,
+{
+    let response_raw: Vec<u8> = call_route(server_url, http_options, route)?;
     let body: U = serde_json::from_slice(response_raw.as_ref())
         .context("response body json deserialization failed")?;
 
@@ -286,9 +300,17 @@ where
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SecretRequestBody {
+pub struct GetSecretRequestBody {
     pub api_key_id: String,
     pub secret_id: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetSecretRequestBody {
+    pub api_key_id: String,
+    pub secret_id: String,
+    pub data: String,
+    pub data_nonce: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -325,6 +347,98 @@ pub struct GenericSecret {
     pub note_title: Option<String>,
 }
 
+impl GenericSecret {
+    pub fn new() -> Self {
+        GenericSecret {
+            application_password_notes: None,
+            application_password_password: None,
+            application_password_title: None,
+            application_password_username: None,
+            bookmark_notes: None,
+            bookmark_title: None,
+            bookmark_url: None,
+            bookmark_url_filter: None,
+            mail_gpg_own_key_email: None,
+            mail_gpg_own_key_name: None,
+            mail_gpg_own_key_private: None,
+            mail_gpg_own_key_public: None,
+            mail_gpg_own_key_title: None,
+            note_notes: None,
+            note_title: None,
+            website_password_notes: None,
+            website_password_password: None,
+            website_password_title: None,
+            website_password_url: None,
+            website_password_url_filter: None,
+            website_password_username: None,
+        }
+    }
+}
+
+pub trait PsonoSecret: Sized {
+    fn from_generic_secret(s: &GenericSecret) -> Result<Self>;
+
+    fn as_json_string(&self) -> Result<String>;
+
+    fn get_secret_value(&self, value: SecretValueType) -> Result<String>;
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WebsiteSecret {
+    pub url_filter: String,
+    pub notes: String,
+    pub password: String,
+    pub username: String,
+    pub url: String,
+    pub title: String,
+}
+
+impl PsonoSecret for WebsiteSecret {
+    fn from_generic_secret(s: &GenericSecret) -> Result<Self> {
+        if s.website_password_notes.is_some()
+            || s.website_password_password.is_some()
+            || s.website_password_title.is_some()
+            || s.website_password_url.is_some()
+            || s.website_password_url_filter.is_some()
+            || s.website_password_username.is_some()
+        {
+            return Ok(WebsiteSecret {
+                notes: s.website_password_notes.clone().unwrap(),
+                password: s.website_password_password.clone().unwrap(),
+                title: s.website_password_title.clone().unwrap(),
+                url: s.website_password_url.clone().unwrap(),
+                url_filter: s.website_password_url_filter.clone().unwrap(),
+                username: s.website_password_username.clone().unwrap(),
+            });
+        } else {
+            return Err(anyhow!("not a website secret"));
+        }
+    }
+
+    fn as_json_string(&self) -> Result<String> {
+        serde_json::to_string(&self).map_err(|e| anyhow!(e))
+    }
+
+    fn get_secret_value(&self, value: SecretValueType) -> Result<String> {
+        // match value {
+        //     SecretValueType::json => Ok(self.as_json_string()?),
+        //     SecretValueType::notes => Ok(self.notes.clone()),
+        //     SecretValueType::password => {}
+        //     SecretValueType::title => {}
+        //     SecretValueType::url => {}
+        //     SecretValueType::url_filter => {}
+        //     SecretValueType::username => {}
+        //     SecretValueType::secret_type => {}
+        //     _ => Err(anyhow!(
+        //         "{} is not available in a {:?} secret",
+        //         value,
+        //         SecretValueTypeType::Website
+        //     )),
+        // }
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Secret {
     pub url_filter: Option<String>,
@@ -333,7 +447,7 @@ pub struct Secret {
     pub username: Option<String>,
     pub url: Option<String>,
     pub title: Option<String>,
-    pub secret_type: SecretValueType,
+    pub secret_type: SecretType,
 
     pub gpg_key_private: Option<String>,
     pub gpg_key_public: Option<String>,
@@ -342,6 +456,46 @@ pub struct Secret {
 }
 
 impl Secret {
+    pub fn as_generic_secret(&self) -> GenericSecret {
+        let mut gs = GenericSecret::new();
+
+        match self.secret_type {
+            SecretType::Website => {
+                gs.website_password_notes = self.notes.clone();
+                gs.website_password_password = self.password.clone();
+                gs.website_password_title = self.title.clone();
+                gs.website_password_url = self.url.clone();
+                gs.website_password_url_filter = self.url_filter.clone();
+                gs.website_password_username = self.username.clone();
+            }
+            SecretType::Application => {
+                gs.application_password_notes = self.notes.clone();
+                gs.application_password_password = self.password.clone();
+                gs.application_password_title = self.title.clone();
+                gs.application_password_username = self.username.clone();
+            }
+            SecretType::Note => {
+                gs.note_notes = self.notes.clone();
+                gs.note_title = self.title.clone();
+            }
+            SecretType::GPGKey => {
+                gs.mail_gpg_own_key_email = self.gpg_key_email.clone();
+                gs.mail_gpg_own_key_name = self.gpg_key_name.clone();
+                gs.mail_gpg_own_key_private = self.gpg_key_private.clone();
+                gs.mail_gpg_own_key_public = self.gpg_key_public.clone();
+                gs.mail_gpg_own_key_title = self.title.clone();
+            }
+            SecretType::Bookmark => {
+                gs.bookmark_notes = self.notes.clone();
+                gs.bookmark_title = self.title.clone();
+                gs.bookmark_url = self.url.clone();
+                gs.bookmark_url_filter = self.url_filter.clone();
+            }
+        }
+
+        gs
+    }
+
     pub fn as_json(&self) -> Option<String> {
         let value_raw = json!({
             "title": &self.title,
@@ -360,21 +514,82 @@ impl Secret {
         serde_json::to_string(&value_raw).ok()
     }
 
-    pub fn get_value(self, value: &SecretValue) -> Option<String> {
+    pub fn get_value(self, value: &SecretValueType) -> Option<String> {
         match value {
-            SecretValue::json => self.as_json(),
-            SecretValue::notes => self.notes,
-            SecretValue::password => self.password,
-            SecretValue::title => self.title,
-            SecretValue::url => self.url,
-            SecretValue::url_filter => self.url_filter,
-            SecretValue::username => self.username,
-            SecretValue::gpg_key_email => self.gpg_key_email,
-            SecretValue::gpg_key_name => self.gpg_key_name,
-            SecretValue::gpg_key_private => self.gpg_key_private,
-            SecretValue::gpg_key_public => self.gpg_key_public,
-            SecretValue::secret_type => Some(self.secret_type.as_str().to_owned()),
+            SecretValueType::json => self.as_json(),
+            SecretValueType::notes => self.notes,
+            SecretValueType::password => self.password,
+            SecretValueType::title => self.title,
+            SecretValueType::url => self.url,
+            SecretValueType::url_filter => self.url_filter,
+            SecretValueType::username => self.username,
+            SecretValueType::gpg_key_email => self.gpg_key_email,
+            SecretValueType::gpg_key_name => self.gpg_key_name,
+            SecretValueType::gpg_key_private => self.gpg_key_private,
+            SecretValueType::gpg_key_public => self.gpg_key_public,
+            SecretValueType::secret_type => Some(self.secret_type.as_str().to_owned()),
         }
+    }
+
+    pub fn set_value(&mut self, secret_value_type: &SecretValueType, value: String) -> Result<()> {
+        match (&self.secret_type, secret_value_type) {
+            // WEBSITE
+            (SecretType::Website, SecretValueType::json) => {
+                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
+            }
+            (SecretType::Website, SecretValueType::notes) => self.notes = Some(value),
+            (SecretType::Website, SecretValueType::password) => self.password = Some(value),
+            (SecretType::Website, SecretValueType::title) => self.title = Some(value),
+            (SecretType::Website, SecretValueType::url) => self.url = Some(value),
+            (SecretType::Website, SecretValueType::url_filter) => self.url_filter = Some(value),
+            (SecretType::Website, SecretValueType::username) => self.username = Some(value),
+            // APPLICATION
+            (SecretType::Application, SecretValueType::json) => {
+                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
+            }
+            (SecretType::Application, SecretValueType::notes) => self.notes = Some(value),
+            (SecretType::Application, SecretValueType::password) => self.password = Some(value),
+            (SecretType::Application, SecretValueType::title) => self.title = Some(value),
+            (SecretType::Application, SecretValueType::username) => self.username = Some(value),
+            // NOTE
+            (SecretType::Note, SecretValueType::json) => {
+                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
+            }
+            (SecretType::Note, SecretValueType::notes) => self.notes = Some(value),
+            (SecretType::Note, SecretValueType::title) => self.title = Some(value),
+            // GPGKey
+            (SecretType::GPGKey, SecretValueType::json) => {
+                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
+            }
+            (SecretType::GPGKey, SecretValueType::title) => self.title = Some(value),
+            (SecretType::GPGKey, SecretValueType::gpg_key_email) => {
+                self.gpg_key_email = Some(value)
+            }
+            (SecretType::GPGKey, SecretValueType::gpg_key_name) => self.gpg_key_name = Some(value),
+            (SecretType::GPGKey, SecretValueType::gpg_key_private) => {
+                self.gpg_key_private = Some(value)
+            }
+            (SecretType::GPGKey, SecretValueType::gpg_key_public) => {
+                self.gpg_key_public = Some(value)
+            }
+            // Bookmark
+            (SecretType::Bookmark, SecretValueType::json) => {
+                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
+            }
+            (SecretType::Bookmark, SecretValueType::notes) => self.notes = Some(value),
+            (SecretType::Bookmark, SecretValueType::title) => self.title = Some(value),
+            (SecretType::Bookmark, SecretValueType::url) => self.url = Some(value),
+            (SecretType::Bookmark, SecretValueType::url_filter) => self.url_filter = Some(value),
+            (_, _) => {
+                return Err(anyhow!(
+                    "cannot set {:?} for {:?}",
+                    secret_value_type,
+                    self.secret_type
+                ))
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -392,7 +607,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 gpg_key_public: None,
                 notes: s.application_password_notes,
                 password: s.application_password_password,
-                secret_type: SecretValueType::Application,
+                secret_type: SecretType::Application,
                 title: s.application_password_title,
                 url: None,
                 url_filter: None,
@@ -414,7 +629,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 gpg_key_public: None,
                 notes: s.website_password_notes,
                 password: s.website_password_password,
-                secret_type: SecretValueType::Website,
+                secret_type: SecretType::Website,
                 title: s.website_password_title,
                 url: s.website_password_url,
                 url_filter: s.website_password_url_filter,
@@ -434,7 +649,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 gpg_key_public: None,
                 notes: s.bookmark_notes,
                 password: None,
-                secret_type: SecretValueType::Bookmark,
+                secret_type: SecretType::Bookmark,
                 title: s.bookmark_title,
                 url: s.bookmark_url,
                 url_filter: s.bookmark_url_filter,
@@ -450,7 +665,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 gpg_key_public: None,
                 notes: s.note_notes,
                 password: None,
-                secret_type: SecretValueType::Note,
+                secret_type: SecretType::Note,
                 title: s.note_title,
                 url: None,
                 url_filter: None,
@@ -471,7 +686,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 gpg_key_public: s.mail_gpg_own_key_public,
                 notes: None,
                 password: None,
-                secret_type: SecretValueType::GPGKey,
+                secret_type: SecretType::GPGKey,
                 title: s.mail_gpg_own_key_title,
                 url: None,
                 url_filter: None,
@@ -483,8 +698,8 @@ impl DataTransform<GenericSecret, Secret> for Secret {
     }
 }
 
-pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<Secret> {
-    let body = SecretRequestBody {
+pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, String)> {
+    let body = GetSecretRequestBody {
         api_key_id: config
             .psono_settings
             .api_key_id
@@ -500,18 +715,60 @@ pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<Secret> {
         body,
     };
 
-    let psono_response: EncryptedResponse = call_route(
+    let psono_response: EncryptedResponse = call_route_deserialize_response(
         &config.psono_settings.server_url,
         &config.http_options,
         request,
     )
     .context("get secret api call failed")?;
 
-    let secret = psono_response
+    let (secret, secret_key_hex) = psono_response
         .open::<GenericSecret, Secret>(&config.psono_settings.api_secret_key_hex)
         .context("get secret decryption failed")?;
 
-    Ok(secret)
+    Ok((secret, secret_key_hex))
+}
+
+pub fn set_secret(
+    secret_id: &Uuid,
+    config: &Config,
+    secret: &Secret,
+    secret_key_hex: &str,
+) -> Result<()> {
+    let nonce_hex = create_nonce_hex();
+    let generic_secret = secret.as_generic_secret();
+    let plaintext = serde_json::to_string(&generic_secret).context("serializing secret failed")?;
+
+    let secret_encrypted_hex =
+        seal_secret_box_hex(plaintext.as_bytes(), &nonce_hex, secret_key_hex)
+            .context("encrypting secret failed")?;
+
+    let body = SetSecretRequestBody {
+        api_key_id: config
+            .psono_settings
+            .api_key_id
+            .to_hyphenated()
+            .to_string()
+            .to_lowercase(),
+        secret_id: secret_id.to_hyphenated().to_string().to_lowercase(),
+        data: secret_encrypted_hex,
+        data_nonce: nonce_hex,
+    };
+
+    let request = Route {
+        method: Method::PUT,
+        endpoint: Endpoint::ApiKeyAccessSecret,
+        body,
+    };
+
+    call_route(
+        &config.psono_settings.server_url,
+        &config.http_options,
+        request,
+    )
+    .context("set secret api call failed")?;
+
+    Ok(())
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -578,7 +835,7 @@ pub fn api_key_info(config: &Config) -> Result<ApiKeyInfo> {
         body,
     };
 
-    let response: InspectApiKeyResponse = call_route(
+    let response: InspectApiKeyResponse = call_route_deserialize_response(
         &config.psono_settings.server_url,
         &config.http_options,
         request,
@@ -599,7 +856,9 @@ pub fn api_key_get_secrets(config: &Config) -> Result<HashMap<Uuid, Secret>> {
         .map(|id| {
             Ok((
                 id,
-                get_secret(&id, &config).context(format!("get secret for {} failed", &id))?,
+                get_secret(&id, &config)
+                    .context(format!("get secret for {} failed", &id))?
+                    .0,
             ))
         })
         .collect()

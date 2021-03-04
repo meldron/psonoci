@@ -7,7 +7,7 @@ use structopt::StructOpt;
 use url::Url;
 use uuid::Uuid;
 
-use crate::api::{parse_url, SecretValue};
+use crate::api::{parse_url, SecretValueType};
 use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
 
@@ -148,8 +148,16 @@ pub enum SecretCommand {
     Get {
         #[structopt(required = true, help = "The secret's uuid")]
         secret_id: Uuid,
-        #[structopt(required = true, possible_values = &SecretValue::variants(), case_insensitive = true, help = "Which secret value-type to return ('json' returns all value-types in a json object)")]
-        secret_value: SecretValue,
+        #[structopt(required = true, possible_values = &SecretValueType::variants(), case_insensitive = true, help = "Which secret value-type to return ('json' returns all value-types in a json object)")]
+        secret_value_type: SecretValueType,
+    },
+    Set {
+        #[structopt(required = true, help = "The secret's uuid")]
+        secret_id: Uuid,
+        #[structopt(required = true, possible_values = &SecretValueType::variants(), case_insensitive = true, help = "Which secret value-type to set ('json' not yet supported)")]
+        secret_value_type: SecretValueType,
+        #[structopt(required = true, help = "The new value to set for type")]
+        secret_new_value: String,
     },
 }
 
