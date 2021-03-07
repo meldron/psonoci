@@ -29,6 +29,8 @@ variables:
         - rustup --version
         - rustup toolchain install "${RUST_TOOLCHAIN}"
         - rustup default "${RUST_TOOLCHAIN}"
+        # gitlab ci build uses docker images from jfrog and not dockerhub
+        - mv Cross_Gitlab.toml Cross.toml
         - cargo --version
         - cargo install cross
         - cross --version
@@ -46,10 +48,10 @@ build-x86_64-unknown-linux-musl:
     variables:
         BUILD_ENV: x86_64-unknown-linux-musl
 
-build-armv7-unknown-linux-musleabihf:
+build-armv7-unknown-linux-gnueabihf:
     <<: *build
     variables:
-        BUILD_ENV: armv7-unknown-linux-musleabihf
+        BUILD_ENV: armv7-unknown-linux-gnueabihf
 
 build-aarch64-unknown-linux-musl:
     <<: *build
