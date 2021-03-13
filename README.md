@@ -82,8 +82,11 @@ Since version `0.2.0` `psonoci` can also be configured with a config file or con
 ### Config File
 
 ```sh
-psonoci --api-key-id 00000000-0000-0000-0000-000000000000
- --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 --server-url 'https://psono.pw/server' config save /tmp/psonocni.toml
+psonoci \
+    --api-key-id 00000000-0000-0000-0000-000000000000 \
+    --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 \
+    --server-url 'https://psono.pw/server' \
+    config save /tmp/psonocni.toml
 ```
 
 Creates the following config file at `/tmp/psonocni.toml`
@@ -120,7 +123,11 @@ PSONO_CI_CONFIG_PATH="/path/to/config.toml" psonoci config show
 If you don't want to use files to load the config there is also the option to load the config from a base58 encoded string which can be supplied as an environment variable.
 
 ```sh
-psonoci --api-key-id 00000000-0000-0000-0000-000000000000 --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 --server-url 'https://psono.pw/server' config pack
+psonoci \
+    --api-key-id 00000000-0000-0000-0000-000000000000 \
+    --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 \
+    --server-url 'https://psono.pw/server' \
+    config pack
 ```
 
 Returns this string :
@@ -132,7 +139,9 @@ Returns this string :
 which than can be used with:
 
 ```sh
-psonoci --config-packed="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ysoVAjW8qS2iYwEaRm9NxzpbSXuwwXL45aHLiWi8TBSee3KnitgJPGyiuGCREGibB2pVCPCVg1zb11TpsbKuzV3aGhqQyE1NJnYwo9qrVjw6P" config show
+psonoci \
+    --config-packed="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ysoVAjW8qS2iYwEaRm9NxzpbSXuwwXL45aHLiWi8TBSee3KnitgJPGyiuGCREGibB2pVCPCVg1zb11TpsbKuzV3aGhqQyE1NJnYwo9qrVjw6P" \
+    config show
 ```
 
 or
