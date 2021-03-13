@@ -81,8 +81,6 @@ Since version `0.2.0` `psonoci` can also be configured with a config file or con
 
 ### Config File
 
-Config files or strings for the current configuration can be created with `psonoci config create` or `psonoci config pack`.
-
 ```sh
 psonoci --api-key-id 00000000-0000-0000-0000-000000000000
  --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 --server-url 'https://psono.pw/server' config save /tmp/psonocni.toml
@@ -111,7 +109,7 @@ The config file then can be loaded with:
 psonoci -c /path/to/config.toml config show
 ```
 
-or
+or be supplied by an environment variable
 
 ```sh
 PSONO_CI_CONFIG_PATH="/path/to/config.toml" psonoci config show
