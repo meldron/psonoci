@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Context, Result};
+use run::run_run_command;
 use structopt::StructOpt;
 
 mod api;
 mod config;
 mod crypto;
 mod opt;
+mod run;
 
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
 use config::{Config, ConfigSaveFormat};
@@ -110,6 +112,9 @@ fn main() -> Result<()> {
         Command::ApiKey { 0: api_key_command } => run_inspect_command(config, api_key_command)?,
         Command::Config { 0: config_command } => {
             run_config_command(config_source, config, config_command)?;
+        }
+        Command::Run(rc) => {
+            run_run_command(config, rc)?;
         }
     }
 
