@@ -11,100 +11,146 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 `psonoci --help`
 
 ```
-psonoci 0.1.0
-psono ci client
+psonoci 0.2.0
+Bernd Kaiser
+Psono ci client
 
 USAGE:
-    psonoci [OPTIONS] --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> <SUBCOMMAND>
+    psonoci [FLAGS] [OPTIONS] --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> <SUBCOMMAND>
 
 FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+        --danger-disable-tls-verification    DANGER: completely disables all TLS (common name and certificate)
+                                             verification. You should not use this. A better approach is just using
+                                             plain http so there's no false sense of security (Psono secrets are still
+                                             authenticated)
+    -h, --help                               Prints help information
+        --use-native-tls                     Use native TLS implementation (for linux musl builds a vendored openssl
+                                             1.1.1j is used)
+    -V, --version                            Prints version information
 
 OPTIONS:
-        --api-key-id <api-key-id>                    api key as uuid [env: PSONO_CI_API_KEY_ID=]
+        --api-key-id <api-key-id>                                  Api key as uuid [env: PSONO_CI_API_KEY_ID=]
         --api-secret-key-hex <api-secret-key-hex>
-            api secret key as 64 byte hex string [env: PSONO_CI_API_SECRET_KEY_HEX=]
+            Api secret key as 64 byte hex string [env: PSONO_CI_API_SECRET_KEY_HEX=]
 
-        --server-url <server-url>                    Url of the psono backend server [env: PSONO_CI_SERVER_URL=]
+        --config-packed <config_packed>
+            psonci config as packed string [env: PSONO_CI_CONFIG_PACKED=]
+
+    -c, --config-path <config_path>
+            psonoci config path [env: PSONO_CI_CONFIG_PATH=psonoci.toml]
+
+        --der-root-certificate-path <der-root-certificate-path>
+            Path to a DER encoded root certificate which should be added to the trust store [env:
+            PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH=]
+        --max-redirects <max-redirects>
+            Maximum numbers of redirects [env: PSONO_CI_MAX_REDIRECTS=]  [default: 0]
+
+        --pem-root-certificate-path <pem-root-certificate-path>
+            Path to a pem encoded root certificate which should be added to the trust store [env:
+            PSONO_CI_ADD_PEM_ROOT_CERTIFICATE_PATH=]
+        --server-url <server-url>
+            Url of the psono backend server [env: PSONO_CI_SERVER_URL=]
+
         --timeout <timeout>
             Connection timeout in seconds [env: PSONO_CI_TIMEOUT=]  [default: 60]
 
 
 SUBCOMMANDS:
-    help      Prints this message or the help of the given subcommand(s)
-    secret    psono secret commands (/api-key-access/secret/)
+    api-key    Psono api-key inspect (/api-key-access/inspect/)
+    config     config commands (create, save, pack,...)
+    help       Prints this message or the help of the given subcommand(s)
+    run        run spawns processes with environment vars from the api-keys secrets
+    secret     Psono secret commands (/api-key-access/secret/)
 ```
 
-### Basic Options
+### Required Options
 
-These options must be specified before the subcommand:
-
-<!-- TODO UPDATE with new options -->
+These three options must be supplied (and be in front of the subcommand):
 
 | Option                   | Env var                     | Type               | Required | Default | Description                                                               |
 | ------------------------ | --------------------------- | ------------------ | -------- | ------- | ------------------------------------------------------------------------- |
 | --api_key_id             | PSONO_CI_API_KEY_ID         | UUID               | yes      | None    | The UUID of your API key                                                  |
 | --api_key_secret_key_hex | PSONO_CI_API_SECRET_KEY_HEX | 64 byte hex string | yes      | None    | Secret key used for decryption of the user's secret key                   |
 | --server_url             | PSONO_CI_SERVER_URL         | URL                | yes      | None    | Address of the PSONO's backend server - e.g.: https://www.psono.pw/server |
-| --timeout                | PSONO_CI_TIMEOUT            | uint64             | no       | 60      | Max http(s) request duration in seconds                                   |
 
-### Secret sub command
+There are several more options, please use the `help` commands for more info.
 
-Right now the secret sub command only supports getting secrets, but maybe further commands will be added in the future.
+## Config
 
-`psonoci secret --help`
+Since version `0.2.0` `psonoci` can also be configured with a config file or config string.
 
+### Config File
+
+Config files or strings for the current configuration can be created with `psonoci config create` or `psonoci config pack`.
+
+```sh
+psonoci --api-key-id 00000000-0000-0000-0000-000000000000
+ --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 --server-url 'https://psono.pw/server' config save /tmp/psonocni.toml
 ```
 
-psonoci-secret 0.1.0
-psono secret commands (/api-key-access/secret/)
+Creates the following config file at `/tmp/psonocni.toml`
 
-USAGE:
-    psonoci --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> secret <SUBCOMMAND>
+```toml
+version = "1"
 
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+[psono_settings]
+api_key_id = "00000000-0000-0000-0000-000000000000"
+api_secret_key_hex = "0000000000000000000000000000000000000000000000000000000000000000"
+server_url = "https://psono.pw/server/"
 
-SUBCOMMANDS:
-    get     Get a psono secret by its uuid
-    help    Prints this message or the help of the given subcommand(s)
+[http_options]
+timeout = 60
+max_redirects = 0
+use_native_tls = false
+danger_disable_tls_verification = false
 ```
 
-#### SecretGet
+The config file then can be loaded with:
 
-Get secret values from the psono backend server.
-
-If the selected value is not set for this secret the process will fail.
-
-`psonoci secret get --help`
-
-```
-psonoci-secret-get 0.1.0
-Get a psono secret by its uuid
-
-USAGE:
-    psonoci secret get <secret-id> <secret-value>
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-ARGS:
-    <secret-id>       The secret's uuid
-    <secret-value>    Which secret value to return ('json' returns all values in a json object) [possible values:
-                      json, notes, password, title, url, url_filter, username, gpg_key_email, gpg_key_name,
-                      gpg_key_private, gpg_key_public]
+```sh
+psonoci -c /path/to/config.toml config show
 ```
 
-Supported secret types:
+or
+
+```sh
+PSONO_CI_CONFIG_PATH="/path/to/config.toml" psonoci config show
+```
+
+### Config String
+
+If you don't want to use files to load the config there is also the option to load the config from a base58 encoded string which can be supplied as an environment variable.
+
+```sh
+psonoci --api-key-id 00000000-0000-0000-0000-000000000000 --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 --server-url 'https://psono.pw/server' config pack
+```
+
+Returns this string :
+
+```
+5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ysoVAjW8qS2iYwEaRm9NxzpbSXuwwXL45aHLiWi8TBSee3KnitgJPGyiuGCREGibB2pVCPCVg1zb11TpsbKuzV3aGhqQyE1NJnYwo9qrVjw6P
+```
+
+which than can be used with:
+
+```sh
+psonoci --config-packed="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ysoVAjW8qS2iYwEaRm9NxzpbSXuwwXL45aHLiWi8TBSee3KnitgJPGyiuGCREGibB2pVCPCVg1zb11TpsbKuzV3aGhqQyE1NJnYwo9qrVjw6P" config show
+```
+
+or
+
+```sh
+PSONO_CI_CONFIG_PACKED="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ysoVAjW8qS2iYwEaRm9NxzpbSXuwwXL45aHLiWi8TBSee3KnitgJPGyiuGCREGibB2pVCPCVg1zb11TpsbKuzV3aGhqQyE1NJnYwo9qrVjw6P" psonoci config show
+```
+
+## Supported secret types:
 
 -   Website
 -   Application
 -   Note
 -   GPGKey
 -   Bookmark
+-   Environment Variables
 
 ## CI/CD Usage Example
 
@@ -118,25 +164,34 @@ TODO
 
 If you have rust installed just run `cargo build --release`.
 
-The current version builds with Rust `1.44`.
+The current version builds with Rust `1.50`.
 
-### Docker approach to create a static linux binary (musl)
+### cross
 
-[build_docker.sh](./build_docker.sh) can be used to build a static binary using `x86_64-unknown-linux-musl`.
+[cross](https://github.com/rust-embedded/cross) (which uses `docker`) is used to cross compile `psonoci` to several architectures.
 
-Afterwards the stripped binary will be located at: `./build/psonoci`.
+After you installed `cross` just run:
 
-Cleanup:
-
--   delete docker_cache directory
--   delete docker image
-
-```
-$> file build/psono
-build/psonoci: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, stripped
+```sh
+cross build --target aarch64-unknown-linux-musl --release
 ```
 
-This way is also used to create the `psonoci` releases.
+`Cross.toml` defines which docker images are used to compile the binary. The images itself are build with the `Dockerfile`s located in `./build_files`.
+
+## Supported Architectures
+
+-   x86_64-unknown-linux-gnu
+-   x86_64-unknown-linux-musl
+-   x86_64-pc-windows-msvc
+-   x86_64-pc-windows-gnu
+-   x86_64-apple-darwin
+-   aarch64-unknown-linux-musl
+-   armv7-unknown-linux-gnueabihf
+-   ~~armv7-unknown-linux-musleabihf~~
+
+Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is able to link against `MUSL v1.2.2`.
+
+Falling back to `MUSL <=1.1` is no longer an option because of [CVE-2020-28928](https://www.openwall.com/lists/musl/2020/11/19/1)
 
 ## Install
 
@@ -166,4 +221,4 @@ TODO
 
 [The MIT License](https://opensource.org/licenses/MIT)
 
-Copyright (c) 2020 Bernd Kaiser
+Copyright (c) 2020, 2021 Bernd Kaiser
