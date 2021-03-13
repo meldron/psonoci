@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::path::PathBuf;
 
@@ -140,6 +141,10 @@ pub enum Command {
     ApiKey(ApiKeyCommand),
     #[structopt(about = "psonoci config commands (create, save, pack,...)")]
     Config(ConfigCommand),
+    #[structopt(
+        about = "psonoci run spawns processes with environment vars from the api-keys secrets"
+    )]
+    Run(RunCommand),
 }
 
 #[derive(StructOpt, Debug)]
@@ -183,4 +188,23 @@ pub enum ConfigCommand {
         path: PathBuf,
     },
     Show,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct RunCommand {
+    #[structopt(
+        short,
+        long,
+        help = "Spawn process only with the env vars from the psono datastore"
+    )]
+    pub clear_env: bool,
+    #[structopt(
+        short = "f",
+        long,
+        name = "secret_uuid",
+        help = "Only include env vars from secrets explicitly supplied"
+    )]
+    pub filter: Option<Vec<Uuid>>,
+    #[structopt(parse(from_os_str))]
+    pub command_values: Vec<OsString>,
 }
