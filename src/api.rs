@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
@@ -37,6 +38,7 @@ pub enum SecretType {
     Note,
     GPGKey,
     Bookmark,
+    EnvVars,
 }
 
 impl SecretType {
@@ -47,6 +49,7 @@ impl SecretType {
             SecretType::Note => "note",
             SecretType::GPGKey => "gpg_key",
             SecretType::Bookmark => "bookmark",
+            SecretType::EnvVars => "env_vars",
         }
     }
 }
@@ -67,6 +70,7 @@ pub enum SecretValueType {
     gpg_key_private,
     gpg_key_public,
     secret_type,
+    env_vars,
 }
 }
 
@@ -85,6 +89,7 @@ impl SecretValueType {
             SecretValueType::gpg_key_private => "gpg_key_private",
             SecretValueType::gpg_key_public => "gpg_key_public",
             SecretValueType::secret_type => "type",
+            SecretValueType::env_vars => "env_vars",
         }
     }
 }
@@ -153,8 +158,8 @@ pub struct EncryptedResponse {
 impl EncryptedResponse {
     pub fn open<I, O>(&self, api_key_secret_key_hex: &str) -> Result<(O, String)>
     where
-        I: DeserializeOwned,
-        O: DataTransform<I, O>,
+        I: DeserializeOwned + Debug,
+        O: DataTransform<I, O> + Debug,
     {
         let encryption_key_raw = open_secret_box(
             &self.secret_key,
@@ -313,6 +318,12 @@ pub struct SetSecretRequestBody {
     pub data_nonce: String,
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EnvironmentVariable {
+    pub key: String,
+    pub value: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GenericSecret {
     // website password
@@ -345,6 +356,11 @@ pub struct GenericSecret {
     // notes
     pub note_notes: Option<String>,
     pub note_title: Option<String>,
+
+    // environment variables
+    pub environment_variables_title: Option<String>,
+    pub environment_variables_notes: Option<String>,
+    pub environment_variables_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 impl GenericSecret {
@@ -371,6 +387,9 @@ impl GenericSecret {
             website_password_url: None,
             website_password_url_filter: None,
             website_password_username: None,
+            environment_variables_notes: None,
+            environment_variables_title: None,
+            environment_variables_variables: None,
         }
     }
 }
@@ -453,6 +472,8 @@ pub struct Secret {
     pub gpg_key_public: Option<String>,
     pub gpg_key_name: Option<String>,
     pub gpg_key_email: Option<String>,
+
+    pub env_vars: Option<Vec<EnvironmentVariable>>,
 }
 
 impl Secret {
@@ -491,6 +512,11 @@ impl Secret {
                 gs.bookmark_url = self.url.clone();
                 gs.bookmark_url_filter = self.url_filter.clone();
             }
+            SecretType::EnvVars => {
+                gs.environment_variables_notes = self.notes.clone();
+                gs.environment_variables_title = self.title.clone();
+                gs.environment_variables_variables = self.env_vars.clone();
+            }
         }
 
         gs
@@ -508,6 +534,7 @@ impl Secret {
             "gpg_key_name": &self.gpg_key_name,
             "gpg_key_private": &self.gpg_key_private,
             "gpg_key_public": &self.gpg_key_public,
+            "env_vars": &self.env_vars,
             "type": &self.secret_type.as_str(),
         });
 
@@ -528,6 +555,10 @@ impl Secret {
             SecretValueType::gpg_key_private => self.gpg_key_private,
             SecretValueType::gpg_key_public => self.gpg_key_public,
             SecretValueType::secret_type => Some(self.secret_type.as_str().to_owned()),
+            SecretValueType::env_vars => self
+                .env_vars
+                .map(|v| serde_json::to_string(&v).ok())
+                .flatten(),
         }
     }
 
@@ -580,6 +611,18 @@ impl Secret {
             (SecretType::Bookmark, SecretValueType::title) => self.title = Some(value),
             (SecretType::Bookmark, SecretValueType::url) => self.url = Some(value),
             (SecretType::Bookmark, SecretValueType::url_filter) => self.url_filter = Some(value),
+            // EnvVars
+            // TODO add env var settings
+            (SecretType::EnvVars, SecretValueType::json) => {
+                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
+            }
+            (SecretType::EnvVars, SecretValueType::title) => self.title = Some(value),
+            (SecretType::EnvVars, SecretValueType::notes) => self.notes = Some(value),
+            (SecretType::EnvVars, SecretValueType::env_vars) => {
+                let env_vars: Vec<EnvironmentVariable> = serde_json::from_str(&value)
+                    .context("env_vars could not be decoded from json")?;
+                self.env_vars = Some(env_vars);
+            }
             (_, _) => {
                 return Err(anyhow!(
                     "cannot set {:?} for {:?}",
@@ -612,6 +655,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 url: None,
                 url_filter: None,
                 username: s.application_password_username,
+                env_vars: None,
             });
         }
 
@@ -623,6 +667,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.website_password_username.is_some()
         {
             return Ok(Secret {
+                env_vars: None,
                 gpg_key_email: None,
                 gpg_key_name: None,
                 gpg_key_private: None,
@@ -643,6 +688,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.bookmark_title.is_some()
         {
             return Ok(Secret {
+                env_vars: None,
                 gpg_key_email: None,
                 gpg_key_name: None,
                 gpg_key_private: None,
@@ -659,6 +705,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
 
         if s.note_notes.is_some() || s.note_title.is_some() {
             return Ok(Secret {
+                env_vars: None,
                 gpg_key_email: None,
                 gpg_key_name: None,
                 gpg_key_private: None,
@@ -680,6 +727,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.mail_gpg_own_key_title.is_some()
         {
             return Ok(Secret {
+                env_vars: None,
                 gpg_key_email: s.mail_gpg_own_key_email,
                 gpg_key_name: s.mail_gpg_own_key_name,
                 gpg_key_private: s.mail_gpg_own_key_private,
@@ -688,6 +736,26 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 password: None,
                 secret_type: SecretType::GPGKey,
                 title: s.mail_gpg_own_key_title,
+                url: None,
+                url_filter: None,
+                username: None,
+            });
+        }
+
+        if s.environment_variables_notes.is_some()
+            || s.environment_variables_title.is_some()
+            || s.environment_variables_variables.is_some()
+        {
+            return Ok(Secret {
+                env_vars: s.environment_variables_variables,
+                gpg_key_email: None,
+                gpg_key_name: None,
+                gpg_key_private: None,
+                gpg_key_public: None,
+                notes: s.environment_variables_notes,
+                password: None,
+                secret_type: SecretType::EnvVars,
+                title: s.environment_variables_title,
                 url: None,
                 url_filter: None,
                 username: None,
@@ -1031,5 +1099,65 @@ mod tests {
         let result = make_request(&options, url, Method::GET, None);
 
         assert!(result.is_ok())
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn generic_secret_to_env_vars_secret() {
+        let gs: GenericSecret = GenericSecret {
+            website_password_url_filter: None,
+            website_password_notes: None,
+            website_password_password: None,
+            website_password_username: None,
+            website_password_url: None,
+            website_password_title: None,
+            application_password_notes: None,
+            application_password_password: None,
+            application_password_username: None,
+            application_password_title: None,
+            bookmark_url_filter: None,
+            bookmark_notes: None,
+            bookmark_url: None,
+            bookmark_title: None,
+            mail_gpg_own_key_private: None,
+            mail_gpg_own_key_public: None,
+            mail_gpg_own_key_name: None,
+            mail_gpg_own_key_email: None,
+            mail_gpg_own_key_title: None,
+            note_notes: None,
+            note_title: None,
+            environment_variables_title: Some("PROD".to_string()),
+            environment_variables_notes: Some("my first note".to_string()),
+            environment_variables_variables: Some(vec![
+                EnvironmentVariable {
+                    key: "USERNAME".to_string(),
+                    value: "tester".to_string(),
+                },
+                EnvironmentVariable {
+                    key: "Password".to_string(),
+                    value: "PASSWORD".to_string(),
+                },
+            ]),
+        };
+
+        let result = Secret::transform(gs);
+        assert!(result.is_ok());
+
+        let s = result.unwrap();
+        assert_eq!(s.title, Some("PROD".to_string()));
+        assert_eq!(s.notes, Some("my first note".to_string()));
+        assert_eq!(
+            s.env_vars,
+            Some(vec![
+                EnvironmentVariable {
+                    key: "USERNAME".to_string(),
+                    value: "tester".to_string(),
+                },
+                EnvironmentVariable {
+                    key: "Password".to_string(),
+                    value: "PASSWORD".to_string(),
+                },
+            ])
+        );
     }
 }
