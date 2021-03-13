@@ -86,10 +86,10 @@ psonoci \
     --api-key-id 00000000-0000-0000-0000-000000000000 \
     --api-secret-key-hex 0000000000000000000000000000000000000000000000000000000000000000 \
     --server-url 'https://psono.pw/server' \
-    config save /tmp/psonocni.toml
+    config save /tmp/psonoci.toml
 ```
 
-Creates the following config file at `/tmp/psonocni.toml`
+Creates the following config file at `/tmp/psonoci.toml`
 
 ```toml
 version = "1"
