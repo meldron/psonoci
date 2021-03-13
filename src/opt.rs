@@ -13,7 +13,7 @@ use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "psonoci", about = "Psono ci client")]
+#[structopt(name = "psonoci", about = "Psono ci client", author = "Bernd Kaiser")]
 pub struct Opt {
     #[structopt(subcommand)]
     pub command: Command,
@@ -139,11 +139,9 @@ pub enum Command {
     Secret(SecretCommand),
     #[structopt(about = "Psono api-key inspect (/api-key-access/inspect/)")]
     ApiKey(ApiKeyCommand),
-    #[structopt(about = "psonoci config commands (create, save, pack,...)")]
+    #[structopt(about = "config commands (create, save, pack,...)")]
     Config(ConfigCommand),
-    #[structopt(
-        about = "psonoci run spawns processes with environment vars from the api-keys secrets"
-    )]
+    #[structopt(about = "run spawns processes with environment vars from the api-keys secrets")]
     Run(RunCommand),
 }
 
