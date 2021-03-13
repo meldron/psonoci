@@ -141,7 +141,7 @@ pub enum Command {
     ApiKey(ApiKeyCommand),
     #[structopt(about = "config commands (create, save, pack,...)")]
     Config(ConfigCommand),
-    #[structopt(about = "run spawns processes with environment vars from the api-keys secrets")]
+    #[structopt(about = "spawns processes with environment vars from the api-keys secrets")]
     Run(RunCommand),
 }
 
