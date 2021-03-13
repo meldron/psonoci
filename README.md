@@ -200,6 +200,8 @@ Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is 
 
 Falling back to `MUSL <=1.1` is no longer an option because of [CVE-2020-28928](https://www.openwall.com/lists/musl/2020/11/19/1)
 
+I am not sure if `aarch64-apple-darwin` is also supported (I think it should work). So if there are any Apple M1 users out there please let me know.
+
 ## Install
 
 Download `psonoci` binary, make executable (`chmod +x psonoci`), and place into a directory which is part of your `$PATH`.
