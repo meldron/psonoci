@@ -75,9 +75,48 @@ These three options must be supplied (and be in front of the subcommand):
 
 There are several more options, please use the `help` commands for more info.
 
+## Protected Environments
+
+`psonoci` can now inject environment variables from your secrets right into you programs!
+
+First create a new secret of the type "`Environment Variables`":
+
+![create Environment Variables](examples/env_vars_create.png "Create Environment Variables")
+
+Then add this secret to your api key
+
+![create api key with env vars](examples/env_vars_api_key.png "create api key with env vars")
+
+
+and afterwards run:
+
+```sh
+psonoci -c /path/to/config-staging.toml run -- ./my_backend.py --timeout 10
+```
+
+This command will execute `./my_backend.py` and inject all environment variables of all secrets into the process:
+
+```py
+#!/usr/bin/python3
+
+# content of my_backend.py
+import os
+import sys
+
+print("args: {}".format(sys.argv))
+print("environment: {}".format(os.environ))
+```
+
+Would return:
+
+```
+args: ['my_backend.py', '--timeout', '60']
+environment: environ({'db_host': 'staging.psono.pw', 'db_password': '5IYqNwDwB6pPSr2YTK5fW', 'db_username': 'staging'})
+```
+
 ## Config
 
-Since version `0.2.0` `psonoci` can also be configured with a config file or config string.
+`psonoci` can also be configured with a config file or config string.
 
 ### Config File
 
