@@ -75,7 +75,7 @@ These three options must be supplied (and be in front of the subcommand):
 
 There are several more options, please use the `help` commands for more info.
 
-## Protected Environments
+## Run With Protected Environments
 
 `psonoci` can now inject environment variables from your secrets right into you programs!
 
