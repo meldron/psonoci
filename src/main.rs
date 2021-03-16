@@ -5,11 +5,13 @@ use structopt::StructOpt;
 mod api;
 mod config;
 mod crypto;
+mod license;
 mod opt;
 mod run;
 
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
 use config::{Config, ConfigSaveFormat};
+use license::print_license;
 use opt::{ApiKeyCommand, Command, ConfigCommand, ConfigSource, Opt, SecretCommand};
 
 fn run_secret_command(config: Config, command: SecretCommand) -> Result<()> {
@@ -82,7 +84,7 @@ fn run_config_command(
                 "{}",
                 config
                     .to_string(ConfigSaveFormat::MessagePackBase58)
-                    .context("packing as bincode base58 encoded failed")?
+                    .context("packing as message pack base58 encoded failed")?
             );
         }
         ConfigCommand::Save { overwrite, path } => {
@@ -115,6 +117,9 @@ fn main() -> Result<()> {
         }
         Command::Run(rc) => {
             run_run_command(config, rc)?;
+        }
+        Command::License => {
+            print_license();
         }
     }
 
