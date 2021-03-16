@@ -143,6 +143,8 @@ pub enum Command {
     Config(ConfigCommand),
     #[structopt(about = "spawns processes with environment vars from the api-keys secrets")]
     Run(RunCommand),
+    #[structopt(about = "prints psonoci's license")]
+    License,
 }
 
 #[derive(StructOpt, Debug)]
