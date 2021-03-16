@@ -394,69 +394,69 @@ impl GenericSecret {
     }
 }
 
-pub trait PsonoSecret: Sized {
-    fn from_generic_secret(s: &GenericSecret) -> Result<Self>;
+// pub trait PsonoSecret: Sized {
+//     fn from_generic_secret(s: &GenericSecret) -> Result<Self>;
 
-    fn as_json_string(&self) -> Result<String>;
+//     fn as_json_string(&self) -> Result<String>;
 
-    fn get_secret_value(&self, value: SecretValueType) -> Result<String>;
-}
+//     fn get_secret_value(&self, value: SecretValueType) -> Result<String>;
+// }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WebsiteSecret {
-    pub url_filter: String,
-    pub notes: String,
-    pub password: String,
-    pub username: String,
-    pub url: String,
-    pub title: String,
-}
+// #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+// pub struct WebsiteSecret {
+//     pub url_filter: String,
+//     pub notes: String,
+//     pub password: String,
+//     pub username: String,
+//     pub url: String,
+//     pub title: String,
+// }
 
-impl PsonoSecret for WebsiteSecret {
-    fn from_generic_secret(s: &GenericSecret) -> Result<Self> {
-        if s.website_password_notes.is_some()
-            || s.website_password_password.is_some()
-            || s.website_password_title.is_some()
-            || s.website_password_url.is_some()
-            || s.website_password_url_filter.is_some()
-            || s.website_password_username.is_some()
-        {
-            return Ok(WebsiteSecret {
-                notes: s.website_password_notes.clone().unwrap(),
-                password: s.website_password_password.clone().unwrap(),
-                title: s.website_password_title.clone().unwrap(),
-                url: s.website_password_url.clone().unwrap(),
-                url_filter: s.website_password_url_filter.clone().unwrap(),
-                username: s.website_password_username.clone().unwrap(),
-            });
-        } else {
-            return Err(anyhow!("not a website secret"));
-        }
-    }
+// impl PsonoSecret for WebsiteSecret {
+//     fn from_generic_secret(s: &GenericSecret) -> Result<Self> {
+//         if s.website_password_notes.is_some()
+//             || s.website_password_password.is_some()
+//             || s.website_password_title.is_some()
+//             || s.website_password_url.is_some()
+//             || s.website_password_url_filter.is_some()
+//             || s.website_password_username.is_some()
+//         {
+//             return Ok(WebsiteSecret {
+//                 notes: s.website_password_notes.clone().unwrap(),
+//                 password: s.website_password_password.clone().unwrap(),
+//                 title: s.website_password_title.clone().unwrap(),
+//                 url: s.website_password_url.clone().unwrap(),
+//                 url_filter: s.website_password_url_filter.clone().unwrap(),
+//                 username: s.website_password_username.clone().unwrap(),
+//             });
+//         } else {
+//             return Err(anyhow!("not a website secret"));
+//         }
+//     }
 
-    fn as_json_string(&self) -> Result<String> {
-        serde_json::to_string(&self).map_err(|e| anyhow!(e))
-    }
+//     fn as_json_string(&self) -> Result<String> {
+//         serde_json::to_string(&self).map_err(|e| anyhow!(e))
+//     }
 
-    fn get_secret_value(&self, value: SecretValueType) -> Result<String> {
-        // match value {
-        //     SecretValueType::json => Ok(self.as_json_string()?),
-        //     SecretValueType::notes => Ok(self.notes.clone()),
-        //     SecretValueType::password => {}
-        //     SecretValueType::title => {}
-        //     SecretValueType::url => {}
-        //     SecretValueType::url_filter => {}
-        //     SecretValueType::username => {}
-        //     SecretValueType::secret_type => {}
-        //     _ => Err(anyhow!(
-        //         "{} is not available in a {:?} secret",
-        //         value,
-        //         SecretValueTypeType::Website
-        //     )),
-        // }
-        todo!()
-    }
-}
+//     fn get_secret_value(&self, value: SecretValueType) -> Result<String> {
+//         // match value {
+//         //     SecretValueType::json => Ok(self.as_json_string()?),
+//         //     SecretValueType::notes => Ok(self.notes.clone()),
+//         //     SecretValueType::password => {}
+//         //     SecretValueType::title => {}
+//         //     SecretValueType::url => {}
+//         //     SecretValueType::url_filter => {}
+//         //     SecretValueType::username => {}
+//         //     SecretValueType::secret_type => {}
+//         //     _ => Err(anyhow!(
+//         //         "{} is not available in a {:?} secret",
+//         //         value,
+//         //         SecretValueTypeType::Website
+//         //     )),
+//         // }
+//         todo!()
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Secret {
