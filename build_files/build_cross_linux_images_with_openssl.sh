@@ -14,6 +14,6 @@ cd "$(dirname "$0")"
 for target in ${TARGETS[*]}; do
     image_name="meldron/psonoci_builder:$target"
     echo "Building ${image_name}"
-    docker build -f "Dockerfile-$target" -t "$image_name" .
+    docker build --pull -f "Dockerfile-$target" -t "$image_name" .
     docker push "$image_name"
 done
