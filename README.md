@@ -87,7 +87,6 @@ Then add this secret to your api key
 
 ![create api key with env vars](examples/env_vars_api_key.png "create api key with env vars")
 
-
 and afterwards run:
 
 ```sh
@@ -210,7 +209,7 @@ TODO
 
 If you have rust installed just run `cargo build --release`.
 
-The current version builds with Rust `1.50`.
+The current version is tested with Rust `1.51`.
 
 ### cross
 
