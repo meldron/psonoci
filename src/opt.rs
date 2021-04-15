@@ -139,23 +139,24 @@ pub enum Command {
     Secret(SecretCommand),
     #[structopt(about = "Psono api-key inspect (/api-key-access/inspect/)")]
     ApiKey(ApiKeyCommand),
-    #[structopt(about = "config commands (create, save, pack,...)")]
+    #[structopt(about = "Config commands (create, save, pack,...)")]
     Config(ConfigCommand),
-    #[structopt(about = "spawns processes with environment vars from the api-keys secrets")]
+    #[structopt(about = "Spawns processes with environment vars from the api-keys secrets")]
     Run(RunCommand),
-    #[structopt(about = "prints psonoci's license")]
+    #[structopt(about = "Prints psonoci's license")]
     License,
 }
 
 #[derive(StructOpt, Debug)]
 pub enum SecretCommand {
-    #[structopt(about = "Get a psono secret by its uuid")]
+    #[structopt(about = "Get a psono secret")]
     Get {
         #[structopt(required = true, help = "The secret's uuid")]
         secret_id: Uuid,
         #[structopt(required = true, possible_values = &SecretValueType::variants(), case_insensitive = true, help = "Which secret value-type to return ('json' returns all value-types in a json object)")]
         secret_value_type: SecretValueType,
     },
+    #[structopt(about = "Set a psono secret")]
     Set {
         #[structopt(required = true, help = "The secret's uuid")]
         secret_id: Uuid,
@@ -168,7 +169,9 @@ pub enum SecretCommand {
 
 #[derive(StructOpt, Debug)]
 pub enum ApiKeyCommand {
+    #[structopt(about = "Prints the meta info of a api-key and lists all its secret ids")]
     Info,
+    #[structopt(about = "Prints all secrets of an api-key as JSON")]
     Secrets,
 }
 
@@ -182,11 +185,16 @@ pub enum ConfigCommand {
         about = "Save psonoci config into a toml file which can be loaded with --config-path"
     )]
     Save {
-        #[structopt(short, long)]
+        #[structopt(
+            short,
+            long,
+            help = "Only if overwrite is set, psonoci will replace a config"
+        )]
         overwrite: bool,
         #[structopt(required = true, parse(from_os_str), help = "Output path")]
         path: PathBuf,
     },
+    #[structopt(about = "Displays the current config in toml format")]
     Show,
 }
 
@@ -205,6 +213,9 @@ pub struct RunCommand {
         help = "Only include env vars from secrets explicitly supplied"
     )]
     pub filter: Option<Vec<Uuid>>,
-    #[structopt(parse(from_os_str))]
+    #[structopt(
+        parse(from_os_str),
+        help = "The command you want to run. It's recommended to prefix it with '--' so additional flags won't be interpreted by psonoci"
+    )]
     pub command_values: Vec<OsString>,
 }
