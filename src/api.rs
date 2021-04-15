@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 // use attohttpc::Method;
+use chrono::{DateTime, Utc};
 use clap::arg_enum;
 use rayon::prelude::*;
 use reqwest::blocking::{Client, ClientBuilder};
@@ -298,6 +299,11 @@ where
     U: DeserializeOwned,
 {
     let response_raw: Vec<u8> = call_route(server_url, http_options, route)?;
+
+    // let response_string: String = String::from_utf8(response_raw.clone())?;
+
+    // println!("{}", response_string);
+
     let body: U = serde_json::from_slice(response_raw.as_ref())
         .context("response body json deserialization failed")?;
 
@@ -844,11 +850,17 @@ pub struct InspectApiKeyRequest {
     pub api_key_id: String,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiKeySecret {
     #[serde(rename = "secret_id")]
     pub secret_id: Uuid,
+    #[serde(rename = "write_date")]
+    pub write_date: DateTime<Utc>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ApiKeySecretMetaData {
+    pub write_date: DateTime<Utc>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -868,17 +880,35 @@ pub struct ApiKeyInfo {
     pub write: bool,
     pub num_api_key_secrets: usize,
     pub api_key_secrets: Vec<Uuid>,
+    pub api_key_secrets_meta_data: HashMap<Uuid, ApiKeySecretMetaData>,
 }
 
 impl ApiKeyInfo {
     pub fn from_inspect_api_key_response(r: InspectApiKeyResponse) -> Self {
-        let api_key_secrets: Vec<Uuid> =
-            r.api_key_secrets.into_iter().map(|s| s.secret_id).collect();
+        let api_key_secrets: Vec<Uuid> = r
+            .api_key_secrets
+            .iter()
+            .map(|s| s.secret_id.clone())
+            .collect();
+
+        let api_key_secrets_meta_data: HashMap<Uuid, ApiKeySecretMetaData> = r
+            .api_key_secrets
+            .into_iter()
+            .map(|s| {
+                let meta_data: ApiKeySecretMetaData = ApiKeySecretMetaData {
+                    write_date: s.write_date,
+                };
+
+                (s.secret_id, meta_data)
+            })
+            .collect();
+
         let num_api_key_secrets = api_key_secrets.len();
 
         Self {
             allow_insecure_access: r.allow_insecure_access,
             api_key_secrets,
+            api_key_secrets_meta_data,
             num_api_key_secrets,
             read: r.read,
             restrict_to_secrets: r.restrict_to_secrets,
