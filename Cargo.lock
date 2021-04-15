@@ -793,7 +793,7 @@ dependencies = [
 
 [[package]]
 name = "psonoci"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bs58",
