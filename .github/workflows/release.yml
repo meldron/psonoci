@@ -125,6 +125,13 @@ jobs:
                   echo "RELEASE_VERSION=$release_version" >> $GITHUB_ENV
                   echo "release version: $RELEASE_VERSION"
 
+            - name: Import GPG key
+              id: import_gpg
+              uses: crazy-max/ghaction-import-gpg@v3
+              with:
+                  gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+                  passphrase: ${{ secrets.GPG_PRIVATE_KEY_PASSPHRASE }}
+
             - name: Build archive
               shell: bash
               run: |
@@ -133,11 +140,15 @@ jobs:
                   if [ "${{ matrix.target_type }}" = "windows" ]; then
                     cp "target/${{ matrix.target }}/release/psonoci.exe" "$staging/"
                     7z a "$staging.zip" "$staging"
+                    gpg --armor --detach-sig -u psonoci@dfjk.eu "$staging.zip"
                     echo "ASSET=$staging.zip" >> $GITHUB_ENV
+                    echo "ASSET_SIG=$staging.zip.asc" >> $GITHUB_ENV
                   else
                     cp "target/${{ matrix.target }}/release/psonoci" "$staging/"
                     tar czf "$staging.tar.gz" "$staging"
+                    gpg --armor --detach-sig -u psonoci@dfjk.eu "$staging.tar.gz"
                     echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
+                    echo "ASSET_SIG=$staging.tar.gz.asc" >> $GITHUB_ENV
                   fi
 
             - name: Upload release archive
@@ -149,3 +160,13 @@ jobs:
                   asset_path: ${{ env.ASSET }}
                   asset_name: ${{ env.ASSET }}
                   asset_content_type: application/octet-stream
+
+            - name: Upload release archive signature
+              uses: actions/upload-release-asset@v1.0.1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+                  asset_path: ${{ env.ASSET_SIG }}
+                  asset_name: ${{ env.ASSET_SIG }}
+                  asset_content_type: application/pgp-signature
