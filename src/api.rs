@@ -128,8 +128,8 @@ pub enum Endpoint {
 impl Endpoint {
     pub fn as_str(&self) -> &str {
         match self {
-            Endpoint::ApiKeyAccessSecret => "/api-key-access/secret/",
-            Endpoint::ApiKeyInspect => "/api-key-access/inspect/",
+            Endpoint::ApiKeyAccessSecret => "api-key-access/secret/",
+            Endpoint::ApiKeyInspect => "api-key-access/inspect/",
         }
     }
 }
@@ -274,16 +274,32 @@ pub fn make_request(
     Ok(vec)
 }
 
+fn build_endpoint_url(server_url: &Url, endpoint: &Endpoint) -> Result<Url> {
+    let mut endpoint_url = server_url.clone();
+
+    endpoint_url.set_path(&server_url.path().trim_end_matches('/'));
+
+    for segment in endpoint.as_str().split("/") {
+        endpoint_url
+            .path_segments_mut()
+            .map_err(|_| anyhow!("cannot create endpoint url from server_url and endpoint path"))?
+            .pop_if_empty()
+            .push(segment.trim_start_matches("/"));
+    }
+
+    Ok(endpoint_url)
+}
+
 fn call_route<T>(server_url: &Url, http_options: &HttpOptions, route: Route<T>) -> Result<Vec<u8>>
 where
     T: Serialize,
 {
-    let url = format!("{}/{}", server_url, route.endpoint.as_str());
-    let url_parsed = Url::parse(&url).context("url parsing error")?;
+    let endpoint_url =
+        build_endpoint_url(server_url, &route.endpoint).context("building endpoint url failed")?;
 
     let body = serde_json::to_string(&route.body)?;
 
-    let response_raw: Vec<u8> = make_request(http_options, url_parsed, route.method, Some(body))
+    let response_raw: Vec<u8> = make_request(http_options, endpoint_url, route.method, Some(body))
         .context("make request failed")?;
 
     Ok(response_raw)
@@ -964,6 +980,8 @@ pub fn api_key_get_secrets(config: &Config) -> Result<HashMap<Uuid, Secret>> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use lazy_static::lazy_static;
 
     use super::*;
@@ -1055,6 +1073,62 @@ mod tests {
             result.unwrap_err().to_string(),
             url::ParseError::InvalidPort.to_string()
         );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn build_url_simple_server_build_valid() {
+        let expected = Url::from_str("https://psono.pw/api-key-access/secret/").unwrap();
+
+        let server_url = Url::from_str("https://psono.pw").unwrap();
+
+        let endpoint_url = build_endpoint_url(&server_url, &Endpoint::ApiKeyAccessSecret);
+
+        assert!(endpoint_url.is_ok());
+
+        assert_eq!(endpoint_url.unwrap(), expected);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn build_url_no_trailing_slash_build_valid() {
+        let expected = Url::from_str("https://psono.pw/backend/api-key-access/secret/").unwrap();
+
+        let server_url = Url::from_str("https://psono.pw/backend").unwrap();
+
+        let endpoint_url = build_endpoint_url(&server_url, &Endpoint::ApiKeyAccessSecret);
+
+        assert!(endpoint_url.is_ok());
+
+        assert_eq!(endpoint_url.unwrap(), expected);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn build_url_one_trailing_slash_build_valid() {
+        let expected = Url::from_str("https://psono.pw/backend/api-key-access/secret/").unwrap();
+
+        let server_url = Url::from_str("https://psono.pw/backend/").unwrap();
+
+        let endpoint_url = build_endpoint_url(&server_url, &Endpoint::ApiKeyAccessSecret);
+
+        assert!(endpoint_url.is_ok());
+
+        assert_eq!(endpoint_url.unwrap(), expected);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn build_url_many_trailing_slashes_build_valid() {
+        let expected = Url::from_str("https://psono.pw/backend/api-key-access/secret/").unwrap();
+
+        let server_url = Url::from_str("https://psono.pw/backend//").unwrap();
+
+        let endpoint_url = build_endpoint_url(&server_url, &Endpoint::ApiKeyAccessSecret);
+
+        assert!(endpoint_url.is_ok());
+
+        assert_eq!(endpoint_url.unwrap(), expected);
     }
 
     #[test]
