@@ -12,7 +12,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Inject slug/short variables
-              uses: rlespinasse/github-slug-action@v2.x
+              uses: rlespinasse/github-slug-action@v3.x
 
             - name: Create artifacts directory
               run: mkdir artifacts
