@@ -1,6 +1,6 @@
 [package]
 authors = ["Bernd Kaiser <bk@dfjk.eu>"]
-edition = "2018"
+edition = "2021"
 name = "psonoci"
 version = "0.2.3"
 
