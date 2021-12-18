@@ -63,9 +63,9 @@ jobs:
               if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
               run: docker pull $builder_image:${{ matrix.target }}
 
-            # # right now do not build image every time to save github actions quota
+            # the base image for armv7-unknown-linux-gnueabihf is broken (ca certs invalid), use a prebuilt image for now
             - name: Build docker image used by cross
-              if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
+              if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix' && matrix.target != 'armv7-unknown-linux-gnueabihf'
               run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
             - name: cargo fmt
