@@ -65,7 +65,7 @@ jobs:
 
             # the base image for armv7-unknown-linux-gnueabihf is broken (ca certs invalid), use a prebuilt image for now
             - name: Build docker image used by cross
-              if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix' && matrix.target != 'armv7-unknown-linux-gnueabihf'
+              if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix' && (matrix.target != 'armv7-unknown-linux-gnueabihf' || matrix.target != 'aarch64-unknown-linux-musl')
               run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
             - name: cargo fmt
