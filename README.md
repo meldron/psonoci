@@ -11,7 +11,7 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 `psonoci --help`
 
 ```
-psonoci 0.2.0
+psonoci 0.2.3
 Bernd Kaiser
 Psono ci client
 
@@ -209,7 +209,7 @@ TODO
 
 If you have rust installed just run `cargo build --release`.
 
-The current version is tested with Rust `1.51`.
+The current version is tested with Rust `1.56.1`.
 
 ### cross
 
