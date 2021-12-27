@@ -1,4 +1,40 @@
-FROM rustembedded/cross:armv7-unknown-linux-gnueabihf
+# cross dockerfile by Jorge Aparicio (https://github.com/rust-embedded/cross/)
+# see build_files/cross_files/LICENSE for license information
+FROM ubuntu:16.04
+
+COPY cross_files/common.sh cross_files/lib.sh /
+RUN /common.sh
+
+COPY cross_files/cmake.sh /
+RUN /cmake.sh
+
+COPY cross_files/xargo.sh /
+RUN /xargo.sh
+
+RUN apt-get install --assume-yes --no-install-recommends \
+    g++-arm-linux-gnueabihf \
+    libc6-dev-armhf-cross
+
+COPY cross_files/qemu.sh /
+RUN /qemu.sh arm softmmu
+
+COPY cross_files/dropbear.sh /
+RUN /dropbear.sh
+
+COPY cross_files/linux-image.sh /
+RUN /linux-image.sh armv7
+
+COPY cross_files/linux-runner /
+
+ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \
+    CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER="/linux-runner armv7" \
+    CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc \
+    CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++ \
+    QEMU_LD_PREFIX=/usr/arm-linux-gnueabihf \
+    RUST_TEST_THREADS=1
+
+RUN apt-get update && apt-get install -y wget curl
+RUN apt-get install --reinstall curl ca-certificates && update-ca-certificates
 
 COPY build_openssl.sh /
 # first parameter is the openssl arch target (see openssls ./Configure LIST)
@@ -12,7 +48,6 @@ ENV OPENSSL_DIR=/openssl \
 
 # workaround for this one here:
 # https://github.com/rust-embedded/cross/issues/260
-RUN apt-get update && apt-get install -y wget
 RUN mkdir -m777 /opt/rust /opt/cargo
 ENV RUSTUP_HOME=/opt/rust CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
 RUN wget --https-only --secure-protocol=TLSv1_2 -O- https://sh.rustup.rs | sh /dev/stdin -y
