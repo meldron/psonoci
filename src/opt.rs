@@ -143,6 +143,8 @@ pub enum Command {
     Config(ConfigCommand),
     #[structopt(about = "Spawns processes with environment vars from the api-keys secrets")]
     Run(RunCommand),
+    #[structopt(about = "Convenience commands on environment variable secrets")]
+    EnvVars(EnvVarsCommand),
     #[structopt(about = "Prints psonoci's license")]
     License,
 }
@@ -218,4 +220,55 @@ pub struct RunCommand {
         help = "The command you want to run. It's recommended to prefix it with '--' so additional flags won't be interpreted by psonoci"
     )]
     pub command_values: Vec<OsString>,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct PasswordCreationSettings {
+    #[structopt(
+        short = "n",
+        long,
+        name = "num_chars",
+        default_value = "21",
+        help = "If a password needs to be created use l chars (unicode graphemes).\nImportant: if you are using unicode chars/graphemes with more than one byte per char, the password byte length will be bigger than the num of chars"
+    )]
+    pub password_length: usize,
+    #[structopt(
+        short = "a",
+        long,
+        name = "allowed_password_chars",
+        help = "By default psono uses alphanumeric chars ([a-zA-Z0-9]) for the created passwords.\nThis option overwrites the default charset.\nIMPORTANT: Make sure to supply enough chars, otherwise the password will be insecure."
+    )]
+    pub danger_password_allowed_chars: Option<String>,
+}
+
+#[derive(StructOpt, Debug)]
+pub enum EnvVarsCommand {
+    #[structopt(
+        about = "Get or create env var for a specific secret. Will always get the first secret the first secret with the specified name in the env var list"
+    )]
+    GetOrCreate {
+        #[structopt(
+            required = true,
+            help = "The uuid of the secret containing the env var"
+        )]
+        secret_id: Uuid,
+        #[structopt(required = true, help = "The name of the env var")]
+        env_var_name: String,
+        #[structopt(flatten)]
+        password_creation_settings: PasswordCreationSettings,
+    },
+    #[structopt(
+        about = "Update or create env var for a specific secret. Will always update the first secret with the specified name in the env var list"
+    )]
+    UpdateOrCreate {
+        #[structopt(
+            required = true,
+            help = "The uuid of the secret containing the env var"
+        )]
+        secret_id: Uuid,
+        #[structopt(required = true, help = "The name of the env var")]
+        env_var_name: String,
+        #[structopt(required = true, help = "The value of the env var")]
+        env_var_value: String,
+    },
 }
