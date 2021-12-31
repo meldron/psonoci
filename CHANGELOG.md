@@ -1,3 +1,17 @@
+# v0.3.0 (`2022-01-01`)
+
+-   Add `env-vars` sub command, which provides convenience commands for environment variable secrets
+
+    -   `get-or-create` returns or creates a specific environment variable by name (key).
+
+        If the environment variable does not exist it creates a new entry add the end of the environment variables list and inserts a random env var value. The length and the charset can be adjusted (`--password-length` and `--danger-password-allowed-chars`). By default created environment values are alphanumeric (`[a-zA-Z0-9]`) and have a length of `21` chars.
+
+    -   `update-or-create` updates or creates a specific environment variable by name (key) with the supplied value.
+
+# v0.2.3 (`2021-12-27`)
+
+-   Fix: Docker `cross` build for `aarch64-unknown-linux-musl` and `armv7-unknown-linux-gnueabihf`
+
 # v0.2.2 (`2021-05-05`)
 
 -   Fix: fix api endpoint url creation with `server-url` (also now ignores trailing slashes)

@@ -1,12 +1,15 @@
 use anyhow::{anyhow, Context, Result};
+use env_vars::run_env_vars_command;
 use run::run_run_command;
 use structopt::StructOpt;
 
 mod api;
 mod config;
 mod crypto;
+mod env_vars;
 mod license;
 mod opt;
+mod passwords;
 mod run;
 
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
@@ -110,17 +113,14 @@ fn main() -> Result<()> {
     let (config_source, config) = opt.raw_config.as_config()?;
 
     match opt.command {
-        Command::Secret { 0: secret_command } => run_secret_command(config, secret_command)?,
-        Command::ApiKey { 0: api_key_command } => run_inspect_command(config, api_key_command)?,
-        Command::Config { 0: config_command } => {
-            run_config_command(config_source, config, config_command)?;
+        Command::Secret(secret_command) => run_secret_command(config, secret_command)?,
+        Command::ApiKey(api_key_command) => run_inspect_command(config, api_key_command)?,
+        Command::Config(config_command) => {
+            run_config_command(config_source, config, config_command)?
         }
-        Command::Run(rc) => {
-            run_run_command(config, rc)?;
-        }
-        Command::License => {
-            print_license();
-        }
+        Command::Run(rc) => run_run_command(config, rc)?,
+        Command::EnvVars(env_command) => run_env_vars_command(env_command, config)?,
+        Command::License => print_license(),
     }
 
     Ok(())

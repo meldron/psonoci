@@ -2,7 +2,7 @@
 authors = ["Bernd Kaiser <bk@dfjk.eu>"]
 edition = "2021"
 name = "psonoci"
-version = "0.2.3"
+version = "0.3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,6 +23,7 @@ serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 structopt = "0.3"
 toml = "0.5.8"
+unicode-segmentation = "1.8"
 url = {version = "2.2.1", features = ["serde"]}
 uuid = {version = "0.8.2", features = ["serde", "v4"]}
 xsalsa20poly1305 = "0.8.0"

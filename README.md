@@ -11,7 +11,7 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 `psonoci --help`
 
 ```
-psonoci 0.2.3
+psonoci 0.3.0
 Bernd Kaiser
 Psono ci client
 
@@ -56,11 +56,13 @@ OPTIONS:
 
 
 SUBCOMMANDS:
-    api-key    Psono api-key inspect (/api-key-access/inspect/)
-    config     config commands (create, save, pack,...)
-    help       Prints this message or the help of the given subcommand(s)
-    run        run spawns processes with environment vars from the api-keys secrets
-    secret     Psono secret commands (/api-key-access/secret/)
+    api-key     Psono api-key inspect (/api-key-access/inspect/)
+    config      Config commands (create, save, pack,...)
+    env-vars    Convenience commands on environment variable secrets
+    help        Prints this message or the help of the given subcommand(s)
+    license     Prints psonoci's license
+    run         Spawns processes with environment vars from the api-keys secrets
+    secret      Psono secret commands (/api-key-access/secret/)
 ```
 
 ### Required Options
@@ -112,6 +114,37 @@ Would return:
 args: ['my_backend.py', '--timeout', '60']
 environment: environ({'db_host': 'staging.psono.pw', 'db_password': '5IYqNwDwB6pPSr2YTK5fW', 'db_username': 'staging'})
 ```
+
+## Environment Variable Convenience Commands (`env-vars`)
+
+Since `v0.3.0` `psonoci` supports the new `env-vars` sub command, which provides convenience functions to get/update or create environment variable names in a specific secret.
+
+Both subcommands work only on secrets of the type environment variables. If they are used with another type of secret, `psonoci` will return an error.
+
+### `get-or-create`
+
+`psonoci env-vars get-or-create` returns the environment variable value by name. If more than one environment variable have the same name/key, the first one will be returned. If there is no environment variable with that name, a new entry will be created with that name and a random value.
+
+`--danger-password-allowed-chars` adjusts of the used characters in the generated value. If this option is not supplied, `psonoci` will create an alphanumeric string (`[a-zA-Z0-9]`).
+
+The length of the newly created random value can set with `--password-length`. Please take notice that this length specifies the number of unicode characters (not bytes).
+
+Example
+
+```sh
+psonoci -c psonoci.toml env-vars get-or-create --password-length 10 --danger-password-allowed-chars "🙈🙉🙊👹🦀🦐🦑🍦🍧🍨🍩🎂🏴󠁧󠁢󠁷󠁬󠁳󠁿" e6305462-1d5d-478c-90eb-03da80e85cff DB_PASSWORD
+```
+
+creates (for example) this string: `🏴󠁧󠁢󠁷󠁬󠁳󠁿🦑👹🦑🙉🍧🦑🏴󠁧󠁢󠁷󠁬󠁳󠁿🙊🦀`
+
+-   String length: `10`
+-   Byte length: `88`
+
+(Please don't use only these chars as `--danger-password-allowed-chars`)
+
+### `update-or-create`
+
+`psonoci env-vars update-or-create` updates or creates environment variable value by name with the supplied value. If there is no environment variable with that name a new one is created. If there are more than one with the same name, only the first will be updated.
 
 ## Config
 
@@ -268,4 +301,4 @@ TODO
 
 [The MIT License](https://opensource.org/licenses/MIT)
 
-Copyright (c) 2020, 2021 Bernd Kaiser
+Copyright (c) 2020, 2021, 2022 Bernd Kaiser
