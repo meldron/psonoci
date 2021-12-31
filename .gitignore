@@ -2,4 +2,6 @@ target
 build
 docker_cache
 .vscode/
+
 psonoci.toml
+psonoci-*.toml
