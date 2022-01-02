@@ -4,10 +4,11 @@
 
 The following versions are still supported and receive security updates
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.2.x   | ✔️                  |
-| < 0.2.0 | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| 0.3.x   | ✔️        |
+| 0.2.x   | ❌        |
+| < 0.2.0 | ❌        |
 
 ## Reporting a Vulnerability
 
