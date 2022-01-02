@@ -147,7 +147,7 @@ creates (for example) this string: `🏴󠁧󠁢󠁷󠁬󠁳󠁿🦑👹🦑🙉
 
 ### `update-or-create`
 
-`psonoci env-vars update-or-create` updates or creates environment variable value by name with the supplied value. If there is no environment variable with that name a new one is created. If there are more than one with the same name, only the first will be updated.
+`psonoci env-vars update-or-create` updates or creates environment variable value by name with the supplied value and then returns this value. If there is no environment variable with that name a new one is created. If there are more than one with the same name, only the first will be updated. If no new value is provided a random one will be created. The new value can be adjusted with `--password-length` and `-danger-password-allowed-chars`. Please see above.
 
 ## Config
 
@@ -279,26 +279,6 @@ I am not sure if `aarch64-apple-darwin` is also supported (I think it should wor
 ## Install
 
 Download `psonoci` binary, make executable (`chmod +x psonoci`), and place into a directory which is part of your `$PATH`.
-
-## Key Setup
-
-TODO
-
-<!-- ### Create API Key
-
-1. Go to `Other -> API Keys` and click `Create new API Key`.
-2. Name your API key and make sure neither `Secret Restriction?` nor `Allow insecure usage?` are activated. (see Image )
-3. Click Create
-4. In the API key overview click on the edit Icon for the newly created key
-5. In this view you will see all secrets you need for the `psoco` config (see image 2)
-
-#### Create API Key
-
-![Create API Key](./images/create_api_key.png "Create API Key")
-
-#### View API Key
-
-![View API Key](./images/view_api_key_secrets.png "View API Key") -->
 
 ## License
 
