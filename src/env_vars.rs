@@ -9,27 +9,32 @@ use crate::{
 };
 
 pub fn run_env_vars_command(env_command: EnvVarsCommand, config: Config) -> Result<()> {
-    match env_command {
+    let secret_env_value = match env_command {
         EnvVarsCommand::GetOrCreate {
             secret_id,
             env_var_name,
             password_creation_settings,
-        } => {
-            let secret_env_value = get_or_create_env_value_by_name(
-                secret_id,
-                env_var_name,
-                config,
-                password_creation_settings,
-            )?;
-
-            print!("{}", secret_env_value);
-        }
+        } => get_or_create_env_value_by_name(
+            secret_id,
+            env_var_name,
+            config,
+            password_creation_settings,
+        )?,
         EnvVarsCommand::UpdateOrCreate {
             secret_id,
             env_var_name,
             env_var_value,
-        } => update_or_create_env_value_by_name(secret_id, env_var_name, env_var_value, config)?,
-    }
+            password_creation_settings,
+        } => update_or_create_env_value_by_name(
+            secret_id,
+            env_var_name,
+            env_var_value,
+            config,
+            password_creation_settings,
+        )?,
+    };
+
+    print!("{}", secret_env_value);
 
     Ok(())
 }
@@ -96,47 +101,61 @@ fn get_or_create(
 pub fn update_or_create_env_value_by_name(
     secret_id: Uuid,
     env_var_name: String,
-    env_var_value: String,
+    env_var_value: Option<String>,
     config: Config,
-) -> Result<()> {
+    password_creation_settings: PasswordCreationSettings,
+) -> Result<String> {
     let (secret, secret_key_hex) = get_env_var_secret(&secret_id, &config)
         .context("update_or_create_env_value_by_name loading secret from store failed")?;
 
-    let secret_updated = update_or_create(secret, env_var_name, env_var_value);
+    let (secret_updated, new_value) = update_or_create(
+        secret,
+        env_var_name,
+        env_var_value,
+        password_creation_settings,
+    );
 
     if let Some(updated) = secret_updated {
         set_secret(&secret_id, &config, &updated, &secret_key_hex)
             .context("Updating secret failed")?;
     }
 
-    Ok(())
+    Ok(new_value)
 }
 
 fn update_or_create(
     mut secret: Secret,
     env_var_name: String,
-    env_var_value: String,
-) -> Option<Secret> {
+    env_var_value: Option<String>,
+    password_creation_settings: PasswordCreationSettings,
+) -> (Option<Secret>, String) {
     let mut env_vars = secret.env_vars.unwrap_or_default();
 
+    let new_value = match env_var_value {
+        Some(v) => v,
+        None => create_random_password(
+            password_creation_settings.password_length,
+            password_creation_settings.danger_password_allowed_chars,
+        ),
+    };
     let needle = env_vars.iter_mut().find(|ev| ev.key == env_var_name);
 
     if let Some(ev) = needle {
-        if ev.value == env_var_value {
-            return None;
+        if ev.value == new_value {
+            return (None, new_value);
         }
 
-        ev.value = env_var_value;
+        ev.value = new_value.clone();
     } else {
         env_vars.push(EnvironmentVariable {
             key: env_var_name,
-            value: env_var_value,
+            value: new_value.clone(),
         });
     }
 
     secret.env_vars = Some(env_vars);
 
-    Some(secret)
+    (Some(secret), new_value)
 }
 
 #[cfg(test)]
@@ -273,7 +292,12 @@ mod tests {
             env_vars: Some(env_vars),
         };
 
-        let secret_updated = update_or_create(secret, "name".to_owned(), "after".to_owned());
+        let (secret_updated, new_secret) = update_or_create(
+            secret,
+            "name".to_owned(),
+            Some("after".to_owned()),
+            PasswordCreationSettings::default(),
+        );
 
         let env_vars_expected = vec![
             EnvironmentVariable {
@@ -304,6 +328,7 @@ mod tests {
             env_vars: Some(env_vars_expected),
         };
         assert_eq!(secret_updated, Some(secret_expected));
+        assert_eq!(new_secret, "after");
     }
 
     #[test]
@@ -335,7 +360,14 @@ mod tests {
             env_vars: Some(env_vars),
         };
 
-        let secret_updated = update_or_create(secret, "new".to_owned(), "new".to_owned());
+        let (secret_updated, new_secret) = update_or_create(
+            secret,
+            "new".to_owned(),
+            Some("new".to_owned()),
+            PasswordCreationSettings::default(),
+        );
+
+        assert_eq!(new_secret, "new");
 
         let env_vars_expected = vec![
             EnvironmentVariable {
@@ -370,6 +402,47 @@ mod tests {
 
     #[test]
     #[allow(non_snake_case)]
+    fn update_or_create__add_new_env_var_with_random_value() {
+        let env_vars = vec![
+            EnvironmentVariable {
+                key: "name".to_owned(),
+                value: "before".to_owned(),
+            },
+            EnvironmentVariable {
+                key: "unchanged".to_owned(),
+                value: "unchanged".to_owned(),
+            },
+        ];
+
+        let secret = Secret {
+            title: Some("test".to_owned()),
+            url_filter: None,
+            notes: None,
+            password: None,
+            username: None,
+            url: None,
+            secret_type: SecretType::EnvVars,
+            gpg_key_private: None,
+            gpg_key_public: None,
+            gpg_key_name: None,
+            gpg_key_email: None,
+            env_vars: Some(env_vars),
+        };
+
+        let (secret_updated, new_secret) = update_or_create(
+            secret,
+            "new".to_owned(),
+            None,
+            PasswordCreationSettings::default(),
+        );
+
+        let new_env_var = &secret_updated.unwrap().env_vars.unwrap()[2];
+        assert_eq!(new_env_var.key, "new");
+        assert_eq!(new_env_var.value, new_secret);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
     fn update_or_create__env_var_not_changed() {
         let env_vars = vec![
             EnvironmentVariable {
@@ -397,9 +470,14 @@ mod tests {
             env_vars: Some(env_vars),
         };
 
-        let secret_updated =
-            update_or_create(secret, "unchanged".to_owned(), "unchanged".to_owned());
+        let (secret_updated, new_secret) = update_or_create(
+            secret,
+            "unchanged".to_owned(),
+            Some("unchanged".to_owned()),
+            PasswordCreationSettings::default(),
+        );
 
+        assert_eq!(new_secret, "unchanged");
         assert_eq!(secret_updated, None);
     }
 }

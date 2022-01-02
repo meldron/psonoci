@@ -245,6 +245,15 @@ pub struct PasswordCreationSettings {
     pub danger_password_allowed_chars: Option<String>,
 }
 
+impl Default for PasswordCreationSettings {
+    fn default() -> Self {
+        Self {
+            password_length: 21,
+            danger_password_allowed_chars: None,
+        }
+    }
+}
+
 #[derive(StructOpt, Debug)]
 pub enum EnvVarsCommand {
     #[structopt(
@@ -262,7 +271,7 @@ pub enum EnvVarsCommand {
         password_creation_settings: PasswordCreationSettings,
     },
     #[structopt(
-        about = "Update or create env var for a specific secret. Will always update the first secret with the specified name in the env var list"
+        about = "Update or create env var for a specific secret and then returns the value. Will always update the first secret with the specified name in the env var list. If no new value is supplied, a random value will be created"
     )]
     UpdateOrCreate {
         #[structopt(
@@ -272,7 +281,11 @@ pub enum EnvVarsCommand {
         secret_id: Uuid,
         #[structopt(required = true, help = "The name of the env var")]
         env_var_name: String,
-        #[structopt(required = true, help = "The value of the env var")]
-        env_var_value: String,
+        #[structopt(
+            help = "The value of the env var. If no value is provided, a random one will be created"
+        )]
+        env_var_value: Option<String>,
+        #[structopt(flatten)]
+        password_creation_settings: PasswordCreationSettings,
     },
 }
