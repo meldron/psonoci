@@ -31,7 +31,7 @@ pub fn deserialize_message_pack<O: DeserializeOwned>(raw: &[u8]) -> Result<O> {
     Deserialize::deserialize(&mut d).context(CONFIG_DESERIALIZING_MESSAGE_PACK_FAILED)
 }
 
-static CONFIG_SERIALIZING_MESSAGE_PACK_FAILED: &str = "serializing to messgagepack failed";
+static CONFIG_SERIALIZING_MESSAGE_PACK_FAILED: &str = "serializing to message pack failed";
 
 pub fn serialize_message_pack<I: Serialize>(input: I) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
@@ -160,7 +160,7 @@ pub struct HttpOptions {
     // TLS options and flags
     #[structopt(
         long,
-        help = "Use native TLS implementation (for linux musl builds a vendored openssl 1.1.1j is used)"
+        help = "Use native TLS implementation (for linux musl builds a vendored openssl is used)"
     )]
     #[serde(default = "default_as_false")]
     pub use_native_tls: bool,
