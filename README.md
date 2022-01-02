@@ -132,7 +132,10 @@ The length of the newly created random value can set with `--password-length`. P
 Example
 
 ```sh
-psonoci -c psonoci.toml env-vars get-or-create --password-length 10 --danger-password-allowed-chars "🙈🙉🙊👹🦀🦐🦑🍦🍧🍨🍩🎂🏴󠁧󠁢󠁷󠁬󠁳󠁿" e6305462-1d5d-478c-90eb-03da80e85cff DB_PASSWORD
+psonoci -c psonoci.toml env-vars get-or-create \
+    --password-length 10 \
+    --danger-password-allowed-chars "🙈🙉🙊👹🦀🦐🦑🍦🍧🍨🍩🎂🏴󠁧󠁢󠁷󠁬󠁳󠁿" \
+    e6305462-1d5d-478c-90eb-03da80e85cff DB_PASSWORD
 ```
 
 creates (for example) this string: `🏴󠁧󠁢󠁷󠁬󠁳󠁿🦑👹🦑🙉🍧🦑🏴󠁧󠁢󠁷󠁬󠁳󠁿🙊🦀`
