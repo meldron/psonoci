@@ -1,6 +1,6 @@
 # psonoci
 
-[PSONO](https://psono.com/) CI client.
+[PSONO](https://psono.com/) CI Client.
 
 PSONO is a secure Open Source Password Manager, which can be self hosted by anyone so you have to trust no one.
 
@@ -13,7 +13,7 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 ```
 psonoci 0.3.0
 Bernd Kaiser
-Psono ci client
+Psono CI Client (https://github.com/meldron/psonoci)
 
 USAGE:
     psonoci [FLAGS] [OPTIONS] --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> <SUBCOMMAND>
