@@ -13,7 +13,11 @@ use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "psonoci", about = "Psono ci client", author = "Bernd Kaiser")]
+#[structopt(
+    name = "psonoci",
+    about = "Psono CI Client (https://github.com/meldron/psonoci)",
+    author = "Bernd Kaiser"
+)]
 pub struct Opt {
     #[structopt(subcommand)]
     pub command: Command,
