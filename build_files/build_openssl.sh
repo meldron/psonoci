@@ -4,9 +4,13 @@
 set -ex
 
 main() {
-    local version=1.1.1m
+    local version=1.1.1n
     local os=$1 \
           triple=$2
+
+    local openssl_file="openssl-$version.tar.gz"
+    local openssl_size=9850712
+    local openssl_file_sha256='40dceb51a4f6a5275bde0e6bf20ef4b91bfc32ed57c0552e2e8e15463372b17a'
 
     local dependencies=(
         ca-certificates
@@ -36,8 +40,11 @@ main() {
     fi
 
     pushd "$td"
-    curl https://www.openssl.org/source/openssl-$version.tar.gz | \
-        tar --strip-components=1 -xz
+
+    # fix for broken certs in armv7 cross image
+    curl -k --max-filesize ${openssl_size} --max-time 600 "https://www.openssl.org/source/${openssl_file}" -o "$openssl_file"
+    echo "${openssl_file_sha256} ${openssl_file}" | sha256sum -c
+    tar --strip-components=1 -xzf "$openssl_file"
     AR=${triple}ar CC=${triple}gcc ./Configure \
       shared \
       --prefix=/openssl \
