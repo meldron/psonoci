@@ -52,16 +52,25 @@ variables:
 build-x86_64-unknown-linux-musl:
     <<: *build
     variables:
+        DOCKER_DRIVER: overlay2
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_TLS_CERTDIR: ""
         BUILD_ENV: x86_64-unknown-linux-musl
 
 build-armv7-unknown-linux-gnueabihf:
     <<: *build
     variables:
+        DOCKER_DRIVER: overlay2
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_TLS_CERTDIR: ""
         BUILD_ENV: armv7-unknown-linux-gnueabihf
 
 build-aarch64-unknown-linux-musl:
     <<: *build
     variables:
+        DOCKER_DRIVER: overlay2
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_TLS_CERTDIR: ""
         BUILD_ENV: aarch64-unknown-linux-musl
 
 #build-x86_64-pc-windows-gnu:
