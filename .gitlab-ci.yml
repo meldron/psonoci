@@ -15,7 +15,13 @@ variables:
     stage: build
     image: psono-docker.jfrog.io/ubuntu:20.04
     services:
-        - docker:18-dind
+        - name: docker:20-dind
+          alias: docker
+          command: ["--tls=false"]
+    variables:
+        DOCKER_DRIVER: overlay2
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_TLS_CERTDIR: ""
     script:
         - apt-get update
         - apt-get install -y curl build-essential
@@ -67,7 +73,7 @@ release-artifacts:
     except:
         - schedules
     stage: release
-    image: psono-docker.jfrog.io/ubuntu:20.04
+    image: psono-docker.jfrog.io/ubuntu:22.04
     script:
         - apt-get update
         - apt-get install -y curl
