@@ -4,13 +4,13 @@
 set -ex
 
 main() {
-    local version=1.1.1n
+    local version=1.1.1v
     local os=$1 \
           triple=$2
 
     local openssl_file="openssl-$version.tar.gz"
-    local openssl_size=9850712
-    local openssl_file_sha256='40dceb51a4f6a5275bde0e6bf20ef4b91bfc32ed57c0552e2e8e15463372b17a'
+    local openssl_size=9893443
+    local openssl_file_sha256='d6697e2871e77238460402e9362d47d18382b15ef9f246aba6c7bd780d38a6b0'
 
     local dependencies=(
         ca-certificates
