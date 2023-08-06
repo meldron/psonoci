@@ -2,8 +2,8 @@ use anyhow::{anyhow, Context, Result};
 use hex::{decode, encode};
 use rand::prelude::*;
 use xsalsa20poly1305::aead::generic_array::{typenum::U24, GenericArray};
-use xsalsa20poly1305::aead::{Aead, NewAead};
-use xsalsa20poly1305::XSalsa20Poly1305;
+use xsalsa20poly1305::aead::Aead;
+use xsalsa20poly1305::{KeyInit, XSalsa20Poly1305};
 
 pub const NONCE_LENGTH: usize = 24;
 pub const SECRET_LENGTH: usize = 32;

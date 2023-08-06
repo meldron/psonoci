@@ -793,10 +793,10 @@ pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, String)>
         api_key_id: config
             .psono_settings
             .api_key_id
-            .to_hyphenated()
+            .hyphenated()
             .to_string()
             .to_lowercase(),
-        secret_id: secret_id.to_hyphenated().to_string().to_lowercase(),
+        secret_id: secret_id.hyphenated().to_string().to_lowercase(),
     };
 
     let request = Route {
@@ -837,10 +837,10 @@ pub fn set_secret(
         api_key_id: config
             .psono_settings
             .api_key_id
-            .to_hyphenated()
+            .hyphenated()
             .to_string()
             .to_lowercase(),
-        secret_id: secret_id.to_hyphenated().to_string().to_lowercase(),
+        secret_id: secret_id.hyphenated().to_string().to_lowercase(),
         data: secret_encrypted_hex,
         data_nonce: nonce_hex,
     };
@@ -938,7 +938,7 @@ pub fn api_key_info(config: &Config) -> Result<ApiKeyInfo> {
         api_key_id: config
             .psono_settings
             .api_key_id
-            .to_hyphenated()
+            .hyphenated()
             .to_string()
             .to_lowercase(),
     };
