@@ -40,6 +40,9 @@ pub enum SecretType {
     GPGKey,
     Bookmark,
     EnvVars,
+    SSHKey,
+    TOTP,
+    CreditCard,
 }
 
 impl SecretType {
@@ -51,6 +54,9 @@ impl SecretType {
             SecretType::GPGKey => "gpg_key",
             SecretType::Bookmark => "bookmark",
             SecretType::EnvVars => "env_vars",
+            SecretType::SSHKey => "ssh_key",
+            SecretType::TOTP => "totp",
+            SecretType::CreditCard => "credit_card",
         }
     }
 }
@@ -72,6 +78,22 @@ pub enum SecretValueType {
     gpg_key_public,
     secret_type,
     env_vars,
+        // SSHKey
+    ssh_key_public,
+    ssh_key_private,
+
+    // TOTP
+    totp_period,
+    totp_algorithm,
+    totp_digits,
+    totp_code,
+
+    // CreditCard
+    credit_card_number,
+    credit_card_cvc,
+    credit_card_name,
+    credit_card_valid_through,
+    credit_card_pin,
 }
 }
 
@@ -91,6 +113,17 @@ impl SecretValueType {
             SecretValueType::gpg_key_public => "gpg_key_public",
             SecretValueType::secret_type => "type",
             SecretValueType::env_vars => "env_vars",
+            SecretValueType::ssh_key_public => "ssh_key_public",
+            SecretValueType::ssh_key_private => "ssh_key_private",
+            SecretValueType::totp_period => "totp_period",
+            SecretValueType::totp_algorithm => "totp_algorithm",
+            SecretValueType::totp_digits => "totp_digits",
+            SecretValueType::totp_code => "totp_code",
+            SecretValueType::credit_card_number => "credit_card_number",
+            SecretValueType::credit_card_cvc => "credit_card_cvc",
+            SecretValueType::credit_card_name => "credit_card_name",
+            SecretValueType::credit_card_valid_through => "credit_card_valid_through",
+            SecretValueType::credit_card_pin => "credit_card_pin",
         }
     }
 }
@@ -174,6 +207,10 @@ impl EncryptedResponse {
 
         let encrypted_raw = open_secret_box(&self.data, &self.data_nonce, &encryption_key)
             .context("decrypting secret failed")?;
+
+        // let raw_string = String::from_utf8_lossy(&encrypted_raw);
+
+        // println!("{}", raw_string);
 
         let input: I = serde_json::from_slice(&encrypted_raw)
             .context("parsing generic response from json failed")?;
@@ -383,6 +420,29 @@ pub struct GenericSecret {
     pub environment_variables_title: Option<String>,
     pub environment_variables_notes: Option<String>,
     pub environment_variables_variables: Option<Vec<EnvironmentVariable>>,
+
+    // ssh
+    pub ssh_own_key_title: Option<String>,
+    pub ssh_own_key_public: Option<String>,
+    pub ssh_own_key_notes: Option<String>,
+    pub ssh_own_key_private: Option<String>,
+
+    // totp
+    pub totp_title: Option<String>,
+    pub totp_period: Option<u32>,
+    pub totp_algorithm: Option<String>,
+    pub totp_digits: Option<u32>,
+    pub totp_code: Option<String>,
+    pub totp_notes: Option<String>,
+
+    // credit card
+    pub credit_card_title: Option<String>,
+    pub credit_card_number: Option<String>,
+    pub credit_card_cvc: Option<String>,
+    pub credit_card_name: Option<String>,
+    pub credit_card_valid_through: Option<String>,
+    pub credit_card_pin: Option<String>,
+    pub credit_card_notes: Option<String>,
 }
 
 impl GenericSecret {
@@ -412,6 +472,23 @@ impl GenericSecret {
             environment_variables_notes: None,
             environment_variables_title: None,
             environment_variables_variables: None,
+            ssh_own_key_title: None,
+            ssh_own_key_public: None,
+            ssh_own_key_notes: None,
+            ssh_own_key_private: None,
+            totp_title: None,
+            totp_period: None,
+            totp_algorithm: None,
+            totp_digits: None,
+            totp_code: None,
+            totp_notes: None,
+            credit_card_title: None,
+            credit_card_number: None,
+            credit_card_cvc: None,
+            credit_card_name: None,
+            credit_card_valid_through: None,
+            credit_card_pin: None,
+            credit_card_notes: None,
         }
     }
 }
@@ -481,6 +558,37 @@ impl GenericSecret {
 // }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SSHKey {
+    key_private: Option<String>,
+    key_public: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TOTP {
+    period: Option<u32>,
+    algorithm: Option<String>,
+    digits: Option<u32>,
+    code: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreditCard {
+    number: Option<String>,
+    cvc: Option<String>,
+    name: Option<String>,
+    valid_through: Option<String>,
+    pin: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GPGKey {
+    key_private: Option<String>,
+    key_public: Option<String>,
+    name: Option<String>,
+    email: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Secret {
     pub url_filter: Option<String>,
     pub notes: Option<String>,
@@ -496,9 +604,32 @@ pub struct Secret {
     pub gpg_key_email: Option<String>,
 
     pub env_vars: Option<Vec<EnvironmentVariable>>,
+    pub ssh_key: Option<SSHKey>,
+    pub totp: Option<TOTP>,
+    pub credit_card: Option<CreditCard>,
 }
 
 impl Secret {
+    pub fn new(secret_type: SecretType) -> Secret {
+        return Secret {
+            secret_type: secret_type,
+            gpg_key_email: None,
+            gpg_key_name: None,
+            gpg_key_private: None,
+            gpg_key_public: None,
+            notes: None,
+            password: None,
+            title: None,
+            url: None,
+            url_filter: None,
+            username: None,
+            env_vars: None,
+            ssh_key: None,
+            totp: None,
+            credit_card: None,
+        };
+    }
+
     pub fn as_generic_secret(&self) -> GenericSecret {
         let mut gs = GenericSecret::new();
 
@@ -538,6 +669,35 @@ impl Secret {
                 gs.environment_variables_notes = self.notes.clone();
                 gs.environment_variables_title = self.title.clone();
                 gs.environment_variables_variables = self.env_vars.clone();
+            }
+            SecretType::SSHKey => {
+                let ssh_key = self.ssh_key.as_ref().expect("ssh_key must be set");
+
+                gs.ssh_own_key_notes = self.notes.clone();
+                gs.ssh_own_key_title = self.title.clone();
+                gs.ssh_own_key_private = ssh_key.key_private.clone();
+                gs.ssh_own_key_public = ssh_key.key_public.clone();
+            }
+            SecretType::TOTP => {
+                let totp = self.totp.as_ref().expect("totp must be set");
+
+                gs.totp_notes = self.notes.clone();
+                gs.totp_title = self.title.clone();
+                gs.totp_period = totp.period;
+                gs.totp_algorithm = totp.algorithm.clone();
+                gs.totp_digits = totp.digits;
+                gs.totp_code = totp.code.clone();
+            }
+            SecretType::CreditCard => {
+                let cc = self.credit_card.as_ref().expect("credit_card must be set");
+
+                gs.credit_card_notes = self.notes.clone();
+                gs.credit_card_title = self.title.clone();
+                gs.credit_card_number = cc.number.clone();
+                gs.credit_card_cvc = cc.cvc.clone();
+                gs.credit_card_name = cc.name.clone();
+                gs.credit_card_valid_through = cc.valid_through.clone();
+                gs.credit_card_pin = cc.pin.clone();
             }
         }
 
@@ -581,13 +741,30 @@ impl Secret {
                 .env_vars
                 .map(|v| serde_json::to_string(&v).ok())
                 .flatten(),
+            SecretValueType::ssh_key_public => self.ssh_key.and_then(|k| k.key_public),
+            SecretValueType::ssh_key_private => self.ssh_key.and_then(|k| k.key_private),
+
+            // TOTP
+            SecretValueType::totp_period => self.totp.and_then(|t| t.period.map(|p| p.to_string())),
+            SecretValueType::totp_algorithm => self.totp.and_then(|t| t.algorithm),
+            SecretValueType::totp_digits => self.totp.and_then(|t| t.digits.map(|d| d.to_string())),
+            SecretValueType::totp_code => self.totp.and_then(|t| t.code),
+
+            // CreditCard
+            SecretValueType::credit_card_number => self.credit_card.and_then(|c| c.number),
+            SecretValueType::credit_card_cvc => self.credit_card.and_then(|c| c.cvc),
+            SecretValueType::credit_card_name => self.credit_card.and_then(|c| c.name),
+            SecretValueType::credit_card_valid_through => {
+                self.credit_card.and_then(|c| c.valid_through)
+            }
+            SecretValueType::credit_card_pin => self.credit_card.and_then(|c| c.pin),
         }
     }
 
     pub fn set_value(&mut self, secret_value_type: &SecretValueType, value: String) -> Result<()> {
         match (&self.secret_type, secret_value_type) {
             // WEBSITE
-            (SecretType::Website, SecretValueType::json) => {
+            (_, SecretValueType::json) => {
                 return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
             }
             (SecretType::Website, SecretValueType::notes) => self.notes = Some(value),
@@ -597,27 +774,16 @@ impl Secret {
             (SecretType::Website, SecretValueType::url_filter) => self.url_filter = Some(value),
             (SecretType::Website, SecretValueType::username) => self.username = Some(value),
             // APPLICATION
-            (SecretType::Application, SecretValueType::json) => {
-                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
-            }
             (SecretType::Application, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::Application, SecretValueType::password) => self.password = Some(value),
             (SecretType::Application, SecretValueType::title) => self.title = Some(value),
             (SecretType::Application, SecretValueType::username) => self.username = Some(value),
             // NOTE
-            (SecretType::Note, SecretValueType::json) => {
-                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
-            }
             (SecretType::Note, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::Note, SecretValueType::title) => self.title = Some(value),
             // GPGKey
-            (SecretType::GPGKey, SecretValueType::json) => {
-                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
-            }
             (SecretType::GPGKey, SecretValueType::title) => self.title = Some(value),
-            (SecretType::GPGKey, SecretValueType::gpg_key_email) => {
-                self.gpg_key_email = Some(value)
-            }
+
             (SecretType::GPGKey, SecretValueType::gpg_key_name) => self.gpg_key_name = Some(value),
             (SecretType::GPGKey, SecretValueType::gpg_key_private) => {
                 self.gpg_key_private = Some(value)
@@ -626,24 +792,121 @@ impl Secret {
                 self.gpg_key_public = Some(value)
             }
             // Bookmark
-            (SecretType::Bookmark, SecretValueType::json) => {
-                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
-            }
             (SecretType::Bookmark, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::Bookmark, SecretValueType::title) => self.title = Some(value),
             (SecretType::Bookmark, SecretValueType::url) => self.url = Some(value),
             (SecretType::Bookmark, SecretValueType::url_filter) => self.url_filter = Some(value),
             // EnvVars
-            // TODO add env var settings
-            (SecretType::EnvVars, SecretValueType::json) => {
-                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
-            }
             (SecretType::EnvVars, SecretValueType::title) => self.title = Some(value),
             (SecretType::EnvVars, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::EnvVars, SecretValueType::env_vars) => {
                 let env_vars: Vec<EnvironmentVariable> = serde_json::from_str(&value)
                     .context("env_vars could not be decoded from json")?;
                 self.env_vars = Some(env_vars);
+            }
+            // SSHKey
+            (SecretType::SSHKey, SecretValueType::ssh_key_private) => {
+                if let Some(ssh_key) = &mut self.ssh_key {
+                    ssh_key.key_private = Some(value);
+                } else {
+                    return Err(anyhow!("SSHKey is None when trying to set ssh_key_private"));
+                }
+            }
+            (SecretType::SSHKey, SecretValueType::ssh_key_public) => {
+                if let Some(ssh_key) = &mut self.ssh_key {
+                    ssh_key.key_public = Some(value);
+                } else {
+                    return Err(anyhow!("SSHKey is None when trying to set ssh_key_public"));
+                }
+            }
+            // TOTP
+            (SecretType::TOTP, SecretValueType::totp_period) => {
+                if let Some(totp) = &mut self.totp {
+                    match value.parse() {
+                        Ok(parsed) => totp.period = Some(parsed),
+                        Err(_) => {
+                            return Err(anyhow!(
+                                "Failed to parse totp period as a number from the provided value"
+                            ))
+                        }
+                    }
+                } else {
+                    return Err(anyhow!("TOTP is None when trying to set totp_period"));
+                }
+            }
+            (SecretType::TOTP, SecretValueType::totp_algorithm) => {
+                if let Some(totp) = &mut self.totp {
+                    totp.algorithm = Some(value);
+                } else {
+                    return Err(anyhow!("TOTP is None when trying to set totp_algorithm"));
+                }
+            }
+            (SecretType::TOTP, SecretValueType::totp_digits) => {
+                if let Some(totp) = &mut self.totp {
+                    match value.parse() {
+                        Ok(parsed) => totp.digits = Some(parsed),
+                        Err(_) => {
+                            return Err(anyhow!(
+                                "Failed to parse totp digits as a number from the provided value"
+                            ))
+                        }
+                    }
+                } else {
+                    return Err(anyhow!("TOTP is None when trying to set totp_digits"));
+                }
+            }
+            (SecretType::TOTP, SecretValueType::totp_code) => {
+                if let Some(totp) = &mut self.totp {
+                    totp.code = Some(value);
+                } else {
+                    return Err(anyhow!("TOTP is None when trying to set totp_code"));
+                }
+            }
+            // CreditCard
+            (SecretType::CreditCard, SecretValueType::credit_card_number) => {
+                if let Some(credit_card) = &mut self.credit_card {
+                    credit_card.number = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "CreditCard is None when trying to set credit_card_number"
+                    ));
+                }
+            }
+            (SecretType::CreditCard, SecretValueType::credit_card_cvc) => {
+                if let Some(credit_card) = &mut self.credit_card {
+                    credit_card.cvc = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "CreditCard is None when trying to set credit_card_cvc"
+                    ));
+                }
+            }
+            (SecretType::CreditCard, SecretValueType::credit_card_name) => {
+                if let Some(credit_card) = &mut self.credit_card {
+                    credit_card.name = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "CreditCard is None when trying to set credit_card_name"
+                    ));
+                }
+            }
+            (SecretType::CreditCard, SecretValueType::credit_card_valid_through) => {
+                if let Some(credit_card) = &mut self.credit_card {
+                    credit_card.valid_through = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "CreditCard is None when trying to set credit_card_valid_through"
+                    ));
+                }
+            }
+            (SecretType::CreditCard, SecretValueType::credit_card_pin) => {
+                if let Some(credit_card) = &mut self.credit_card {
+                    credit_card.pin = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "CreditCard is None when trying to set credit_card_pin"
+                    ));
+                }
             }
             (_, _) => {
                 return Err(anyhow!(
@@ -665,20 +928,14 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.application_password_username.is_some()
             || s.application_password_title.is_some()
         {
-            return Ok(Secret {
-                gpg_key_email: None,
-                gpg_key_name: None,
-                gpg_key_private: None,
-                gpg_key_public: None,
-                notes: s.application_password_notes,
-                password: s.application_password_password,
-                secret_type: SecretType::Application,
-                title: s.application_password_title,
-                url: None,
-                url_filter: None,
-                username: s.application_password_username,
-                env_vars: None,
-            });
+            let mut secret = Secret::new(SecretType::Application);
+
+            secret.notes = s.application_password_notes;
+            secret.password = s.application_password_password;
+            secret.title = s.application_password_title;
+            secret.username = s.application_password_username;
+
+            return Ok(secret);
         }
 
         if s.website_password_notes.is_some()
@@ -688,20 +945,16 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.website_password_url_filter.is_some()
             || s.website_password_username.is_some()
         {
-            return Ok(Secret {
-                env_vars: None,
-                gpg_key_email: None,
-                gpg_key_name: None,
-                gpg_key_private: None,
-                gpg_key_public: None,
-                notes: s.website_password_notes,
-                password: s.website_password_password,
-                secret_type: SecretType::Website,
-                title: s.website_password_title,
-                url: s.website_password_url,
-                url_filter: s.website_password_url_filter,
-                username: s.website_password_username,
-            });
+            let mut secret = Secret::new(SecretType::Website);
+
+            secret.notes = s.website_password_notes;
+            secret.password = s.website_password_password;
+            secret.title = s.website_password_title;
+            secret.url = s.website_password_url;
+            secret.url_filter = s.website_password_url_filter;
+            secret.username = s.website_password_username;
+
+            return Ok(secret);
         }
 
         if s.bookmark_url_filter.is_some()
@@ -709,37 +962,22 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.bookmark_url.is_some()
             || s.bookmark_title.is_some()
         {
-            return Ok(Secret {
-                env_vars: None,
-                gpg_key_email: None,
-                gpg_key_name: None,
-                gpg_key_private: None,
-                gpg_key_public: None,
-                notes: s.bookmark_notes,
-                password: None,
-                secret_type: SecretType::Bookmark,
-                title: s.bookmark_title,
-                url: s.bookmark_url,
-                url_filter: s.bookmark_url_filter,
-                username: None,
-            });
+            let mut secret = Secret::new(SecretType::Bookmark);
+            secret.notes = s.bookmark_notes;
+            secret.title = s.bookmark_title;
+            secret.url = s.bookmark_url;
+            secret.url_filter = s.bookmark_url_filter;
+
+            return Ok(secret);
         }
 
         if s.note_notes.is_some() || s.note_title.is_some() {
-            return Ok(Secret {
-                env_vars: None,
-                gpg_key_email: None,
-                gpg_key_name: None,
-                gpg_key_private: None,
-                gpg_key_public: None,
-                notes: s.note_notes,
-                password: None,
-                secret_type: SecretType::Note,
-                title: s.note_title,
-                url: None,
-                url_filter: None,
-                username: None,
-            });
+            let mut secret = Secret::new(SecretType::Note);
+
+            secret.notes = s.note_notes;
+            secret.title = s.note_title;
+
+            return Ok(secret);
         }
 
         if s.mail_gpg_own_key_private.is_some()
@@ -748,40 +986,88 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.mail_gpg_own_key_email.is_some()
             || s.mail_gpg_own_key_title.is_some()
         {
-            return Ok(Secret {
-                env_vars: None,
-                gpg_key_email: s.mail_gpg_own_key_email,
-                gpg_key_name: s.mail_gpg_own_key_name,
-                gpg_key_private: s.mail_gpg_own_key_private,
-                gpg_key_public: s.mail_gpg_own_key_public,
-                notes: None,
-                password: None,
-                secret_type: SecretType::GPGKey,
-                title: s.mail_gpg_own_key_title,
-                url: None,
-                url_filter: None,
-                username: None,
-            });
+            let mut secret = Secret::new(SecretType::GPGKey);
+
+            secret.gpg_key_email = s.mail_gpg_own_key_email;
+            secret.gpg_key_name = s.mail_gpg_own_key_name;
+            secret.gpg_key_private = s.mail_gpg_own_key_private;
+            secret.gpg_key_public = s.mail_gpg_own_key_public;
+            secret.title = s.mail_gpg_own_key_title;
+
+            return Ok(secret);
         }
 
         if s.environment_variables_notes.is_some()
             || s.environment_variables_title.is_some()
             || s.environment_variables_variables.is_some()
         {
-            return Ok(Secret {
-                env_vars: s.environment_variables_variables,
-                gpg_key_email: None,
-                gpg_key_name: None,
-                gpg_key_private: None,
-                gpg_key_public: None,
-                notes: s.environment_variables_notes,
-                password: None,
-                secret_type: SecretType::EnvVars,
-                title: s.environment_variables_title,
-                url: None,
-                url_filter: None,
-                username: None,
+            let mut secret = Secret::new(SecretType::EnvVars);
+
+            secret.env_vars = s.environment_variables_variables;
+            secret.notes = s.environment_variables_notes;
+            secret.title = s.environment_variables_title;
+
+            return Ok(secret);
+        }
+
+        if s.ssh_own_key_notes.is_some()
+            || s.ssh_own_key_private.is_some()
+            || s.ssh_own_key_public.is_some()
+            || s.ssh_own_key_title.is_some()
+        {
+            let mut secret = Secret::new(SecretType::SSHKey);
+
+            secret.title = s.ssh_own_key_title;
+            secret.notes = s.ssh_own_key_notes;
+            secret.ssh_key = Some(SSHKey {
+                key_private: s.ssh_own_key_private,
+                key_public: s.ssh_own_key_public,
             });
+
+            return Ok(secret);
+        }
+
+        if s.totp_title.is_some()
+            || s.totp_period.is_some()
+            || s.totp_algorithm.is_some()
+            || s.totp_digits.is_some()
+            || s.totp_code.is_some()
+            || s.totp_notes.is_some()
+        {
+            let mut secret = Secret::new(SecretType::TOTP);
+            secret.title = s.totp_title;
+            secret.totp = Some(TOTP {
+                period: s.totp_period,
+                algorithm: s.totp_algorithm,
+                digits: s.totp_digits,
+                code: s.totp_code,
+            });
+            secret.notes = s.totp_notes;
+
+            return Ok(secret);
+        }
+
+        // Credit Card
+        if s.credit_card_title.is_some()
+            || s.credit_card_number.is_some()
+            || s.credit_card_cvc.is_some()
+            || s.credit_card_name.is_some()
+            || s.credit_card_valid_through.is_some()
+            || s.credit_card_pin.is_some()
+            || s.credit_card_notes.is_some()
+        {
+            let mut secret = Secret::new(SecretType::CreditCard);
+            secret.title = s.credit_card_title;
+            secret.credit_card = Some(CreditCard {
+                number: s.credit_card_number,
+                cvc: s.credit_card_cvc,
+                name: s.credit_card_name,
+                valid_through: s.credit_card_valid_through,
+                pin: s.credit_card_pin,
+            });
+            secret.notes = s.credit_card_notes;
+
+            return Ok(secret);
         }
 
         Err(anyhow!("unsupported secret type"))
@@ -1208,41 +1494,19 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn generic_secret_to_env_vars_secret() {
-        let gs: GenericSecret = GenericSecret {
-            website_password_url_filter: None,
-            website_password_notes: None,
-            website_password_password: None,
-            website_password_username: None,
-            website_password_url: None,
-            website_password_title: None,
-            application_password_notes: None,
-            application_password_password: None,
-            application_password_username: None,
-            application_password_title: None,
-            bookmark_url_filter: None,
-            bookmark_notes: None,
-            bookmark_url: None,
-            bookmark_title: None,
-            mail_gpg_own_key_private: None,
-            mail_gpg_own_key_public: None,
-            mail_gpg_own_key_name: None,
-            mail_gpg_own_key_email: None,
-            mail_gpg_own_key_title: None,
-            note_notes: None,
-            note_title: None,
-            environment_variables_title: Some("PROD".to_string()),
-            environment_variables_notes: Some("my first note".to_string()),
-            environment_variables_variables: Some(vec![
-                EnvironmentVariable {
-                    key: "USERNAME".to_string(),
-                    value: "tester".to_string(),
-                },
-                EnvironmentVariable {
-                    key: "Password".to_string(),
-                    value: "PASSWORD".to_string(),
-                },
-            ]),
-        };
+        let mut gs: GenericSecret = GenericSecret::new();
+        gs.environment_variables_title = Some("PROD".to_string());
+        gs.environment_variables_notes = Some("my first note".to_string());
+        gs.environment_variables_variables = Some(vec![
+            EnvironmentVariable {
+                key: "USERNAME".to_string(),
+                value: "tester".to_string(),
+            },
+            EnvironmentVariable {
+                key: "Password".to_string(),
+                value: "PASSWORD".to_string(),
+            },
+        ]);
 
         let result = Secret::transform(gs);
         assert!(result.is_ok());
