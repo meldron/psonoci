@@ -180,20 +180,9 @@ mod tests {
             },
         ];
 
-        let secret = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars),
-        };
+        let mut secret = Secret::new(SecretType::EnvVars);
+        secret.title = Some("test".to_owned());
+        secret.env_vars = Some(env_vars);
 
         let (secret_updated, env_var_value) = get_or_create(
             secret,
@@ -222,20 +211,9 @@ mod tests {
             },
         ];
 
-        let secret = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars),
-        };
+        let mut secret = Secret::new(SecretType::EnvVars);
+        secret.title = Some("test".to_owned());
+        secret.env_vars = Some(env_vars);
 
         let (secret_updated, new_env_var_value) = get_or_create(
             secret,
@@ -277,20 +255,9 @@ mod tests {
             },
         ];
 
-        let secret = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars),
-        };
+        let mut secret = Secret::new(SecretType::EnvVars);
+        secret.title = Some("test".to_owned());
+        secret.env_vars = Some(env_vars);
 
         let (secret_updated, new_secret) = update_or_create(
             secret,
@@ -313,20 +280,9 @@ mod tests {
                 value: "unchanged".to_owned(),
             },
         ];
-        let secret_expected = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars_expected),
-        };
+        let mut secret_expected = Secret::new(SecretType::EnvVars);
+        secret_expected.title = Some("test".to_owned());
+        secret_expected.env_vars = Some(env_vars_expected);
         assert_eq!(secret_updated, Some(secret_expected));
         assert_eq!(new_secret, "after");
     }
@@ -345,20 +301,9 @@ mod tests {
             },
         ];
 
-        let secret = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars),
-        };
+        let mut secret = Secret::new(SecretType::EnvVars);
+        secret.title = Some("test".to_owned());
+        secret.env_vars = Some(env_vars);
 
         let (secret_updated, new_secret) = update_or_create(
             secret,
@@ -383,20 +328,11 @@ mod tests {
                 value: "new".to_owned(),
             },
         ];
-        let secret_expected = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars_expected),
-        };
+
+        let mut secret_expected = Secret::new(SecretType::EnvVars);
+        secret_expected.title = Some("test".to_owned());
+        secret_expected.env_vars = Some(env_vars_expected);
+
         assert_eq!(secret_updated, Some(secret_expected));
     }
 
@@ -414,20 +350,9 @@ mod tests {
             },
         ];
 
-        let secret = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars),
-        };
+        let mut secret = Secret::new(SecretType::EnvVars);
+        secret.title = Some("test".to_owned());
+        secret.env_vars = Some(env_vars);
 
         let (secret_updated, new_secret) = update_or_create(
             secret,
@@ -455,20 +380,9 @@ mod tests {
             },
         ];
 
-        let secret = Secret {
-            title: Some("test".to_owned()),
-            url_filter: None,
-            notes: None,
-            password: None,
-            username: None,
-            url: None,
-            secret_type: SecretType::EnvVars,
-            gpg_key_private: None,
-            gpg_key_public: None,
-            gpg_key_name: None,
-            gpg_key_email: None,
-            env_vars: Some(env_vars),
-        };
+        let mut secret = Secret::new(SecretType::EnvVars);
+        secret.title = Some("test".to_owned());
+        secret.env_vars = Some(env_vars);
 
         let (secret_updated, new_secret) = update_or_create(
             secret,
