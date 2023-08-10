@@ -11,11 +11,13 @@ mod license;
 mod opt;
 mod passwords;
 mod run;
+mod totp;
 
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
 use config::{Config, ConfigSaveFormat};
 use license::print_license;
 use opt::{ApiKeyCommand, Command, ConfigCommand, ConfigSource, Opt, SecretCommand};
+use totp::run_totp_command;
 
 fn run_secret_command(config: Config, command: SecretCommand) -> Result<()> {
     match command {
@@ -120,6 +122,7 @@ fn main() -> Result<()> {
         }
         Command::Run(rc) => run_run_command(config, rc)?,
         Command::EnvVars(env_command) => run_env_vars_command(env_command, config)?,
+        Command::Totp(tc) => run_totp_command(tc, config)?,
         Command::License => print_license(),
     }
 

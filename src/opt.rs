@@ -149,6 +149,8 @@ pub enum Command {
     Run(RunCommand),
     #[structopt(about = "Convenience commands on environment variable secrets")]
     EnvVars(EnvVarsCommand),
+    #[structopt(about = "TOTP commands")]
+    Totp(TotpCommand),
     #[structopt(about = "Prints psonoci's license")]
     License,
 }
@@ -287,5 +289,39 @@ pub enum EnvVarsCommand {
         env_var_value: Option<String>,
         #[structopt(flatten)]
         password_creation_settings: PasswordCreationSettings,
+    },
+}
+
+#[derive(StructOpt, Debug)]
+pub enum TotpCommand {
+    #[structopt(about = "Get the current token for a TOTP secret")]
+    GetToken {
+        #[structopt(
+            required = true,
+            help = "The uuid of the secret containing the totp data"
+        )]
+        secret_id: Uuid,
+    },
+    #[structopt(about = "Check if a token is currently valid for a TOTP Secret")]
+    ValidateToken {
+        #[structopt(
+            required = true,
+            help = "The uuid of the secret containing the totp data"
+        )]
+        secret_id: Uuid,
+        #[structopt(required = true, help = "The token to validate")]
+        token: String,
+    },
+    #[structopt(about = "Get the otpauth url for a TOTP secret")]
+    GetUrl {
+        #[structopt(
+            required = true,
+            help = "The uuid of the secret containing the totp data"
+        )]
+        secret_id: Uuid,
+        #[structopt(long, help = "TOTP issuer for URL")]
+        issuer: Option<String>,
+        #[structopt(long, help = "TOTP account name for URL")]
+        account_name: Option<String>,
     },
 }
