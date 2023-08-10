@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 // use attohttpc::Method;
 use chrono::{DateTime, Utc};
 use clap::arg_enum;
@@ -23,6 +23,7 @@ use uuid::Uuid;
 
 use crate::config::{Config, HttpOptions};
 use crate::crypto::{create_nonce_hex, open_secret_box, seal_secret_box_hex};
+use crate::totp::{is_valid_totp_algorithm, is_valid_totp_digit};
 
 static USER_AGENT_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
@@ -565,10 +566,10 @@ pub struct SSHKey {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TOTP {
-    period: Option<u32>,
-    algorithm: Option<String>,
-    digits: Option<u32>,
-    code: Option<String>,
+    pub period: Option<u32>,
+    pub algorithm: Option<String>,
+    pub digits: Option<u32>,
+    pub code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -836,6 +837,10 @@ impl Secret {
             }
             (SecretType::TOTP, SecretValueType::totp_algorithm) => {
                 if let Some(totp) = &mut self.totp {
+                    if !is_valid_totp_algorithm(&value) {
+                        bail!("Invalid algorithm. Only SHA1, SHA256, or SHA512 are allowed");
+                    }
+
                     totp.algorithm = Some(value);
                 } else {
                     return Err(anyhow!("TOTP is None when trying to set totp_algorithm"));
@@ -843,8 +848,16 @@ impl Secret {
             }
             (SecretType::TOTP, SecretValueType::totp_digits) => {
                 if let Some(totp) = &mut self.totp {
-                    match value.parse() {
-                        Ok(parsed) => totp.digits = Some(parsed),
+                    match value.parse::<u32>() {
+                        Ok(parsed) => {
+                            if !is_valid_totp_digit(parsed) {
+                                bail!(
+                                    "Invalid number of digits. Only 6, 7, or 8 digits are allowed"
+                                );
+                            }
+
+                            totp.digits = Some(parsed)
+                        }
                         Err(_) => {
                             return Err(anyhow!(
                                 "Failed to parse totp digits as a number from the provided value"
