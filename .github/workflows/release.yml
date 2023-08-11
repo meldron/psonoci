@@ -1,172 +1,172 @@
 name: Release
 on:
-    push:
-        tags:
-            - "v*.*.*"
-            - "v*.*.*-rc*"
-            - "release-test"
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-rc*"
+      - "release-test"
 
 jobs:
-    create-release:
-        name: create-release
-        runs-on: ubuntu-latest
-        steps:
-            - name: Inject slug/short variables
-              uses: rlespinasse/github-slug-action@v3.x
+  create-release:
+    name: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inject slug/short variables
+        uses: rlespinasse/github-slug-action@v3.x
 
-            - name: Create artifacts directory
-              run: mkdir artifacts
+      - name: Create artifacts directory
+        run: mkdir artifacts
 
-            - name: Create Release
-              id: create_release
-              uses: actions/create-release@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  tag_name: ${{ env.GITHUB_REF_SLUG }}
-                  release_name: Release ${{ env.GITHUB_REF_SLUG }}
-                  draft: false
-                  prerelease: false
-
-            - name: Save release upload URL to artifact
-              run: echo "${{ steps.create_release.outputs.upload_url }}" > artifacts/release-upload-url
-
-            - name: Save version number to artifact
-              run: echo "${{ env.GITHUB_REF_SLUG }}" > artifacts/release-version
-
-            - name: Upload artifacts
-              uses: actions/upload-artifact@v1
-              with:
-                  name: artifacts
-                  path: artifacts
-
-    build-release:
-        name: build-release
-        needs: ["create-release"]
-        runs-on: ${{ matrix.os }}
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
         env:
-            builder_image: meldron/psonoci_builder
-        strategy:
-            matrix:
-                build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
-                include:
-                    - build: linux
-                      os: ubuntu-18.04
-                      target: x86_64-unknown-linux-musl
-                      target_type: unix
-                    - build: linux-armv7
-                      os: ubuntu-18.04
-                      target: armv7-unknown-linux-gnueabihf
-                      target_type: unix
-                    - build: linux-aarch64
-                      os: ubuntu-18.04
-                      target: aarch64-unknown-linux-musl
-                      target_type: unix
-                    - build: macos
-                      os: macos-latest
-                      target: x86_64-apple-darwin
-                      target_type: unix
-                    - build: win-gnu
-                      os: windows-2019
-                      target: x86_64-pc-windows-gnu
-                      target_type: windows
-                    - build: win-msvc
-                      os: windows-2019
-                      target: x86_64-pc-windows-msvc
-                      target_type: windows
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.GITHUB_REF_SLUG }}
+          release_name: Release ${{ env.GITHUB_REF_SLUG }}
+          draft: false
+          prerelease: false
 
-        steps:
-            - uses: actions/checkout@v2
+      - name: Save release upload URL to artifact
+        run: echo "${{ steps.create_release.outputs.upload_url }}" > artifacts/release-upload-url
 
-            - name: install rust
-              uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: stable
-                  target: ${{ matrix.target }}
-                  override: true
+      - name: Save version number to artifact
+        run: echo "${{ env.GITHUB_REF_SLUG }}" > artifacts/release-version
 
-            - name: Pull docker image used by cross
-              if: matrix.os == 'ubuntu-18.04'
-              run: docker pull $builder_image:${{ matrix.target }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: artifacts
+          path: artifacts
 
-            # - name: Build docker image used by cross
-            #   if: matrix.target != 'x86_64-pc-windows-gnu'
-            #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
+  build-release:
+    name: build-release
+    needs: ["create-release"]
+    runs-on: ${{ matrix.os }}
+    env:
+      builder_image: meldron/psonoci_builder
+    strategy:
+      matrix:
+        build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
+        include:
+          - build: linux
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            target_type: unix
+          - build: linux-armv7
+            os: ubuntu-22.04
+            target: armv7-unknown-linux-gnueabihf
+            target_type: unix
+          - build: linux-aarch64
+            os: ubuntu-22.04
+            target: aarch64-unknown-linux-musl
+            target_type: unix
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
+            target_type: unix
+          - build: win-gnu
+            os: windows-2019
+            target: x86_64-pc-windows-gnu
+            target_type: windows
+          - build: win-msvc
+            os: windows-2019
+            target: x86_64-pc-windows-msvc
+            target_type: windows
 
-            - name: build with cross
-              uses: actions-rs/cargo@v1
-              if: matrix.os == 'ubuntu-18.04'
-              with:
-                  use-cross: true
-                  command: build
-                  args: --release --target ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v2
 
-            - name: build with cargo
-              uses: actions-rs/cargo@v1
-              if: matrix.os != 'ubuntu-18.04'
-              with:
-                  use-cross: false
-                  command: build
-                  args: --release --target ${{ matrix.target }}
+      - name: install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
 
-            - name: Get release download URL
-              uses: actions/download-artifact@v1
-              with:
-                  name: artifacts
-                  path: artifacts
+      - name: Pull docker image used by cross
+        if: matrix.os == 'ubuntu-22.04'
+        run: docker pull $builder_image:${{ matrix.target }}
 
-            - name: Set release upload URL and release version
-              shell: bash
-              run: |
-                  release_upload_url="$(cat artifacts/release-upload-url)"
-                  echo "RELEASE_UPLOAD_URL=$release_upload_url" >> $GITHUB_ENV
-                  echo "release upload url: $RELEASE_UPLOAD_URL"
-                  release_version="$(cat artifacts/release-version)"
-                  echo "RELEASE_VERSION=$release_version" >> $GITHUB_ENV
-                  echo "release version: $RELEASE_VERSION"
+      # - name: Build docker image used by cross
+      #   if: matrix.target != 'x86_64-pc-windows-gnu'
+      #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
-            - name: Import GPG key
-              id: import_gpg
-              uses: crazy-max/ghaction-import-gpg@v3
-              with:
-                  gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-                  passphrase: ${{ secrets.GPG_PRIVATE_KEY_PASSPHRASE }}
+      - name: build with cross
+        uses: actions-rs/cargo@v1
+        if: matrix.os == 'ubuntu-22.04'
+        with:
+          use-cross: true
+          command: build
+          args: --release --target ${{ matrix.target }}
 
-            - name: Build archive
-              shell: bash
-              run: |
-                  staging="psonoci-${{ env.RELEASE_VERSION }}-${{ matrix.target }}"
-                  mkdir -p "$staging"
-                  if [ "${{ matrix.target_type }}" = "windows" ]; then
-                    cp "target/${{ matrix.target }}/release/psonoci.exe" "$staging/"
-                    7z a "$staging.zip" "$staging"
-                    gpg --armor --detach-sig -u psonoci@dfjk.eu "$staging.zip"
-                    echo "ASSET=$staging.zip" >> $GITHUB_ENV
-                    echo "ASSET_SIG=$staging.zip.asc" >> $GITHUB_ENV
-                  else
-                    cp "target/${{ matrix.target }}/release/psonoci" "$staging/"
-                    tar czf "$staging.tar.gz" "$staging"
-                    gpg --armor --detach-sig -u psonoci@dfjk.eu "$staging.tar.gz"
-                    echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
-                    echo "ASSET_SIG=$staging.tar.gz.asc" >> $GITHUB_ENV
-                  fi
+      - name: build with cargo
+        uses: actions-rs/cargo@v1
+        if: matrix.os != 'ubuntu-22.04'
+        with:
+          use-cross: false
+          command: build
+          args: --release --target ${{ matrix.target }}
 
-            - name: Upload release archive
-              uses: actions/upload-release-asset@v1.0.1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ env.RELEASE_UPLOAD_URL }}
-                  asset_path: ${{ env.ASSET }}
-                  asset_name: ${{ env.ASSET }}
-                  asset_content_type: application/octet-stream
+      - name: Get release download URL
+        uses: actions/download-artifact@v1
+        with:
+          name: artifacts
+          path: artifacts
 
-            - name: Upload release archive signature
-              uses: actions/upload-release-asset@v1.0.1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ env.RELEASE_UPLOAD_URL }}
-                  asset_path: ${{ env.ASSET_SIG }}
-                  asset_name: ${{ env.ASSET_SIG }}
-                  asset_content_type: application/pgp-signature
+      - name: Set release upload URL and release version
+        shell: bash
+        run: |
+          release_upload_url="$(cat artifacts/release-upload-url)"
+          echo "RELEASE_UPLOAD_URL=$release_upload_url" >> $GITHUB_ENV
+          echo "release upload url: $RELEASE_UPLOAD_URL"
+          release_version="$(cat artifacts/release-version)"
+          echo "RELEASE_VERSION=$release_version" >> $GITHUB_ENV
+          echo "release version: $RELEASE_VERSION"
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v3
+        with:
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PRIVATE_KEY_PASSPHRASE }}
+
+      - name: Build archive
+        shell: bash
+        run: |
+          staging="psonoci-${{ env.RELEASE_VERSION }}-${{ matrix.target }}"
+          mkdir -p "$staging"
+          if [ "${{ matrix.target_type }}" = "windows" ]; then
+            cp "target/${{ matrix.target }}/release/psonoci.exe" "$staging/"
+            7z a "$staging.zip" "$staging"
+            gpg --armor --detach-sig -u psonoci@dfjk.eu "$staging.zip"
+            echo "ASSET=$staging.zip" >> $GITHUB_ENV
+            echo "ASSET_SIG=$staging.zip.asc" >> $GITHUB_ENV
+          else
+            cp "target/${{ matrix.target }}/release/psonoci" "$staging/"
+            tar czf "$staging.tar.gz" "$staging"
+            gpg --armor --detach-sig -u psonoci@dfjk.eu "$staging.tar.gz"
+            echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
+            echo "ASSET_SIG=$staging.tar.gz.asc" >> $GITHUB_ENV
+          fi
+
+      - name: Upload release archive
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+          asset_path: ${{ env.ASSET }}
+          asset_name: ${{ env.ASSET }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload release archive signature
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+          asset_path: ${{ env.ASSET_SIG }}
+          asset_name: ${{ env.ASSET_SIG }}
+          asset_content_type: application/pgp-signature
