@@ -24,6 +24,11 @@ jobs:
             target: armv7-unknown-linux-gnueabihf
             target_type: unix
             use_cross: true
+          - build: linux-armv7-musl
+            os: ubuntu-22.04
+            target: armv7-unknown-linux-musleabihf
+            target_type: unix
+            use_cross: true
           - build: linux-aarch64
             os: ubuntu-22.04
             target: aarch64-unknown-linux-musl
