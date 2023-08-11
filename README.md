@@ -11,7 +11,7 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 `psonoci --help`
 
 ```
-psonoci 0.3.0
+psonoci 0.4.0
 Bernd Kaiser
 Psono CI Client (https://github.com/meldron/psonoci)
 
@@ -24,8 +24,8 @@ FLAGS:
                                              plain http so there's no false sense of security (Psono secrets are still
                                              authenticated)
     -h, --help                               Prints help information
-        --use-native-tls                     Use native TLS implementation (for linux musl builds a vendored openssl
-                                             1.1.1j is used)
+        --use-native-tls                     Use native TLS implementation (for linux musl builds a vendored openssl is
+                                             used)
     -V, --version                            Prints version information
 
 OPTIONS:
@@ -36,9 +36,7 @@ OPTIONS:
         --config-packed <config_packed>
             psonci config as packed string [env: PSONO_CI_CONFIG_PACKED=]
 
-    -c, --config-path <config_path>
-            psonoci config path [env: PSONO_CI_CONFIG_PATH=psonoci.toml]
-
+    -c, --config-path <config_path>                                psonoci config path [env: PSONO_CI_CONFIG_PATH=]
         --der-root-certificate-path <der-root-certificate-path>
             Path to a DER encoded root certificate which should be added to the trust store [env:
             PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH=]
@@ -63,6 +61,7 @@ SUBCOMMANDS:
     license     Prints psonoci's license
     run         Spawns processes with environment vars from the api-keys secrets
     secret      Psono secret commands (/api-key-access/secret/)
+    totp        TOTP commands
 ```
 
 ### Required Options
@@ -77,6 +76,24 @@ These three options must be supplied (and be in front of the subcommand):
 
 There are several more options, please use the `help` commands for more info.
 
+## TOTP
+
+Since version `0.4` `psonoci` supports Psono's [Time-based one-time password (TOTP)](https://en.wikipedia.org/wiki/Time-based_one-time_password) secret type.
+
+Besides the standard functionality to read and write the secret info (`secret` subcommand), 
+`psonoci` also supports the creation and validation of tokens (both commands require a correctly configured system time).
+
+### get-token
+
+`psonoci topt get-token secret-id`: returns a currently valid TOTP token.
+
+### validate-token
+
+`psonoci topt validate-token secret-id token`: checks if a token is currently valid. Returns with exit code `0` if valid, otherwise displays an error and returns with exit code `1`.
+
+### get-url
+
+Also there is the option to export the token [otpauth url](https://github.com/google/google-authenticator/wiki/Key-Uri-Format) with `psonoci topt get-url secret-id`.
 ## Run With Protected Environments
 
 `psonoci` can now inject environment variables from your secrets right into you programs!
@@ -232,12 +249,9 @@ PSONO_CI_CONFIG_PACKED="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ys
 -   GPGKey
 -   Bookmark
 -   Environment Variables
-
-## CI/CD Usage Example
-
-TODO
-
-<!-- See [ci.sh](./examples/ci.sh) for an example script on how to use `psonoci` during your CI/CD process. -->
+-   Credit Card
+-   TOTP
+-   SSH Key
 
 ## Build
 
@@ -245,7 +259,7 @@ TODO
 
 If you have rust installed just run `cargo build --release`.
 
-The current version is tested with Rust `1.56.1`.
+The current version is tested with Rust `1.71.1`.
 
 ### cross
 
@@ -271,13 +285,13 @@ cross build --target aarch64-unknown-linux-musl --release
 -   armv7-unknown-linux-gnueabihf
 -   armv7-unknown-linux-musleabihf
 
-~~Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is able to link against `MUSL v1.2.2`.
+~~Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is able to link against `MUSL v1.2.2`.~~
 
 ~~Falling back to `MUSL <=1.1` is no longer an option because of [CVE-2020-28928](https://www.openwall.com/lists/musl/2020/11/19/1)~~
 
-Since version 0.4 `armv7-unknown-linux-musleabihf` is back!
+Since version `0.4` the `armv7-unknown-linux-musleabihf` target is back!
 
-Since version 0.4 `aarch64-apple-darwin` is also build and released.
+Since version `0.4` the `aarch64-apple-darwin` target is also build and released.
 
 ## Install
 
@@ -287,4 +301,4 @@ Download `psonoci` binary, make executable (`chmod +x psonoci`), and place into 
 
 [The MIT License](https://opensource.org/licenses/MIT)
 
-Copyright (c) 2020, 2021, 2022 Bernd Kaiser
+Copyright (c) 2020, 2021, 2022, 2023 Bernd Kaiser
