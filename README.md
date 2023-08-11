@@ -266,15 +266,18 @@ cross build --target aarch64-unknown-linux-musl --release
 -   x86_64-pc-windows-msvc
 -   x86_64-pc-windows-gnu
 -   x86_64-apple-darwin
+-   aarch64-apple-darwin
 -   aarch64-unknown-linux-musl
 -   armv7-unknown-linux-gnueabihf
--   ~~armv7-unknown-linux-musleabihf~~
+-   armv7-unknown-linux-musleabihf
 
-Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is able to link against `MUSL v1.2.2`.
+~~Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is able to link against `MUSL v1.2.2`.
 
-Falling back to `MUSL <=1.1` is no longer an option because of [CVE-2020-28928](https://www.openwall.com/lists/musl/2020/11/19/1)
+~~Falling back to `MUSL <=1.1` is no longer an option because of [CVE-2020-28928](https://www.openwall.com/lists/musl/2020/11/19/1)~~
 
-I am not sure if `aarch64-apple-darwin` is also supported (I think it should work). So if there are any Apple M1 users out there please let me know.
+Since version 0.4 `armv7-unknown-linux-musleabihf` is back!
+
+Since version 0.4 `aarch64-apple-darwin` is also build and released.
 
 ## Install
 
