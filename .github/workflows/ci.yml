@@ -1,104 +1,109 @@
 name: Build
 on:
-    pull_request:
-    push:
-        branches:
-            - master
+  pull_request:
+  push:
+    branches:
+      - master
 
 jobs:
-    build:
-        runs-on: ${{ matrix.os }}
-        env:
-            builder_image: meldron/psonoci_builder
-        strategy:
-            matrix:
-                build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
-                include:
-                    - build: linux
-                      os: ubuntu-18.04
-                      target: x86_64-unknown-linux-musl
-                      target_type: unix
-                      use_cross: true
-                    - build: linux-armv7
-                      os: ubuntu-18.04
-                      target: armv7-unknown-linux-gnueabihf
-                      target_type: unix
-                      use_cross: true
-                    - build: linux-aarch64
-                      os: ubuntu-18.04
-                      target: aarch64-unknown-linux-musl
-                      target_type: unix
-                      use_cross: true
-                    - build: macos
-                      os: macos-latest
-                      target: x86_64-apple-darwin
-                      target_type: unix
-                      use_cross: false
-                    - build: win-gnu
-                      os: ubuntu-18.04
-                      target: x86_64-pc-windows-gnu
-                      target_type: windows
-                      use_cross: true
-                    - build: win-msvc
-                      os: windows-2019
-                      target: x86_64-pc-windows-msvc
-                      target_type: windows
-                      use_cross: false
+  build:
+    runs-on: ${{ matrix.os }}
+    env:
+      builder_image: meldron/psonoci_builder
+    strategy:
+      matrix:
+        build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
+        include:
+          - build: linux
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            target_type: unix
+            use_cross: true
+          - build: linux-armv7
+            os: ubuntu-22.04
+            target: armv7-unknown-linux-gnueabihf
+            target_type: unix
+            use_cross: true
+          - build: linux-aarch64
+            os: ubuntu-22.04
+            target: aarch64-unknown-linux-musl
+            target_type: unix
+            use_cross: true
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
+            target_type: unix
+            use_cross: false
+          - build: macos-aarch64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            target_type: unix
+            use_cross: false
+          - build: win-gnu
+            os: ubuntu-22.04
+            target: x86_64-pc-windows-gnu
+            target_type: windows
+            use_cross: true
+          - build: win-msvc
+            os: windows-2019
+            target: x86_64-pc-windows-msvc
+            target_type: windows
+            use_cross: false
 
-        steps:
-            - name: Get the version
-              id: get_version
-              shell: bash
-              run: echo "SHA8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_ENV
+    steps:
+      - name: Get the version
+        id: get_version
+        shell: bash
+        run: echo "SHA8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_ENV
 
-            - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-            - uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: stable
-                  target: ${{ matrix.target }}
-                  override: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
 
-            - name: Pull docker image used by cross
-              if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
-              run: docker pull $builder_image:${{ matrix.target }}
+      - name: Pull docker image used by cross
+        if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
+        run: docker pull $builder_image:${{ matrix.target }}
 
-            # the base image for armv7-unknown-linux-gnueabihf is broken (ca certs invalid), use a prebuilt image for now
-            # - name: Build docker image used by cross
-            #   if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
-            #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
+      # the base image for armv7-unknown-linux-gnueabihf is broken (ca certs invalid), use a prebuilt image for now
+      # - name: Build docker image used by cross
+      #   if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
+      #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
-            - name: cargo fmt
-              uses: actions-rs/cargo@v1
-              with:
-                  use-cross: false
-                  command: fmt
-                  args: --all -- --check
+      - name: cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: false
+          command: fmt
+          args: --all -- --check
 
-            # - name: cargo test
-            #   uses: actions-rs/cargo@v1
-            #   with:
-            #       use-cross: ${{ matrix.use_cross }}
-            #       command: test
-            #       args: --release --target ${{ matrix.target }}
+      # - name: cargo test
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #       use-cross: ${{ matrix.use_cross }}
+      #       command: test
+      #       args: --release --target ${{ matrix.target }}
 
-            - name: cargo build
-              uses: actions-rs/cargo@v1
-              with:
-                  use-cross: ${{ matrix.use_cross }}
-                  command: build
-                  args: --release --target ${{ matrix.target }}
+      - name: cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: ${{ matrix.use_cross }}
+          command: build
+          args: --release --target ${{ matrix.target }}
 
-            - name: upload unix artifact
-              uses: actions/upload-artifact@v2
-              if: matrix.target != 'windows'
-              with:
-                  name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
-                  path: target/${{ matrix.target }}/release/psonoci
+      - name: upload unix artifact
+        uses: actions/upload-artifact@v2
+        if: matrix.target != 'windows'
+        with:
+          name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/psonoci
 
-            - name: upload windows artifact
-              uses: actions/upload-artifact@v2
-              if: matrix.target_type == 'windows'
-              with:
-                  name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
-                  path: target/${{ matrix.target }}/release/psonoci.exe
+      - name: upload windows artifact
+        uses: actions/upload-artifact@v2
+        if: matrix.target_type == 'windows'
+        with:
+          name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/psonoci.exe
