@@ -1,36 +1,7 @@
 # cross dockerfile by Jorge Aparicio (https://github.com/rust-embedded/cross/)
 # see build_files/cross_files/LICENSE for license information
+
 FROM rustembedded/cross:aarch64-unknown-linux-musl
-
-# COPY cross_files/common.sh cross_files/lib.sh /
-# RUN /common.sh
-
-# COPY cross_files/cmake.sh /
-# RUN /cmake.sh
-
-# COPY cross_files/xargo.sh /
-# RUN /xargo.sh
-
-# COPY cross_files/qemu.sh /
-# RUN /qemu.sh aarch64
-
-# COPY cross_files/musl.sh /
-# RUN /musl.sh TARGET=aarch64-linux-musl
-
-# # Allows qemu run dynamic linked binaries
-# RUN ln -sf \
-#     /usr/local/aarch64-linux-musl/lib/libc.so \
-#     /usr/local/aarch64-linux-musl/lib/ld-musl-aarch64.so.1
-# ENV QEMU_LD_PREFIX=/usr/local/aarch64-linux-musl
-
-# COPY cross_files/aarch64-linux-musl-gcc.sh /usr/bin/
-# RUN chmod a+rx /usr/bin/aarch64-linux-musl-gcc.sh
-
-# ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc.sh \
-#     CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUNNER=qemu-aarch64 \
-#     CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc \
-#     CXX_aarch64_unknown_linux_musl=aarch64-linux-musl-g++ \
-#     RUST_TEST_THREADS=1
 
 RUN apt-get update && apt-get install -y wget curl
 RUN apt-get install --reinstall curl ca-certificates && update-ca-certificates
