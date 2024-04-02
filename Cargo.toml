@@ -2,7 +2,7 @@
 authors = ["Bernd Kaiser <bk@dfjk.eu>"]
 edition = "2021"
 name = "psonoci"
-version = "0.4.0"
+version = "0.5.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,26 +10,32 @@ version = "0.4.0"
 anyhow = "1.0"
 bs58 = "0.5.0"
 chrono = { version = "0.4.26", features = ["serde"] }
-clap = "2.33.3"
+clap = "2"
 const_format = "0.2"
 hex = "0.4.3"
 lazy_static = "1.4.0"
 rand = "0.8"
 rayon = "1.7"
-reqwest = { version = "0.11", default-features = false, features = [
-    "blocking",
-    "native-tls",
-    "rustls-tls",
-    "json",
-] }
 rmp = "0.8"
 rmp-serde = "1.1"
+reqwest = { version = "0.12", features = ["blocking", "native-tls-vendored", "rustls-tls", "json"] }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0"
 structopt = "0.3.26"
-toml = "0.7"
+toml = "0.8"
 totp-rs = { version = "5.1.0", features = ["otpauth"] }
 unicode-segmentation = "1.10"
 url = { version = "2.4", features = ["serde"] }
 uuid = { version = "1.4", features = ["serde", "v4"] }
 xsalsa20poly1305 = "0.9.1"
+
+#[target.'cfg(all(not(target_env = "musl"), not(target = "armv7-unknown-linux-gnueabihf")))'.dependencies.reqwest]
+#version = "0.12"
+#default-features = false
+#features = ["blocking", "native-tls", "rustls-tls", "json"]
+#
+## For MUSL targets and armv7-unknown-linux-gnueabihf
+#[target.'cfg(any(target_env = "musl", target = "armv7-unknown-linux-gnueabihf"))'.dependencies.reqwest]
+#version = "0.12"
+#default-features = false
+#features = ["blocking", "native-tls-vendored", "rustls-tls", "json"]
