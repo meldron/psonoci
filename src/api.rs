@@ -44,6 +44,7 @@ pub enum SecretType {
     SSHKey,
     TOTP,
     CreditCard,
+    ElsterCertificate,
 }
 
 impl SecretType {
@@ -58,6 +59,7 @@ impl SecretType {
             SecretType::SSHKey => "ssh_key",
             SecretType::TOTP => "totp",
             SecretType::CreditCard => "credit_card",
+            SecretType::ElsterCertificate => "elster_certificate",
         }
     }
 }
@@ -209,9 +211,9 @@ impl EncryptedResponse {
         let encrypted_raw = open_secret_box(&self.data, &self.data_nonce, &encryption_key)
             .context("decrypting secret failed")?;
 
-        // let raw_string = String::from_utf8_lossy(&encrypted_raw);
+        let raw_string = String::from_utf8_lossy(&encrypted_raw);
 
-        // println!("{}", raw_string);
+        println!("{}", raw_string);
 
         let input: I = serde_json::from_slice(&encrypted_raw)
             .context("parsing generic response from json failed")?;
@@ -444,6 +446,13 @@ pub struct GenericSecret {
     pub credit_card_valid_through: Option<String>,
     pub credit_card_pin: Option<String>,
     pub credit_card_notes: Option<String>,
+
+    // elster certificate
+    pub elster_certificate_title: Option<String>,
+    pub elster_certificate_file_content: Option<String>,
+    pub elster_certificate_password: Option<String>,
+    pub elster_certificate_retrieval_code: Option<String>,
+    pub elster_certificate_notes: Option<String>,
 }
 
 impl GenericSecret {
@@ -490,6 +499,11 @@ impl GenericSecret {
             credit_card_valid_through: None,
             credit_card_pin: None,
             credit_card_notes: None,
+            elster_certificate_title: None,
+            elster_certificate_file_content: None,
+            elster_certificate_password: None,
+            elster_certificate_retrieval_code: None,
+            elster_certificate_notes: None,
         }
     }
 }
@@ -700,6 +714,7 @@ impl Secret {
                 gs.credit_card_valid_through = cc.valid_through.clone();
                 gs.credit_card_pin = cc.pin.clone();
             }
+            SecretType::ElsterCertificate => todo!(),
         }
 
         gs
