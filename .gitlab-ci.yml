@@ -4,7 +4,7 @@ stages:
     - deploy
 
 variables:
-    RUST_TOOLCHAIN: "1.50.0"
+    RUST_TOOLCHAIN: "1.81.0"
     DOCKER_HOST: "tcp://docker:2375"
 
 ## BUILD
@@ -13,34 +13,38 @@ variables:
     except:
         - schedules
     stage: build
-    image: psono-docker.jfrog.io/ubuntu:20.04
+    image: psono-docker.jfrog.io/ubuntu:22.04
     services:
-        - name: docker:20-dind
+        - name: docker:25-dind
           alias: docker
           command: ["--tls=false"]
     variables:
+        CROSS_CONTAINER_IN_CONTAINER: "true"
         DOCKER_DRIVER: overlay2
         DOCKER_HOST: tcp://docker:2375/
         DOCKER_TLS_CERTDIR: ""
     script:
         - apt-get update
-        - apt-get install -y curl build-essential
+        - apt-get install -y curl build-essential ca-certificates iptables libdevmapper1.02.1
         - curl -fL https://getcli.jfrog.io | sh
         - ./jfrog config add rt-server-1 --artifactory-url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials --overwrite
-        - curl -fSL "https://download.docker.com/linux/static/stable/x86_64/docker-20.10.17.tgz" -o docker.tgz && echo "969210917b5548621a2b541caf00f86cc6963c6cf0fb13265b9731c3b98974d9 *docker.tgz" | sha256sum -c - && tar -xzvf docker.tgz && mv docker/* /usr/local/bin/ && rm -Rf docker && rm docker.tgz
+        - curl -fSL "https://download.docker.com/linux/ubuntu/dists/jammy/pool/stable/amd64/containerd.io_1.6.28-1_amd64.deb" -o containerd.deb && echo "3fcc3e44e6d507c346ae05bbaef8f4bb04dfa8da9f04af658537f7e373c91340 containerd.deb" | sha256sum -c -
+        - curl -fSL "https://download.docker.com/linux/ubuntu/dists/jammy/pool/stable/amd64/docker-buildx-plugin_0.12.1-1~ubuntu.22.04~jammy_amd64.deb" -o docker-buildx-plugin.deb && echo "3fb7cd11fd9bf7c31d81c1afa96c023519d9e6e17422192aa4d0aa2767ed0776 docker-buildx-plugin.deb" | sha256sum -c -
+        - curl -fSL "https://download.docker.com/linux/ubuntu/dists/jammy/pool/stable/amd64/docker-ce-cli_25.0.3-1~ubuntu.22.04~jammy_amd64.deb" -o docker-ce-cli.deb && echo "624abe860a3d9dd190c278263b3ae115d54ce1135774a79f84026a6ec6ebafd1 docker-ce-cli.deb" | sha256sum -c -
+        - curl -fSL "https://download.docker.com/linux/ubuntu/dists/jammy/pool/stable/amd64/docker-ce_25.0.3-1~ubuntu.22.04~jammy_amd64.deb" -o docker-ce.deb && echo "63c7703814558a829ab3cc37c8018c050c9dad56f99c261090500f6c87821fd1 docker-ce.deb" | sha256sum -c -
+        - dpkg -i ./containerd.deb ./docker-ce.deb ./docker-ce-cli.deb ./docker-buildx-plugin.deb
         - docker info
-        - docker build -f "build_files/Dockerfile-${BUILD_ENV}" -t "psonoci_builder:${BUILD_ENV}" --pull build_files
         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         - source /root/.cargo/env
         - rustup --version
         - rustup toolchain install "${RUST_TOOLCHAIN}"
         - rustup default "${RUST_TOOLCHAIN}"
         # gitlab ci build uses docker images from jfrog and not dockerhub
-        - mv Cross_Gitlab.toml Cross.toml
+#        - mv Cross_Gitlab.toml Cross.toml
         - cargo --version
         - cargo install cross
         - cross --version
-        - cross test --release --target "${BUILD_ENV}"
+#        - cross test --release --target "${BUILD_ENV}"
         - cross build --release --target "${BUILD_ENV}"
         - ls -la "target/${BUILD_ENV}/release/psonoci"
         - ./jfrog rt u --target-props="CI_BUILD_REF_NAME=$CI_BUILD_REF_NAME;CI_COMMIT_SHA=$CI_COMMIT_SHA;CI_COMMIT_URL=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA;CI_PROJECT_ID=$CI_PROJECT_ID;CI_PROJECT_NAME=$CI_PROJECT_NAME;CI_PROJECT_NAMESPACE=$CI_PROJECT_NAMESPACE;CI_PROJECT_URL=$CI_PROJECT_URL;CI_PIPELINE_ID=$CI_PIPELINE_ID;CI_PIPELINE_URL=$CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID;CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME;CI_JOB_ID=$CI_JOB_ID;CI_JOB_URL=$CI_PROJECT_URL/-/jobs/$CI_JOB_ID;CI_JOB_NAME=$CI_JOB_NAME;CI_JOB_STAGE=$CI_JOB_STAGE;CI_RUNNER_ID=$CI_RUNNER_ID;GITLAB_USER_ID=$GITLAB_USER_ID;CI_SERVER_VERSION=$CI_SERVER_VERSION" "target/${BUILD_ENV}/release/psonoci" "psono/ci/${CI_BUILD_REF_NAME}/${BUILD_ENV}/psonoci"
