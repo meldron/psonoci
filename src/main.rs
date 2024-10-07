@@ -94,13 +94,13 @@ fn run_config_command(
         }
         ConfigCommand::Save { overwrite, path } => {
             config
-                .save(&path, ConfigSaveFormat::TOML, overwrite)
+                .save(&path, ConfigSaveFormat::Toml, overwrite)
                 .context("saving config failed")?;
         }
         ConfigCommand::Show => {
             eprintln!("# The config is loaded from {}\n", config_source);
             let c = config
-                .to_string(ConfigSaveFormat::TOML)
+                .to_string(ConfigSaveFormat::Toml)
                 .context("serializing config to toml failed")?;
             println!("{}", c);
         }
@@ -112,7 +112,7 @@ fn run_config_command(
 fn main() -> Result<()> {
     let opt: Opt = Opt::from_args();
 
-    let (config_source, config) = opt.raw_config.as_config()?;
+    let (config_source, config) = opt.raw_config.into_config()?;
 
     match opt.command {
         Command::Secret(secret_command) => run_secret_command(config, secret_command)?,

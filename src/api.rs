@@ -42,7 +42,8 @@ pub enum SecretType {
     Bookmark,
     EnvVars,
     SSHKey,
-    TOTP,
+    #[serde(rename = "TOTP")]
+    Totp,
     CreditCard,
     ElsterCertificate,
 }
@@ -57,7 +58,7 @@ impl SecretType {
             SecretType::Bookmark => "bookmark",
             SecretType::EnvVars => "env_vars",
             SecretType::SSHKey => "ssh_key",
-            SecretType::TOTP => "totp",
+            SecretType::Totp => "totp",
             SecretType::CreditCard => "credit_card",
             SecretType::ElsterCertificate => "elster_certificate",
         }
@@ -151,8 +152,8 @@ pub fn parse_url(src: &str) -> Result<Url> {
 }
 
 enum CertificateEncoding {
-    DER,
-    PEM,
+    Der,
+    Pem,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -208,7 +209,7 @@ impl EncryptedResponse {
         let encryption_key = std::str::from_utf8(&encryption_key_raw)
             .context("decrypted secret key is not valid utf-8")?;
 
-        let encrypted_raw = open_secret_box(&self.data, &self.data_nonce, &encryption_key)
+        let encrypted_raw = open_secret_box(&self.data, &self.data_nonce, encryption_key)
             .context("decrypting secret failed")?;
 
         let raw_string = String::from_utf8_lossy(&encrypted_raw);
@@ -232,8 +233,8 @@ fn load_root_certificate(encoding: CertificateEncoding, path: &PathBuf) -> Resul
         .context(CERTIFICATE_ERROR_READ)?;
 
     let cert_result = match encoding {
-        CertificateEncoding::DER => Certificate::from_der(&buf),
-        CertificateEncoding::PEM => Certificate::from_pem(&buf),
+        CertificateEncoding::Der => Certificate::from_der(&buf),
+        CertificateEncoding::Pem => Certificate::from_pem(&buf),
     };
 
     let cert = cert_result.context(CERTIFICATE_ERROR_DECODE)?;
@@ -249,7 +250,7 @@ pub fn make_request(
 ) -> Result<Vec<u8>> {
     let redirect_policy: Policy = match http_options.max_redirects {
         0 => Policy::none(),
-        _ => Policy::limited(http_options.max_redirects as usize),
+        _ => Policy::limited(http_options.max_redirects),
     };
 
     let mut headers = HeaderMap::new();
@@ -261,14 +262,14 @@ pub fn make_request(
 
     if http_options.der_root_certificate_path.is_some() {
         let cert_der_path = http_options.der_root_certificate_path.as_ref().unwrap();
-        let cert_der = load_root_certificate(CertificateEncoding::DER, cert_der_path)
+        let cert_der = load_root_certificate(CertificateEncoding::Der, cert_der_path)
             .context("adding DER root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_der);
     }
 
     if http_options.pem_root_certificate_path.is_some() {
         let cert_pem_path = http_options.pem_root_certificate_path.as_ref().unwrap();
-        let cert_pem = load_root_certificate(CertificateEncoding::PEM, cert_pem_path)
+        let cert_pem = load_root_certificate(CertificateEncoding::Pem, cert_pem_path)
             .context("adding PEM root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_pem);
     }
@@ -317,7 +318,7 @@ pub fn make_request(
 fn build_endpoint_url(server_url: &Url, endpoint: &Endpoint) -> Result<Url> {
     let mut endpoint_url = server_url.clone();
 
-    endpoint_url.set_path(&server_url.path().trim_end_matches('/'));
+    endpoint_url.set_path(server_url.path().trim_end_matches('/'));
 
     for segment in endpoint.as_str().split("/") {
         endpoint_url
@@ -579,7 +580,7 @@ pub struct SSHKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TOTP {
+pub struct Totp {
     pub period: Option<u32>,
     pub algorithm: Option<String>,
     pub digits: Option<u32>,
@@ -620,14 +621,14 @@ pub struct Secret {
 
     pub env_vars: Option<Vec<EnvironmentVariable>>,
     pub ssh_key: Option<SSHKey>,
-    pub totp: Option<TOTP>,
+    pub totp: Option<Totp>,
     pub credit_card: Option<CreditCard>,
 }
 
 impl Secret {
     pub fn new(secret_type: SecretType) -> Secret {
-        return Secret {
-            secret_type: secret_type,
+        Secret {
+            secret_type,
             gpg_key_email: None,
             gpg_key_name: None,
             gpg_key_private: None,
@@ -642,7 +643,7 @@ impl Secret {
             ssh_key: None,
             totp: None,
             credit_card: None,
-        };
+        }
     }
 
     pub fn as_generic_secret(&self) -> GenericSecret {
@@ -693,7 +694,7 @@ impl Secret {
                 gs.ssh_own_key_private = ssh_key.key_private.clone();
                 gs.ssh_own_key_public = ssh_key.key_public.clone();
             }
-            SecretType::TOTP => {
+            SecretType::Totp => {
                 let totp = self.totp.as_ref().expect("totp must be set");
 
                 gs.totp_notes = self.notes.clone();
@@ -755,8 +756,7 @@ impl Secret {
             SecretValueType::secret_type => Some(self.secret_type.as_str().to_owned()),
             SecretValueType::env_vars => self
                 .env_vars
-                .map(|v| serde_json::to_string(&v).ok())
-                .flatten(),
+                .and_then(|v| serde_json::to_string(&v).ok()),
             SecretValueType::ssh_key_public => self.ssh_key.and_then(|k| k.key_public),
             SecretValueType::ssh_key_private => self.ssh_key.and_then(|k| k.key_private),
 
@@ -836,7 +836,7 @@ impl Secret {
                 }
             }
             // TOTP
-            (SecretType::TOTP, SecretValueType::totp_period) => {
+            (SecretType::Totp, SecretValueType::totp_period) => {
                 if let Some(totp) = &mut self.totp {
                     match value.parse() {
                         Ok(parsed) => totp.period = Some(parsed),
@@ -850,7 +850,7 @@ impl Secret {
                     return Err(anyhow!("TOTP is None when trying to set totp_period"));
                 }
             }
-            (SecretType::TOTP, SecretValueType::totp_algorithm) => {
+            (SecretType::Totp, SecretValueType::totp_algorithm) => {
                 if let Some(totp) = &mut self.totp {
                     if !is_valid_totp_algorithm(&value) {
                         bail!("Invalid algorithm. Only SHA1, SHA256, or SHA512 are allowed");
@@ -861,7 +861,7 @@ impl Secret {
                     return Err(anyhow!("TOTP is None when trying to set totp_algorithm"));
                 }
             }
-            (SecretType::TOTP, SecretValueType::totp_digits) => {
+            (SecretType::Totp, SecretValueType::totp_digits) => {
                 if let Some(totp) = &mut self.totp {
                     match value.parse::<u32>() {
                         Ok(parsed) => {
@@ -883,7 +883,7 @@ impl Secret {
                     return Err(anyhow!("TOTP is None when trying to set totp_digits"));
                 }
             }
-            (SecretType::TOTP, SecretValueType::totp_code) => {
+            (SecretType::Totp, SecretValueType::totp_code) => {
                 if let Some(totp) = &mut self.totp {
                     totp.code = Some(value);
                 } else {
@@ -1062,9 +1062,9 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.totp_code.is_some()
             || s.totp_notes.is_some()
         {
-            let mut secret = Secret::new(SecretType::TOTP);
+            let mut secret = Secret::new(SecretType::Totp);
             secret.title = s.totp_title;
-            secret.totp = Some(TOTP {
+            secret.totp = Some(Totp {
                 period: s.totp_period,
                 algorithm: s.totp_algorithm,
                 digits: s.totp_digits,
@@ -1218,7 +1218,7 @@ impl ApiKeyInfo {
         let api_key_secrets: Vec<Uuid> = r
             .api_key_secrets
             .iter()
-            .map(|s| s.secret_id.clone())
+            .map(|s| s.secret_id)
             .collect();
 
         let api_key_secrets_meta_data: HashMap<Uuid, ApiKeySecretMetaData> = r
@@ -1276,7 +1276,7 @@ pub fn api_key_info(config: &Config) -> Result<ApiKeyInfo> {
 }
 
 pub fn api_key_get_secrets(config: &Config) -> Result<HashMap<Uuid, Secret>> {
-    let api_key_info = api_key_info(&config).context("inspect api key call failed")?;
+    let api_key_info = api_key_info(config).context("inspect api key call failed")?;
 
     api_key_info
         .api_key_secrets
@@ -1284,7 +1284,7 @@ pub fn api_key_get_secrets(config: &Config) -> Result<HashMap<Uuid, Secret>> {
         .map(|id| {
             Ok((
                 id,
-                get_secret(&id, &config)
+                get_secret(&id, config)
                     .context(format!("get secret for {} failed", &id))?
                     .0,
             ))
@@ -1450,7 +1450,7 @@ mod tests {
     fn load_root_certificate__pem_success() {
         let cert_path = get_bad_ssl_cert_path();
 
-        let result = load_root_certificate(CertificateEncoding::PEM, &cert_path);
+        let result = load_root_certificate(CertificateEncoding::Pem, &cert_path);
 
         assert!(result.is_ok())
     }
@@ -1460,7 +1460,7 @@ mod tests {
     fn load_root_certificate__request_der_supply_pem() {
         let cert_path = get_bad_ssl_cert_path();
 
-        let result = load_root_certificate(CertificateEncoding::DER, &cert_path);
+        let result = load_root_certificate(CertificateEncoding::Der, &cert_path);
 
         assert!(result.is_err());
         assert_eq!(

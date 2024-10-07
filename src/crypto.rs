@@ -17,7 +17,7 @@ pub type Nonce = GenericArray<u8, U24>;
 
 impl FromHex for Nonce {
     fn from_hex(bs: &str) -> Result<Nonce> {
-        let raw = decode_hex_with_length_check(&bs, NONCE_LENGTH)?;
+        let raw = decode_hex_with_length_check(bs, NONCE_LENGTH)?;
 
         let nonce = GenericArray::clone_from_slice(&raw);
 
@@ -31,12 +31,12 @@ impl FromHex for XSalsa20Poly1305 {
 
         let key = GenericArray::from_slice(&raw);
 
-        Ok(XSalsa20Poly1305::new(&*key))
+        Ok(XSalsa20Poly1305::new(key))
     }
 }
 
 fn decode_hex_with_length_check(s: &str, length: usize) -> Result<Vec<u8>> {
-    let raw = decode(&s)?;
+    let raw = decode(s)?;
 
     if raw.len() != length {
         return Err(anyhow!(
@@ -70,8 +70,8 @@ pub fn open_secret_box(
     nonce_hex: &str,
     key_hex: &str,
 ) -> Result<Vec<u8>> {
-    let salsa = XSalsa20Poly1305::from_hex(&key_hex).context("key hex decode failed")?;
-    let nonce = Nonce::from_hex(&nonce_hex).context("nonce hex decode failed")?;
+    let salsa = XSalsa20Poly1305::from_hex(key_hex).context("key hex decode failed")?;
+    let nonce = Nonce::from_hex(nonce_hex).context("nonce hex decode failed")?;
     let cipher_message = decode(cipher_message_hex).context("cipher_message hex decode failed")?;
 
     let text = salsa
@@ -91,9 +91,9 @@ pub fn create_nonce_hex() -> String {
 }
 
 pub fn seal_secret_box_hex(plaintext: &[u8], nonce_hex: &str, key_hex: &str) -> Result<String> {
-    let salsa = XSalsa20Poly1305::from_hex(&key_hex).context("key hex decode failed")?;
+    let salsa = XSalsa20Poly1305::from_hex(key_hex).context("key hex decode failed")?;
 
-    let nonce = Nonce::from_hex(&nonce_hex).context("nonce hex decode failed")?;
+    let nonce = Nonce::from_hex(nonce_hex).context("nonce hex decode failed")?;
 
     let cipher_message = salsa
         .encrypt(&nonce, plaintext)

@@ -61,9 +61,9 @@ pub enum ConfigSource {
 impl Display for ConfigSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            ConfigSource::Args => format!("command line args"),
+            ConfigSource::Args => "command line args".to_string(),
             ConfigSource::File(fp) => format!("--config-path '{}'", fp),
-            ConfigSource::Pack => format!("--config-packed"),
+            ConfigSource::Pack => "--config-packed".to_string(),
         };
 
         write!(f, "{}", s)
@@ -71,7 +71,7 @@ impl Display for ConfigSource {
 }
 
 impl RawConfig {
-    pub fn as_config(self) -> Result<(ConfigSource, Config)> {
+    pub fn into_config(self) -> Result<(ConfigSource, Config)> {
         let psono_settings: PsonoSettings;
 
         if let Some(config_packed) = self.config_packed {
@@ -86,7 +86,7 @@ impl RawConfig {
             let path_str = config_path.as_path().display().to_string();
             return Ok((
                 ConfigSource::File(path_str),
-                ConfigLoader::load(&config_path, crate::config::ConfigSaveFormat::TOML)
+                ConfigLoader::load(&config_path, crate::config::ConfigSaveFormat::Toml)
                     .context("loading config failed")?,
             ));
         } else {
