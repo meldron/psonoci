@@ -46,7 +46,7 @@ pub fn serialize_message_pack<I: Serialize>(input: I) -> Result<Vec<u8>> {
 impl ConfigLoader {
     pub fn from_str(s: &str, format: ConfigSaveFormat) -> Result<Config> {
         let cl: ConfigLoader = match format {
-            ConfigSaveFormat::TOML => toml::from_str(s)?,
+            ConfigSaveFormat::Toml => toml::from_str(s)?,
             // ConfigSaveFormat::JSON => {
             //     todo!()
             // }
@@ -83,7 +83,7 @@ pub struct ConfigV1 {
 pub type Config = ConfigV1;
 
 pub enum ConfigSaveFormat {
-    TOML,
+    Toml,
     // JSON,
     MessagePackBase58,
 }
@@ -93,7 +93,7 @@ impl ConfigV1 {
         let config_loader = ConfigLoader::V1(self.clone());
 
         let serialized = match format {
-            ConfigSaveFormat::TOML => {
+            ConfigSaveFormat::Toml => {
                 toml::to_string(&config_loader).context("serializing to toml failed")?
             }
             // ConfigSaveFormat::JSON => {

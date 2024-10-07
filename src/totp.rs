@@ -3,7 +3,7 @@ use totp_rs::{Algorithm, Secret as TotpSecret, TOTP};
 use uuid::Uuid;
 
 use crate::{
-    api::{get_secret, Secret as PsonoSecret, SecretType, TOTP as TOTPSecret},
+    api::{get_secret, Secret as PsonoSecret, SecretType, Totp as TOTPSecret},
     config::Config,
     opt::TotpCommand,
 };
@@ -18,10 +18,7 @@ fn parse_algorithm(s: &str) -> Result<Algorithm> {
 }
 
 pub fn is_valid_totp_algorithm(s: &str) -> bool {
-    match s.to_uppercase().as_str() {
-        "SHA1" | "SHA256" | "SHA512" => true,
-        _ => false,
-    }
+    matches!(s.to_uppercase().as_str(), "SHA1" | "SHA256" | "SHA512")
 }
 
 pub fn is_valid_totp_digit(d: u32) -> bool {
@@ -38,7 +35,7 @@ fn create_totp(
         .as_ref()
         .ok_or_else(|| anyhow!("algorithm is not set"))?;
 
-    let algorithm = parse_algorithm(&algorithm_raw)?;
+    let algorithm = parse_algorithm(algorithm_raw)?;
 
     let digits = totp_secret
         .digits
@@ -70,10 +67,10 @@ fn create_totp(
 }
 
 fn get_token_secret(secret_id: &Uuid, config: &Config) -> Result<(PsonoSecret, String)> {
-    let (secret, secret_key_hex) = get_secret(&secret_id, &config)
+    let (secret, secret_key_hex) = get_secret(secret_id, config)
         .context("get_token_secret loading secret from store failed")?;
 
-    if secret.secret_type != SecretType::TOTP {
+    if secret.secret_type != SecretType::Totp {
         bail!("The specified secret is not an TOTP secret");
     }
 
@@ -86,7 +83,7 @@ fn get_totp(
     account_name: Option<String>,
     config: &Config,
 ) -> Result<TOTP> {
-    let (secret, _) = get_token_secret(&secret_id, &config)?;
+    let (secret, _) = get_token_secret(secret_id, config)?;
     let totp_secret = secret.totp.ok_or_else(|| anyhow!("totp data not set"))?;
 
     create_totp(&totp_secret, issuer, account_name)

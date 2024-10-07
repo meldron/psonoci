@@ -60,7 +60,7 @@ pub fn get_or_create_env_value_by_name(
 }
 
 fn get_env_var_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, String)> {
-    let (secret, secret_key_hex) = get_secret(&secret_id, &config)
+    let (secret, secret_key_hex) = get_secret(secret_id, config)
         .context("get_or_create_env_value_by_name loading secret from store failed")?;
 
     if secret.secret_type != SecretType::EnvVars {

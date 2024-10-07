@@ -28,7 +28,7 @@ fn create_password_with_allowed_chars(length: usize, allowed_chars: &str) -> Str
 
     iter::repeat(())
         .map(|()| rng.sample(uniform_between))
-        .map(|nth| graphemes.iter().nth(nth).unwrap().to_owned())
+        .map(|nth| graphemes.get(nth).unwrap().to_owned())
         .take(length)
         .collect()
 }

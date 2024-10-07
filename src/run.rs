@@ -13,7 +13,7 @@ use crate::opt::RunCommand;
 type EnvironmentVars = HashMap<String, String>;
 type Duplicates = HashMap<String, usize>;
 
-fn create_env_vars_map<'a>(
+fn create_env_vars_map(
     secrets: HashMap<Uuid, Secret>,
     filter: Option<Vec<Uuid>>,
 ) -> (HashMap<String, String>, Duplicates) {
@@ -28,9 +28,7 @@ fn create_env_vars_map<'a>(
         None => secrets,
     };
 
-    filtered
-        .into_iter()
-        .map(|(_, s)| s)
+    filtered.into_values()
         // .filter(|s| s.secret_type == SecretType::EnvVars)
         .for_each(|s| {
             if let Some(evs) = s.env_vars {
@@ -66,8 +64,8 @@ where
         command.env_clear();
     }
 
-    if envs.len() > 0 {
-        duplicates.into_iter().for_each(|(name, dup)| {
+    if !envs.is_empty() {
+        duplicates.iter().for_each(|(name, dup)| {
             eprintln!(
                 "psonoci warning: duplicate env var with name '{}'; overwritten '{}' times",
                 name, dup
