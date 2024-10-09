@@ -217,12 +217,12 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::str::FromStr;
 
     use super::*;
 
-    fn debug_config_v1() -> ConfigV1 {
+    pub fn debug_config_v1() -> ConfigV1 {
         ConfigV1 {
             psono_settings: PsonoSettings {
                 api_key_id: Uuid::from_str("0e1ed23d-cac8-4a04-868b-275bf43b81cd")
