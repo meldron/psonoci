@@ -149,5 +149,5 @@ pub fn run_totp_command(totp_command: TotpCommand, config: Config) -> Result<()>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 }
