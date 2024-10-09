@@ -28,7 +28,8 @@ fn create_env_vars_map(
         None => secrets,
     };
 
-    filtered.into_values()
+    filtered
+        .into_values()
         // .filter(|s| s.secret_type == SecretType::EnvVars)
         .for_each(|s| {
             if let Some(evs) = s.env_vars {
@@ -117,10 +118,7 @@ fn exit_status_code(exit_status: &ExitStatus) -> i32 {
 
 #[cfg(not(target_family = "unix"))]
 fn exit_status_code(exit_status: &ExitStatus) -> i32 {
-    match exit_status.code() {
-        Some(code) => code,
-        None => 1,
-    }
+    exit_status.code().unwrap_or_else(|| 1)
 }
 
 pub fn run_run_command(config: Config, rc: RunCommand) -> Result<()> {
