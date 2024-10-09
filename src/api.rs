@@ -212,9 +212,8 @@ impl EncryptedResponse {
         let encrypted_raw = open_secret_box(&self.data, &self.data_nonce, encryption_key)
             .context("decrypting secret failed")?;
 
-        let raw_string = String::from_utf8_lossy(&encrypted_raw);
-
-        println!("{}", raw_string);
+        // let raw_string = String::from_utf8_lossy(&encrypted_raw);
+        // println!("{}", raw_string);
 
         let input: I = serde_json::from_slice(&encrypted_raw)
             .context("parsing generic response from json failed")?;
@@ -575,8 +574,8 @@ impl GenericSecret {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SSHKey {
-    key_private: Option<String>,
-    key_public: Option<String>,
+    pub key_private: Option<String>,
+    pub key_public: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -589,19 +588,20 @@ pub struct Totp {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreditCard {
-    number: Option<String>,
-    cvc: Option<String>,
-    name: Option<String>,
-    valid_through: Option<String>,
-    pin: Option<String>,
+    pub number: Option<String>,
+    pub cvc: Option<String>,
+    pub name: Option<String>,
+    pub valid_through: Option<String>,
+    pub pin: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GPGKey {
-    key_private: Option<String>,
-    key_public: Option<String>,
-    name: Option<String>,
-    email: Option<String>,
+    pub key_private: Option<String>,
+    pub key_public: Option<String>,
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -734,6 +734,8 @@ impl Secret {
             "gpg_key_private": &self.gpg_key_private,
             "gpg_key_public": &self.gpg_key_public,
             "env_vars": &self.env_vars,
+            "totp": &self.totp,
+            "credit_card": &self.credit_card,
             "type": &self.secret_type.as_str(),
         });
 
@@ -754,9 +756,7 @@ impl Secret {
             SecretValueType::gpg_key_private => self.gpg_key_private,
             SecretValueType::gpg_key_public => self.gpg_key_public,
             SecretValueType::secret_type => Some(self.secret_type.as_str().to_owned()),
-            SecretValueType::env_vars => self
-                .env_vars
-                .and_then(|v| serde_json::to_string(&v).ok()),
+            SecretValueType::env_vars => self.env_vars.and_then(|v| serde_json::to_string(&v).ok()),
             SecretValueType::ssh_key_public => self.ssh_key.and_then(|k| k.key_public),
             SecretValueType::ssh_key_private => self.ssh_key.and_then(|k| k.key_private),
 
@@ -799,7 +799,7 @@ impl Secret {
             (SecretType::Note, SecretValueType::title) => self.title = Some(value),
             // GPGKey
             (SecretType::GPGKey, SecretValueType::title) => self.title = Some(value),
-
+            (SecretType::GPGKey, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::GPGKey, SecretValueType::gpg_key_name) => self.gpg_key_name = Some(value),
             (SecretType::GPGKey, SecretValueType::gpg_key_private) => {
                 self.gpg_key_private = Some(value)
@@ -821,6 +821,8 @@ impl Secret {
                 self.env_vars = Some(env_vars);
             }
             // SSHKey
+            (SecretType::SSHKey, SecretValueType::title) => self.title = Some(value),
+            (SecretType::SSHKey, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::SSHKey, SecretValueType::ssh_key_private) => {
                 if let Some(ssh_key) = &mut self.ssh_key {
                     ssh_key.key_private = Some(value);
@@ -836,6 +838,8 @@ impl Secret {
                 }
             }
             // TOTP
+            (SecretType::Totp, SecretValueType::title) => self.title = Some(value),
+            (SecretType::Totp, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::Totp, SecretValueType::totp_period) => {
                 if let Some(totp) = &mut self.totp {
                     match value.parse() {
@@ -891,6 +895,8 @@ impl Secret {
                 }
             }
             // CreditCard
+            (SecretType::CreditCard, SecretValueType::title) => self.title = Some(value),
+            (SecretType::CreditCard, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::CreditCard, SecretValueType::credit_card_number) => {
                 if let Some(credit_card) = &mut self.credit_card {
                     credit_card.number = Some(value);
@@ -1215,11 +1221,7 @@ pub struct ApiKeyInfo {
 
 impl ApiKeyInfo {
     pub fn from_inspect_api_key_response(r: InspectApiKeyResponse) -> Self {
-        let api_key_secrets: Vec<Uuid> = r
-            .api_key_secrets
-            .iter()
-            .map(|s| s.secret_id)
-            .collect();
+        let api_key_secrets: Vec<Uuid> = r.api_key_secrets.iter().map(|s| s.secret_id).collect();
 
         let api_key_secrets_meta_data: HashMap<Uuid, ApiKeySecretMetaData> = r
             .api_key_secrets
