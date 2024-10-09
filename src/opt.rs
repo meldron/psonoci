@@ -151,6 +151,9 @@ pub enum Command {
     EnvVars(EnvVarsCommand),
     #[structopt(about = "TOTP commands")]
     Totp(TotpCommand),
+    #[structopt(about = "SSH commands")]
+    #[cfg(unix)]
+    Ssh(SshCommand),
     #[structopt(about = "Prints psonoci's license")]
     License,
 }
@@ -324,4 +327,40 @@ pub enum TotpCommand {
         #[structopt(long, help = "TOTP account name for URL")]
         account_name: Option<String>,
     },
+}
+
+#[derive(StructOpt, Debug)]
+pub enum SshCommand {
+    Add(SshAddCommand),
+}
+
+#[derive(StructOpt, Debug)]
+pub struct SshAddCommand {
+    #[structopt(
+        required = true,
+        help = "The uuid of the secret containing the ssh key"
+    )]
+    pub secret_id: Uuid,
+
+    #[structopt(
+        long,
+        parse(from_os_str),
+        help = "Path of the SSH_AUTH_SOCK (overwrites $SSH_AUTH_SOCK)"
+    )]
+    pub ssh_auth_sock_path: Option<PathBuf>,
+
+    #[structopt(long, help = "Optional passphrase which was used to encrypt the key")]
+    pub key_passphrase: Option<String>,
+
+    #[structopt(
+        long,
+        help = "This constraint requests that the agent limit the key's lifetime by deleting it after the specified duration (in seconds) has elapsed from the time the key was added to the agent"
+    )]
+    pub key_lifetime: Option<u32>,
+
+    #[structopt(
+        long,
+        help = "This constraint requests that the agent require explicit user confirmation for each private key operation using the key"
+    )]
+    pub key_conformation: bool,
 }

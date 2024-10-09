@@ -18,7 +18,12 @@ rand = "0.8"
 rayon = "1.7"
 rmp = "0.8"
 rmp-serde = "1.1"
-reqwest = { version = "0.12", features = ["blocking", "native-tls-vendored", "rustls-tls", "json"] }
+reqwest = { version = "0.12", features = [
+    "blocking",
+    "native-tls-vendored",
+    "rustls-tls",
+    "json",
+] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 structopt = "0.3.26"
@@ -28,14 +33,9 @@ unicode-segmentation = "1.10"
 url = { version = "2.4", features = ["serde"] }
 uuid = { version = "1.4", features = ["serde", "v4"] }
 xsalsa20poly1305 = "0.9.1"
+russh-keys = { git = "https://github.com/Eugeny/russh.git", rev = "348e522e7462cb0ba8458db948fbbb6097a77109" }
+tokio = "1.40.0"
+futures = "0.3.31"
 
-#[target.'cfg(all(not(target_env = "musl"), not(target = "armv7-unknown-linux-gnueabihf")))'.dependencies.reqwest]
-#version = "0.12"
-#default-features = false
-#features = ["blocking", "native-tls", "rustls-tls", "json"]
-#
-## For MUSL targets and armv7-unknown-linux-gnueabihf
-#[target.'cfg(any(target_env = "musl", target = "armv7-unknown-linux-gnueabihf"))'.dependencies.reqwest]
-#version = "0.12"
-#default-features = false
-#features = ["blocking", "native-tls-vendored", "rustls-tls", "json"]
+[dev-dependencies]
+mockall = "0.13.0"
