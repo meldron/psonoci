@@ -11,8 +11,11 @@ mod license;
 mod opt;
 mod passwords;
 mod run;
+mod secret_provider;
+mod ssh;
 mod totp;
 
+use crate::ssh::run_ssh_command;
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
 use config::{Config, ConfigSaveFormat};
 use license::print_license;
@@ -124,6 +127,8 @@ fn main() -> Result<()> {
         Command::EnvVars(env_command) => run_env_vars_command(env_command, config)?,
         Command::Totp(tc) => run_totp_command(tc, config)?,
         Command::License => print_license(),
+        #[cfg(unix)]
+        Command::Ssh(ssh_command) => run_ssh_command(ssh_command, config)?,
     }
 
     Ok(())
