@@ -98,6 +98,11 @@ pub enum SecretValueType {
     credit_card_name,
     credit_card_valid_through,
     credit_card_pin,
+
+    // ElsterCertificate
+    elster_certificate_file_content,
+    elster_certificate_password,
+    elster_certificate_retrieval_code,
 }
 }
 
@@ -128,6 +133,11 @@ impl SecretValueType {
             SecretValueType::credit_card_name => "credit_card_name",
             SecretValueType::credit_card_valid_through => "credit_card_valid_through",
             SecretValueType::credit_card_pin => "credit_card_pin",
+            SecretValueType::elster_certificate_file_content => "elster_certificate_file_content",
+            SecretValueType::elster_certificate_password => "elster_certificate_password",
+            SecretValueType::elster_certificate_retrieval_code => {
+                "elster_certificate_retrieval_code"
+            }
         }
     }
 }
@@ -602,6 +612,12 @@ pub struct GPGKey {
     pub name: Option<String>,
     pub email: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ElsterCertificate {
+    pub file_content: Option<String>,
+    pub password: Option<String>,
+    pub retrieval_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -623,6 +639,7 @@ pub struct Secret {
     pub ssh_key: Option<SSHKey>,
     pub totp: Option<Totp>,
     pub credit_card: Option<CreditCard>,
+    pub elster_certificate: Option<ElsterCertificate>,
 }
 
 impl Secret {
@@ -643,6 +660,7 @@ impl Secret {
             ssh_key: None,
             totp: None,
             credit_card: None,
+            elster_certificate: None,
         }
     }
 
@@ -715,7 +733,18 @@ impl Secret {
                 gs.credit_card_valid_through = cc.valid_through.clone();
                 gs.credit_card_pin = cc.pin.clone();
             }
-            SecretType::ElsterCertificate => todo!(),
+            SecretType::ElsterCertificate => {
+                let elster_certificate = self
+                    .elster_certificate
+                    .as_ref()
+                    .expect("elster_certificate must be set");
+
+                gs.elster_certificate_title = self.title.clone();
+                gs.elster_certificate_file_content = elster_certificate.file_content.clone();
+                gs.elster_certificate_password = elster_certificate.password.clone();
+                gs.elster_certificate_retrieval_code = elster_certificate.retrieval_code.clone();
+                gs.elster_certificate_notes = self.notes.clone();
+            }
         }
 
         gs
@@ -774,6 +803,17 @@ impl Secret {
                 self.credit_card.and_then(|c| c.valid_through)
             }
             SecretValueType::credit_card_pin => self.credit_card.and_then(|c| c.pin),
+
+            // ElsterCertificate
+            SecretValueType::elster_certificate_file_content => {
+                self.elster_certificate.and_then(|e| e.file_content)
+            }
+            SecretValueType::elster_certificate_password => {
+                self.elster_certificate.and_then(|e| e.password)
+            }
+            SecretValueType::elster_certificate_retrieval_code => {
+                self.elster_certificate.and_then(|e| e.retrieval_code)
+            }
         }
     }
 
@@ -942,6 +982,32 @@ impl Secret {
                     ));
                 }
             }
+            // ElsterCertificate
+            (SecretType::ElsterCertificate, SecretValueType::title) => self.title = Some(value),
+            (SecretType::ElsterCertificate, SecretValueType::notes) => self.notes = Some(value),
+            (SecretType::ElsterCertificate, SecretValueType::elster_certificate_file_content) => {
+                if let Some(elster_certificate) = &mut self.elster_certificate {
+                    elster_certificate.file_content = Some(value);
+                } else {
+                    return Err(anyhow!("ElsterCertificate is None when trying to set elster_certificate_file_content"));
+                }
+            }
+            (SecretType::ElsterCertificate, SecretValueType::elster_certificate_password) => {
+                if let Some(elster_certificate) = &mut self.elster_certificate {
+                    elster_certificate.password = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "ElsterCertificate is None when trying to set elster_certificate_password"
+                    ));
+                }
+            }
+            (SecretType::ElsterCertificate, SecretValueType::elster_certificate_retrieval_code) => {
+                if let Some(elster_certificate) = &mut self.elster_certificate {
+                    elster_certificate.retrieval_code = Some(value);
+                } else {
+                    return Err(anyhow!("ElsterCertificate is None when trying to set elster_certificate_retrieval_code"));
+                }
+            }
             (_, _) => {
                 return Err(anyhow!(
                     "cannot set {:?} for {:?}",
@@ -1100,6 +1166,24 @@ impl DataTransform<GenericSecret, Secret> for Secret {
                 pin: s.credit_card_pin,
             });
             secret.notes = s.credit_card_notes;
+
+            return Ok(secret);
+        }
+
+        if s.elster_certificate_file_content.is_some()
+            || s.elster_certificate_notes.is_some()
+            || s.elster_certificate_password.is_some()
+            || s.elster_certificate_title.is_some()
+            || s.elster_certificate_retrieval_code.is_some()
+        {
+            let mut secret = Secret::new(SecretType::ElsterCertificate);
+            secret.title = s.elster_certificate_title;
+            secret.elster_certificate = Some(ElsterCertificate {
+                file_content: s.elster_certificate_file_content,
+                retrieval_code: s.elster_certificate_retrieval_code,
+                password: s.elster_certificate_password,
+            });
+            secret.notes = s.elster_certificate_notes;
 
             return Ok(secret);
         }
