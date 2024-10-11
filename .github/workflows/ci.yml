@@ -12,7 +12,7 @@ jobs:
       builder_image: meldron/psonoci_builder
     strategy:
       matrix:
-        build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
+        build: [ linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc ]
         include:
           - build: linux
             os: ubuntu-22.04
@@ -100,14 +100,14 @@ jobs:
           args: --release --target ${{ matrix.target }}
 
       - name: upload unix artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: matrix.target != 'windows'
         with:
           name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/psonoci
 
       - name: upload windows artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: matrix.target_type == 'windows'
         with:
           name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
