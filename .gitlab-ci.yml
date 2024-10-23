@@ -40,7 +40,7 @@ variables:
   services:
     - name: docker:25-dind
       alias: docker
-      command: ["--tls=false"]
+      command: [ "--tls=false" ]
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_HOST: tcp://docker:2375/
@@ -55,7 +55,7 @@ variables:
 .build-cross-linux:
   extends: .build-cross-base
   script:
-    - !reference [.build-cross-base-script, script]
+    - !reference [ .build-cross-base-script, script ]
     - ls -la "target/${BUILD_ENV}/release/psonoci"
     - ./jfrog rt u --target-props="CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME;CI_COMMIT_SHA=$CI_COMMIT_SHA;CI_COMMIT_URL=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA;CI_PROJECT_ID=$CI_PROJECT_ID;CI_PROJECT_NAME=$CI_PROJECT_NAME;CI_PROJECT_NAMESPACE=$CI_PROJECT_NAMESPACE;CI_PROJECT_URL=$CI_PROJECT_URL;CI_PIPELINE_ID=$CI_PIPELINE_ID;CI_PIPELINE_URL=$CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID;CI_JOB_ID=$CI_JOB_ID;CI_JOB_URL=$CI_PROJECT_URL/-/jobs/$CI_JOB_ID;CI_JOB_NAME=$CI_JOB_NAME;CI_JOB_STAGE=$CI_JOB_STAGE;CI_RUNNER_ID=$CI_RUNNER_ID;GITLAB_USER_ID=$GITLAB_USER_ID;CI_SERVER_VERSION=$CI_SERVER_VERSION" "target/${BUILD_ENV}/release/psonoci" "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci"
     - ./jfrog rt sp "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci" "CI_COMMIT_TAG=$CI_COMMIT_TAG" || true
@@ -63,34 +63,56 @@ variables:
 .build-cross-windows:
   extends: .build-cross-base
   script:
-    - !reference [.build-cross-base-script, script]
+    - !reference [ .build-cross-base-script, script ]
     - ls -la "target/${BUILD_ENV}/release/psonoci.exe"
     - ./jfrog rt u --target-props="CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME;CI_COMMIT_SHA=$CI_COMMIT_SHA;CI_COMMIT_URL=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA;CI_PROJECT_ID=$CI_PROJECT_ID;CI_PROJECT_NAME=$CI_PROJECT_NAME;CI_PROJECT_NAMESPACE=$CI_PROJECT_NAMESPACE;CI_PROJECT_URL=$CI_PROJECT_URL;CI_PIPELINE_ID=$CI_PIPELINE_ID;CI_PIPELINE_URL=$CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID;CI_JOB_ID=$CI_JOB_ID;CI_JOB_URL=$CI_PROJECT_URL/-/jobs/$CI_JOB_ID;CI_JOB_NAME=$CI_JOB_NAME;CI_JOB_STAGE=$CI_JOB_STAGE;CI_RUNNER_ID=$CI_RUNNER_ID;GITLAB_USER_ID=$GITLAB_USER_ID;CI_SERVER_VERSION=$CI_SERVER_VERSION" "target/${BUILD_ENV}/release/psonoci.exe" "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci.exe"
     - ./jfrog rt sp "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci.exe" "CI_COMMIT_TAG=$CI_COMMIT_TAG" || true
 
-# Build job for x86_64-unknown-linux-musl
-build-x86_64-unknown-linux-musl:
-  extends: .build-cross-linux
-  variables:
-    BUILD_ENV: x86_64-unknown-linux-musl
+## Build job for x86_64-unknown-linux-musl
+#build-x86_64-unknown-linux-musl:
+#  extends: .build-cross-linux
+#  variables:
+#    BUILD_ENV: x86_64-unknown-linux-musl
+#
+## Build job for armv7-unknown-linux-gnueabihf
+#build-armv7-unknown-linux-gnueabihf:
+#  extends: .build-cross-linux
+#  variables:
+#    BUILD_ENV: armv7-unknown-linux-gnueabihf
+#
+## Build job for aarch64-unknown-linux-musl
+#build-aarch64-unknown-linux-musl:
+#  extends: .build-cross-linux
+#  variables:
+#    BUILD_ENV: aarch64-unknown-linux-musl
+#
+## Build job for build-x86_64-pc-windows-gnu
+#build-x86_64-pc-windows-gnu:
+#  extends: .build-cross-windows
+#  variables:
+#    BUILD_ENV: x86_64-pc-windows-gnu
 
-# Build job for armv7-unknown-linux-gnueabihf
-build-armv7-unknown-linux-gnueabihf:
-  extends: .build-cross-linux
-  variables:
-    BUILD_ENV: armv7-unknown-linux-gnueabihf
-
-# Build job for aarch64-unknown-linux-musl
-build-aarch64-unknown-linux-musl:
-  extends: .build-cross-linux
-  variables:
-    BUILD_ENV: aarch64-unknown-linux-musl
-
-# Build job for build-x86_64-pc-windows-gnu
-build-x86_64-pc-windows-gnu:
-  extends: .build-cross-windows
-  variables:
-    BUILD_ENV: x86_64-pc-windows-gnu
+build-x86_64-pc-windows-msvc:
+  stage: build
+  script:
+    - .\var\build-windows.ps1
+  #    - wget https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe -outfile rustup-init.exe
+  #    - ./rustup-init.exe -y --profile minimal --default-toolchain $RUST_TOOLCHAIN-x86_64-pc-windows-msvc
+  #    - $env:PATH = "$($env:USERPROFILE)\.cargo\bin;$env:PATH"
+  #    - echo "##vso[task.setvariable variable=PATH]$($env:PATH)"
+  #    - cargo build --release
+  artifacts:
+    name: "psonoci_x86_64-pc-windows-msvc_$CI_COMMIT_REF_NAME"
+    paths:
+      - ./target/release/psonoci.exe
+    expire_in: 1 week
+  tags:
+    - windows
+  except:
+    - schedules
+  only:
+    - branches@psono/psono-ci
+    - tags@psono/psono-ci
 
 release-artifacts:
   except:
