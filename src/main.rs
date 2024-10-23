@@ -12,9 +12,11 @@ mod opt;
 mod passwords;
 mod run;
 mod secret_provider;
+#[cfg(unix)]
 mod ssh;
 mod totp;
 
+#[cfg(unix)]
 use crate::ssh::run_ssh_command;
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
 use config::{Config, ConfigSaveFormat};
