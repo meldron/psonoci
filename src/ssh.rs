@@ -122,7 +122,7 @@ fn get_ssh_key_pair(
         .context("decoding key pair failed")
 }
 
-fn get_constraints(key_lifetime: Option<u32>, key_conformation: bool) -> Vec<Constraint> {
+fn get_constraints(key_lifetime: Option<u32>, key_confirmation: bool) -> Vec<Constraint> {
     let mut constraints = vec![];
 
     if let Some(key_lifetime) = key_lifetime {
@@ -131,7 +131,7 @@ fn get_constraints(key_lifetime: Option<u32>, key_conformation: bool) -> Vec<Con
         });
     }
 
-    if key_conformation {
+    if key_confirmation {
         constraints.push(Constraint::Confirm);
     }
 
@@ -151,7 +151,7 @@ fn ssh_add(
         &config,
         secret_provider,
     )?;
-    let constraints = get_constraints(add_command.key_lifetime, add_command.key_conformation);
+    let constraints = get_constraints(add_command.key_lifetime, add_command.key_confirmation);
 
     agent_client.add_identity(&agent_path, &keypair, &constraints)
 }
@@ -170,6 +170,7 @@ pub fn run_ssh_command(ssh_command: SshCommand, config: Config) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod tests {
     use super::*;
     use crate::api;
@@ -208,7 +209,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
     }
 
     #[test]
-    fn get_ssh_key_pair_wrong_secret_type() {
+    fn get_ssh_key_pair__wrong_secret_type() {
         let mut secret_provider_mock = MockSecretProvider::new();
 
         let uuid = Uuid::new_v4();
@@ -230,7 +231,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
     }
 
     #[test]
-    fn get_ssh_key_pair_no_private_key() {
+    fn get_ssh_key_pair__no_private_key() {
         let mut secret_provider_mock = MockSecretProvider::new();
 
         let uuid = Uuid::new_v4();
@@ -249,7 +250,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
     }
 
     #[test]
-    fn get_ssh_key_pair_invalid_ssh_private_key() {
+    fn get_ssh_key_pair__invalid_ssh_private_key() {
         let mut secret_provider_mock = MockSecretProvider::new();
 
         let uuid = Uuid::new_v4();
