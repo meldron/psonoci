@@ -7,6 +7,7 @@ mod api;
 mod config;
 mod crypto;
 mod env_vars;
+mod gpg;
 mod license;
 mod opt;
 mod passwords;
@@ -16,6 +17,7 @@ mod secret_provider;
 mod ssh;
 mod totp;
 
+use crate::gpg::run_gpg_command;
 #[cfg(unix)]
 use crate::ssh::run_ssh_command;
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
@@ -129,6 +131,7 @@ fn main() -> Result<()> {
         Command::EnvVars(env_command) => run_env_vars_command(env_command, config)?,
         Command::Totp(tc) => run_totp_command(tc, config)?,
         Command::License => print_license(),
+        Command::Gpg(gpg_command) => run_gpg_command(gpg_command, config)?,
         #[cfg(unix)]
         Command::Ssh(ssh_command) => run_ssh_command(ssh_command, config)?,
     }

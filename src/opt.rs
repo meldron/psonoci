@@ -154,6 +154,8 @@ pub enum Command {
     #[structopt(about = "SSH commands")]
     #[cfg(unix)]
     Ssh(SshCommand),
+    #[structopt(about = "GPG commands")]
+    Gpg(GpgCommand),
     #[structopt(about = "Prints psonoci's license")]
     License,
 }
@@ -362,5 +364,68 @@ pub struct SshAddCommand {
         long,
         help = "This constraint requests that the agent require explicit user confirmation for each private key operation using the key"
     )]
-    pub key_conformation: bool,
+    pub key_confirmation: bool,
+}
+
+#[derive(StructOpt, Debug)]
+pub enum GpgCommand {
+    Sign(GpgSignCommand),
+    Verify(GpgVerifyCommand),
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GpgSignCommand {
+    #[structopt(
+        required = true,
+        help = "The uuid of the secret containing the gpg private key"
+    )]
+    pub secret_id: Uuid,
+
+    #[structopt(
+        parse(from_os_str),
+        help = "Input file path. If no path is given, reads from stdin"
+    )]
+    pub input_file: Option<PathBuf>,
+
+    #[structopt(
+        short = "o",
+        long,
+        parse(from_os_str),
+        name = "output path",
+        help = "Output file path. If no path is given, writes to stdout"
+    )]
+    pub output: Option<PathBuf>,
+
+    #[structopt(short = "a", long, help = "Armor the gpg signature")]
+    pub armor: bool,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct GpgVerifyCommand {
+    #[structopt(
+        required = true,
+        help = "The uuid of the secret containing the gpg private key"
+    )]
+    pub secret_id: Uuid,
+
+    #[structopt(
+        parse(from_os_str),
+        help = "Input file path. If no path is given, reads from stdin"
+    )]
+    pub input_file: Option<PathBuf>,
+
+    #[structopt(
+        short = "s",
+        long,
+        parse(from_os_str),
+        name = "signature path",
+        help = "Signature file path"
+    )]
+    pub signature: PathBuf,
+
+    #[structopt(short = "q", long, help = "Do not print verification error")]
+    pub quiet: bool,
+
+    #[structopt(short = "v", long, help = "Print success message")]
+    pub verbose: bool,
 }
