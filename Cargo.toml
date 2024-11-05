@@ -36,6 +36,8 @@ xsalsa20poly1305 = "0.9.1"
 russh-keys = { git = "https://github.com/Eugeny/russh.git", rev = "348e522e7462cb0ba8458db948fbbb6097a77109" }
 tokio = "1.40.0"
 futures = "0.3.31"
+pgp = "0.14.0"
 
 [dev-dependencies]
 mockall = "0.13.0"
+tempfile = "3.13"
