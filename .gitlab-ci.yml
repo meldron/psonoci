@@ -1,5 +1,6 @@
 stages:
   - build
+  - release-prepare
   - release
   - deploy
 
@@ -155,52 +156,148 @@ build-aarch64-apple-darwin:
   variables:
     BUILD_ENV: aarch64-apple-darwin
 
-release-artifacts:
-  except:
-    - schedules
-  stage: release
-  image: psono-docker.jfrog.io/ubuntu:22.04
+# release-artifacts:
+#   except:
+#     - schedules
+#   stage: release
+#   image: psono-docker.jfrog.io/ubuntu:22.04
+#   script:
+#     - apt-get update
+#     - apt-get install -y curl
+#     - curl -fL https://getcli.jfrog.io | sh
+#     - ./jfrog config add rt-server-1 --artifactory-url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials --overwrite
+#     - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/x86_64-unknown-linux-musl/psonoci" psono/ci/latest/x86_64-unknown-linux-musl/
+#     - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/armv7-unknown-linux-musleabihf/psonoci" psono/ci/latest/armv7-unknown-linux-musleabihf/
+#     - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/aarch64-unknown-linux-musl/psonoci" psono/ci/latest/aarch64-unknown-linux-musl/
+#     # - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/x86_64-pc-windows-gnu/psonoci" psono/ci/latest/x86_64-pc-windows-gnu/
+#   only:
+#     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+
+collect-artifacts:
+  stage: release-prepare
   script:
-    - apt-get update
-    - apt-get install -y curl
-    - curl -fL https://getcli.jfrog.io | sh
-    - ./jfrog config add rt-server-1 --artifactory-url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials --overwrite
-    - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/x86_64-unknown-linux-musl/psonoci" psono/ci/latest/x86_64-unknown-linux-musl/
-    - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/armv7-unknown-linux-musleabihf/psonoci" psono/ci/latest/armv7-unknown-linux-musleabihf/
-    - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/aarch64-unknown-linux-musl/psonoci" psono/ci/latest/aarch64-unknown-linux-musl/
-    # - ./jfrog rt cp --flat "psono/ci/${CI_COMMIT_REF_NAME}/x86_64-pc-windows-gnu/psonoci" psono/ci/latest/x86_64-pc-windows-gnu/
+    - echo "Collecting binaries from build jobs and zipping them..."
+    - mkdir collected_artifacts
+    # Zip the Linux x86_64 binary
+    - zip -j "collected_artifacts/psonoci_x86_64-unknown-linux-musl_${CI_COMMIT_TAG}.zip" "target/x86_64-unknown-linux-musl/release/psonoci"
+    # Zip the Linux armv7 binary
+    - zip -j "collected_artifacts/psonoci_armv7-unknown-linux-gnueabihf_${CI_COMMIT_TAG}.zip" "target/armv7-unknown-linux-gnueabihf/release/psonoci"
+    # Zip the Linux aarch64 binary
+    - zip -j "collected_artifacts/psonoci_aarch64-unknown-linux-musl_${CI_COMMIT_TAG}.zip" "target/aarch64-unknown-linux-musl/release/psonoci"
+    # Zip the Windows x86_64 GNU binary
+    - zip -j "collected_artifacts/psonoci_x86_64-pc-windows-gnu_${CI_COMMIT_TAG}.zip" "target/x86_64-pc-windows-gnu/release/psonoci.exe"
+    # Zip the Windows x86_64 MSVC binary
+    - zip -j "collected_artifacts/psonoci_x86_64-pc-windows-msvc_${CI_COMMIT_TAG}.zip" "target/release/psonoci.exe"
+    # Zip the macOS x86_64 binary
+    - zip -j "collected_artifacts/psonoci_x86_64-apple-darwin_${CI_COMMIT_TAG}.zip" "target/x86_64-apple-darwin/release/psonoci"
+    # Zip the macOS aarch64 binary
+    - zip -j "collected_artifacts/psonoci_aarch64-apple-darwin_${CI_COMMIT_TAG}.zip" "target/aarch64-apple-darwin/release/psonoci"
+  dependencies:
+    - build-x86_64-unknown-linux-musl
+    - build-armv7-unknown-linux-gnueabihf
+    - build-aarch64-unknown-linux-musl
+    - build-x86_64-pc-windows-gnu
+    - build-x86_64-pc-windows-msvc
+    - build-x86_64-apple-darwin
+    - build-aarch64-apple-darwin
+  artifacts:
+    name: "psonoci_collected_${CI_COMMIT_REF_NAME}"
+    paths:
+      - collected_artifacts/*.zip
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+    - gitlab-release-test-tag
+
+gitlab-release:
+  stage: release
+  script:
+    - echo "Creating GitLab release with zip files..."
+  dependencies:
+    - collect-artifacts
+  release:
+    name: "psonoci $CI_COMMIT_TAG"
+    tag_name: "$CI_COMMIT_TAG"
+    description: "psonoci release of version $CI_COMMIT_TAG"
+    assets:
+      links:
+        - name: "psonocix86_64-unknown-linux-musl_${CI_COMMIT_TAG}"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/collected_artifacts/psonoci_x86_64-unknown-linux-musl_${CI_COMMIT_TAG}.zip"
+        - name: "psonociarmv7-unknown-linux-gnueabihf_${CI_COMMIT_TAG}"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/collected_artifacts/psonoci_armv7-unknown-linux-gnueabihf_${CI_COMMIT_TAG}.zip"
+        - name: "psonociaarch64-unknown-linux-musl_${CI_COMMIT_TAG}"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/collected_artifacts/psonoci_aarch64-unknown-linux-musl_${CI_COMMIT_TAG}.zip"
+        - name: "psonocix86_64-pc-windows-gnu_${CI_COMMIT_TAG}"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/collected_artifacts/psonoci_x86_64-pc-windows-gnu_${CI_COMMIT_TAG}.zip"
+        - name: "psonocix86_64-pc-windows-msvc_${CI_COMMIT_TAG}"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/collected_artifacts/psonoci_x86_64-pc-windows-msvc_${CI_COMMIT_TAG}.zip"
+        - name: "psonocix86_64-apple-darwin_${CI_COMMIT_TAG"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/collected_artifacts/psonoci_x86_64-apple-darwin_${CI_COMMIT_TAG}.zip"
+        - name: "psonociaarch64-apple-darwin_${CI_COMMIT_TAG}"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/collected_artifacts/psonoci_aarch64-apple-darwin_${CI_COMMIT_TAG}.zip"
+  only:
+    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+    - gitlab-release-test-tag
+
+# deploy-artifacts:
+#   except:
+#     - schedules
+#   stage: deploy
+#   image: psono-docker.jfrog.io/ubuntu:24.04
+#   script:
+#     - sh ./var/login_gcp.sh
+#     - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-unknown-linux-musl/psonoci --output psonoci-x86_64-unknown-linux-musl
+#     - gsutil cp psonoci-x86_64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/x86_64-linux/psonoci
+#     - curl https://psono.jfrog.io/psono/psono/ci/master/armv7-unknown-linux-musleabihf/psonoci --output psonoci-armv7-unknown-linux-musleabihf
+#     - gsutil cp psonoci-armv7-unknown-linux-musleabihf gs://get.psono.com/$CI_PROJECT_PATH/armv7-linux/psonoci
+#     - curl https://psono.jfrog.io/psono/psono/ci/master/aarch64-unknown-linux-musl/psonoci --output psonoci-aarch64-unknown-linux-musl
+#     - gsutil cp psonoci-aarch64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/aarch64-linux/psonoci
+#   #    - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-pc-windows-gnu/psonoci.exe --output psonoci-x86_64-pc-windows-gnu.exe
+#   #    - gsutil cp psonoci-x86_64-pc-windows-gnu.exe gs://get.psono.com/$CI_PROJECT_PATH/x86_64-pc-windows-gnu/psonoci.exe
+#   only:
+#     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
 
 deploy-artifacts:
   except:
     - schedules
   stage: deploy
-  image: psono-docker.jfrog.io/ubuntu:20.04
+  image: psono-docker.jfrog.io/ubuntu:24.04
   script:
     - sh ./var/login_gcp.sh
-    - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-unknown-linux-musl/psonoci --output psonoci-x86_64-unknown-linux-musl
-    - gsutil cp psonoci-x86_64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/x86_64-linux/psonoci
-    - curl https://psono.jfrog.io/psono/psono/ci/master/armv7-unknown-linux-musleabihf/psonoci --output psonoci-armv7-unknown-linux-musleabihf
-    - gsutil cp psonoci-armv7-unknown-linux-musleabihf gs://get.psono.com/$CI_PROJECT_PATH/armv7-linux/psonoci
-    - curl https://psono.jfrog.io/psono/psono/ci/master/aarch64-unknown-linux-musl/psonoci --output psonoci-aarch64-unknown-linux-musl
-    - gsutil cp psonoci-aarch64-unknown-linux-musl gs://get.psono.com/$CI_PROJECT_PATH/aarch64-linux/psonoci
-  #    - curl https://psono.jfrog.io/psono/psono/ci/master/x86_64-pc-windows-gnu/psonoci.exe --output psonoci-x86_64-pc-windows-gnu.exe
-  #    - gsutil cp psonoci-x86_64-pc-windows-gnu.exe gs://get.psono.com/$CI_PROJECT_PATH/x86_64-pc-windows-gnu/psonoci.exe
+    # Linux x86_64
+    - gsutil cp ./target/x86_64-unknown-linux-musl/release/psonoci gs://get.psono.com/$CI_PROJECT_PATH/x86_64-linux/psonoci
+    # Linux armv7
+    - gsutil cp ./target/armv7-unknown-linux-gnueabihf/release/psonoci gs://get.psono.com/$CI_PROJECT_PATH/armv7-linux/psonoci
+    # Linux aarch64
+    - gsutil cp ./target/aarch64-unknown-linux-musl/release/psonoci gs://get.psono.com/$CI_PROJECT_PATH/aarch64-linux/psonoci
+    # # Windows x86_64 GNU
+    # - gsutil cp ./target/x86_64-pc-windows-gnu/release/psonoci.exe gs://get.psono.com/$CI_PROJECT_PATH/x86_64-windows-gnu/psonoci.exe
+    # Windows x86_64 MSVC
+    - gsutil cp ./target/release/psonoci.exe gs://get.psono.com/$CI_PROJECT_PATH/x86_64-windows/psonoci.exe
+    # macOS x86_64
+    - gsutil cp ./target/x86_64-apple-darwin/release/psonoci gs://get.psono.com/$CI_PROJECT_PATH/x86_64-macos/psonoci
+    # macOS aarch64
+    - gsutil cp ./target/aarch64-apple-darwin/release/psonoci gs://get.psono.com/$CI_PROJECT_PATH/aarch64-macos/psonoci
+  dependencies:
+    - build-x86_64-unknown-linux-musl
+    - build-armv7-unknown-linux-gnueabihf
+    - build-aarch64-unknown-linux-musl
+    - build-x86_64-pc-windows-gnu
+    - build-x86_64-pc-windows-msvc
+    - build-x86_64-apple-darwin
+    - build-aarch64-apple-darwin
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
-
-deploy-changelog:
-  except:
-    - schedules
-  stage: deploy
-  image: psono-docker.jfrog.io/ubuntu:20.04
-  script:
-    - sh ./var/login_gcp.sh
-    - 'curl -H "PRIVATE-TOKEN: $GITLAB_PERSONAL_ACCESS_TOKEN" "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/repository/tags" --output changelog.json'
-    - gsutil cp changelog.json gs://static.psono.com/gitlab.com/$CI_PROJECT_PATH/changelog.json
-  environment:
-    name: static.psono.com
-    url: https://static.psono.com/gitlab.com/psono/psono-client/changelog.json
-  only:
-    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+# deploy-changelog:
+#   except:
+#     - schedules
+#   stage: deploy
+#   image: psono-docker.jfrog.io/ubuntu:20.04
+#   script:
+#     - sh ./var/login_gcp.sh
+#     - 'curl -H "PRIVATE-TOKEN: $GITLAB_PERSONAL_ACCESS_TOKEN" "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/repository/tags" --output changelog.json'
+#     - gsutil cp changelog.json gs://static.psono.com/gitlab.com/$CI_PROJECT_PATH/changelog.json
+#   environment:
+#     name: static.psono.com
+#     url: https://static.psono.com/gitlab.com/psono/psono-client/changelog.json
+#   only:
+#     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
