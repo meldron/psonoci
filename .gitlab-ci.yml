@@ -174,8 +174,11 @@ build-aarch64-apple-darwin:
 #     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
 
 collect-artifacts:
+  image: psono-docker.jfrog.io/ubuntu:24.04
   stage: release-prepare
   script:
+    - apt-get update
+    - apt-get install -y zip
     - echo "Collecting binaries from build jobs and zipping them..."
     - mkdir collected_artifacts
     # Zip the Linux x86_64 binary
