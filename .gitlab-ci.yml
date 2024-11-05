@@ -54,6 +54,11 @@ variables:
 
 .build-cross-linux:
   extends: .build-cross-base
+  artifacts:
+    name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
+    paths:
+      - ./target/${BUILD_ENV}/release/psonoci
+    expire_in: 1 week
   script:
     - !reference [.build-cross-base-script, script]
     - ls -la "target/${BUILD_ENV}/release/psonoci"
@@ -62,6 +67,11 @@ variables:
 
 .build-cross-windows:
   extends: .build-cross-base
+  artifacts:
+    name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
+    paths:
+      - ./target/${BUILD_ENV}/release/psonoci.exe
+    expire_in: 1 week
   script:
     - !reference [.build-cross-base-script, script]
     - ls -la "target/${BUILD_ENV}/release/psonoci.exe"
@@ -96,11 +106,6 @@ build-x86_64-pc-windows-msvc:
   stage: build
   script:
     - .\var\build-windows.ps1
-  #    - wget https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe -outfile rustup-init.exe
-  #    - ./rustup-init.exe -y --profile minimal --default-toolchain $RUST_TOOLCHAIN-x86_64-pc-windows-msvc
-  #    - $env:PATH = "$($env:USERPROFILE)\.cargo\bin;$env:PATH"
-  #    - echo "##vso[task.setvariable variable=PATH]$($env:PATH)"
-  #    - cargo build --release
   artifacts:
     name: "psonoci_x86_64-pc-windows-msvc_$CI_COMMIT_REF_NAME"
     paths:
@@ -113,6 +118,42 @@ build-x86_64-pc-windows-msvc:
   only:
     - branches@psono/psono-ci
     - tags@psono/psono-ci
+
+.build-macos:
+  stage: build
+  tags:
+    - macos
+  script:
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    - . "$HOME/.cargo/env"
+    - rustup --version
+    - rustup toolchain install "${RUST_TOOLCHAIN}"
+    - rustup default "${RUST_TOOLCHAIN}"
+    - rustup target add "${BUILD_ENV}"
+    - cargo --version
+    - cargo build --release --target "${BUILD_ENV}"
+  artifacts:
+    name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
+    paths:
+      - ./target/${BUILD_ENV}/release/psonoci
+    expire_in: 1 week
+  except:
+    - schedules
+  only:
+    - branches@psono/psono-ci
+    - tags@psono/psono-ci
+
+# Build job for x86_64-apple-darwin
+build-x86_64-apple-darwin:
+  extends: .build-macos
+  variables:
+    BUILD_ENV: x86_64-apple-darwin
+
+# Build job for aarch64-apple-darwin
+build-aarch64-apple-darwin:
+  extends: .build-macos
+  variables:
+    BUILD_ENV: aarch64-apple-darwin
 
 release-artifacts:
   except:
