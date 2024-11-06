@@ -17,4 +17,4 @@ if (Test-Path -Path $filePath) {
 $env:PATH = "$env:CARGO_HOME\bin;$env:PATH"
 
 # Run Cargo to build the project
-& "$env:CARGO_HOME\bin\cargo.exe" build --release
+& "$env:CARGO_HOME\bin\cargo.exe" build --release --target=x86_64-pc-windows-msvc

@@ -106,12 +106,14 @@ build-x86_64-pc-windows-gnu:
 build-x86_64-pc-windows-msvc:
   stage: build
   script:
-    - .\var\build-windows.ps1
+    - .\var\build_windows.ps1
   artifacts:
     name: "psonoci_x86_64-pc-windows-msvc_$CI_COMMIT_REF_NAME"
     paths:
-      - ./target/release/psonoci.exe
+      - ./target/x86_64-pc-windows-msvc/release/psonoci.exe
     expire_in: 1 week
+  variables:
+    BUILD_ENV: x86_64-pc-windows-msvc
   tags:
     - windows
   except:
