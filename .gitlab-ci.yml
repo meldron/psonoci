@@ -197,6 +197,7 @@ collect-artifacts:
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
+    - gitlab-release-test-tag2
 
 gitlab-release:
   image: registry.gitlab.com/gitlab-org/release-cli:latest
@@ -242,6 +243,7 @@ gitlab-release:
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
+    - gitlab-release-test-tag2
 
 # deploy-artifacts:
 #   except:
