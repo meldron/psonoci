@@ -178,31 +178,31 @@ collect-artifacts:
   stage: release-prepare
   script:
     - apt-get update
-    - apt-get install -y zip
+    - apt-get install -y zip tar
     - sh ./var/login_gcp.sh
-    - echo "Collecting binaries from build jobs and zipping them..."
+    - echo "Collecting binaries from build jobs and archiving them..."
     - mkdir collected_artifacts
-    # Zip and upload the Linux x86_64 binary
-    - zip -j "collected_artifacts/psonoci_x86_64-unknown-linux-musl_${CI_COMMIT_TAG}.zip" "target/x86_64-unknown-linux-musl/release/psonoci"
-    - gsutil cp "collected_artifacts/psonoci_x86_64-unknown-linux-musl_${CI_COMMIT_TAG}.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
-    # Zip and upload the Linux armv7 binary
-    - zip -j "collected_artifacts/psonoci_armv7-unknown-linux-gnueabihf_${CI_COMMIT_TAG}.zip" "target/armv7-unknown-linux-gnueabihf/release/psonoci"
-    - gsutil cp "collected_artifacts/psonoci_armv7-unknown-linux-gnueabihf_${CI_COMMIT_TAG}.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
-    # Zip and upload the Linux aarch64 binary
-    - zip -j "collected_artifacts/psonoci_aarch64-unknown-linux-musl_${CI_COMMIT_TAG}.zip" "target/aarch64-unknown-linux-musl/release/psonoci"
-    - gsutil cp "collected_artifacts/psonoci_aarch64-unknown-linux-musl_${CI_COMMIT_TAG}.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
+    # Archive and upload the Linux x86_64 binary
+    - tar -czf "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.tar.gz" -C "target/x86_64-unknown-linux-musl/release/" "psonoci"
+    - gsutil cp "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.tar.gz" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
+    # Archive and upload the Linux armv7 binary
+    - tar -czf "collected_artifacts/psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.tar.gz" -C "target/armv7-unknown-linux-gnueabihf/release/" "psonoci"
+    - gsutil cp "collected_artifacts/psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.tar.gz" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
+    # Archive and upload the Linux aarch64 binary
+    - tar -czf "collected_artifacts/psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.tar.gz" -C "target/aarch64-unknown-linux-musl/release/" "psonoci"
+    - gsutil cp "collected_artifacts/psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.tar.gz" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
     # Zip and upload the Windows x86_64 GNU binary
-    - zip -j "collected_artifacts/psonoci_x86_64-pc-windows-gnu_${CI_COMMIT_TAG}.zip" "target/x86_64-pc-windows-gnu/release/psonoci.exe"
-    - gsutil cp "collected_artifacts/psonoci_x86_64-pc-windows-gnu_${CI_COMMIT_TAG}.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
+    - zip -j "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.zip" "target/x86_64-pc-windows-gnu/release/psonoci.exe"
+    - gsutil cp "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
     # Zip and upload the Windows x86_64 MSVC binary
-    - zip -j "collected_artifacts/psonoci_x86_64-pc-windows-msvc_${CI_COMMIT_TAG}.zip" "target/release/psonoci.exe"
-    - gsutil cp "collected_artifacts/psonoci_x86_64-pc-windows-msvc_${CI_COMMIT_TAG}.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
-    # Zip and upload the macOS x86_64 binary
-    - zip -j "collected_artifacts/psonoci_x86_64-apple-darwin_${CI_COMMIT_TAG}.zip" "target/x86_64-apple-darwin/release/psonoci"
-    - gsutil cp "collected_artifacts/psonoci_x86_64-apple-darwin_${CI_COMMIT_TAG}.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
-    # Zip and upload the macOS aarch64 binary
-    - zip -j "collected_artifacts/psonoci_aarch64-apple-darwin_${CI_COMMIT_TAG}.zip" "target/aarch64-apple-darwin/release/psonoci"
-    - gsutil cp "collected_artifacts/psonoci_aarch64-apple-darwin_${CI_COMMIT_TAG}.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
+    - zip -j "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip" "target/release/psonoci.exe"
+    - gsutil cp "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
+    # Archive and upload the macOS x86_64 binary
+    - tar -czf "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz" -C "target/x86_64-apple-darwin/release/" "psonoci"
+    - gsutil cp "collected_artifacts/psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
+    # Archive and upload the macOS aarch64 binary
+    - tar -czf "collected_artifacts/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz" -C "target/aarch64-apple-darwin/release/" "psonoci"
+    - gsutil cp "collected_artifacts/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz" "gs://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/"
   dependencies:
     - build-x86_64-unknown-linux-musl
     - build-armv7-unknown-linux-gnueabihf
@@ -215,6 +215,7 @@ collect-artifacts:
     name: "psonoci_collected_${CI_COMMIT_REF_NAME}"
     paths:
       - collected_artifacts/*.zip
+      - collected_artifacts/*.tar.gz
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
@@ -223,7 +224,7 @@ gitlab-release:
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   stage: release
   script:
-    - echo "Creating GitLab release with zip files..."
+    - echo "Creating GitLab release with zip and tar.gz files..."
   dependencies:
     - collect-artifacts
   release:
@@ -232,20 +233,20 @@ gitlab-release:
     description: "psonoci release of version $CI_COMMIT_TAG"
     assets:
       links:
-        - name: "psonoci-x86_64-unknown-linux-musl"
-          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci_x86_64-unknown-linux-musl_${CI_COMMIT_TAG}.zip"
-        - name: "psonoci-armv7-unknown-linux-gnueabihf"
-          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci_armv7-unknown-linux-gnueabihf_${CI_COMMIT_TAG}.zip"
-        - name: "psonoci-aarch64-unknown-linux-musl"
-          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci_aarch64-unknown-linux-musl_${CI_COMMIT_TAG}.zip"
-        - name: "psonoci-x86_64-pc-windows-gnu"
-          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci_x86_64-pc-windows-gnu_${CI_COMMIT_TAG}.zip"
-        - name: "psonoci-x86_64-pc-windows-msvc"
-          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci_x86_64-pc-windows-msvc_${CI_COMMIT_TAG}.zip"
-        - name: "psonoci-x86_64-apple-darwin"
-          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci_x86_64-apple-darwin_${CI_COMMIT_TAG}.zip"
-        - name: "psonoci-aarch64-apple-darwin"
-          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci_aarch64-apple-darwin_${CI_COMMIT_TAG}.zip"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.tar.gz"
+        - name: "psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.tar.gz"
+        - name: "psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.tar.gz"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.zip"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz"
+        - name: "psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz"
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
@@ -268,7 +269,7 @@ gitlab-release:
 #   only:
 #     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
 
-deploy-artifacts:
+deploy-latest:
   except:
     - schedules
   stage: deploy
