@@ -11,7 +11,7 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 `psonoci --help`
 
 ```
-psonoci 0.4.0
+psonoci 0.5.0
 Bernd Kaiser
 Psono CI Client (https://github.com/meldron/psonoci)
 
@@ -57,10 +57,12 @@ SUBCOMMANDS:
     api-key     Psono api-key inspect (/api-key-access/inspect/)
     config      Config commands (create, save, pack,...)
     env-vars    Convenience commands on environment variable secrets
+    gpg         GPG commands
     help        Prints this message or the help of the given subcommand(s)
     license     Prints psonoci's license
     run         Spawns processes with environment vars from the api-keys secrets
     secret      Psono secret commands (/api-key-access/secret/)
+    ssh         SSH commands
     totp        TOTP commands
 ```
 
@@ -75,6 +77,55 @@ These three options must be supplied (and be in front of the subcommand):
 | --server_url             | PSONO_CI_SERVER_URL         | URL                | yes      | None    | Address of the PSONO's backend server - e.g.: https://www.psono.pw/server |
 
 There are several more options, please use the `help` commands for more info.
+
+## SSH
+
+Since version `0.5` `psonoci` supports Psono's SSH sub command, which allows you to add SSH keys stored in your Psono vault to your SSH agent.
+
+This feature is currently **not** available on Windows.
+
+The SSH subcommand provides the following operation:
+
+### `add`
+
+`psonoci ssh add secret-id [OPTIONS]`: adds an SSH key from a Psono secret to your SSH agent.
+
+Options:
+- `--ssh-auth-sock-path <PATH>`: Path of the SSH_AUTH_SOCK (overwrites $SSH_AUTH_SOCK environment variable)
+- `--key-passphrase <PASSPHRASE>`: Optional passphrase which was used to encrypt the key
+- `--key-lifetime <SECONDS>`: Limit the key's lifetime by deleting it after the specified duration in seconds
+- `--key-confirmation`: Require explicit user confirmation for each private key operation using the key
+
+The secret must be of type SSH Key and contain a private key. On Unix systems, if `--ssh-auth-sock-path` is not provided, the command will use the `SSH_AUTH_SOCK` environment variable. 
+
+## GPG
+
+Since version `0.5` `psonoci` supports Psono's GPG secret type, allowing you to securely manage GPG keys stored in your Psono vault for signing and verification operations.
+
+The GPG subcommand provides two main operations:
+
+### `sign`
+
+`psonoci gpg sign secret-id [OPTIONS] [INPUT_FILE]`: signs data using the GPG private key stored in the specified secret. 
+
+Options:
+- `--input-file <PATH>`: File to sign (if not provided, reads from stdin)
+- `--output <PATH>`: Write signature to file (if not provided, writes to stdout)
+- `--armor`: Output ASCII armored signature instead of binary
+
+The secret must be of type GPG Key and contain a private key.
+
+### `verify`
+
+`psonoci gpg verify secret-id --signature <SIGNATURE_FILE> [OPTIONS] [INPUT_FILE]`: verifies a signature using the GPG public key stored in the specified secret.
+
+Options:
+- `--input-file <PATH>`: File to verify (if not provided, reads from stdin)
+- `--signature <PATH>`, `-s <PATH>`: Path to the signature file (required)
+- `--quiet`, `-q`: Do not print verification error
+- `--verbose`, `-v`: Print success message with signature details
+
+Returns with exit code `0` if the signature is valid, otherwise displays an error and returns with exit code `1`. When using `--verbose`, displays information about when the signature was created and by whom.
 
 ## TOTP
 
