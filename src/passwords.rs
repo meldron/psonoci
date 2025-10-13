@@ -58,7 +58,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn create_password_with_allowed_chars__valid_length() {
-        let password = create_password_with_allowed_chars(21, "abcdनमस्ते्🏴‍☠️🦀");
+        let password = create_password_with_allowed_chars(21, "🚀⭐🌟🔥💯🎉🎊🎈🎁🎂");
         let password_graphemes: Vec<&str> = password.graphemes(true).collect();
         assert_eq!(password_graphemes.len(), 21);
     }
