@@ -120,7 +120,7 @@ dependencies = [
  "base64ct",
  "blake2",
  "cpufeatures",
- "password-hash 0.5.0",
+ "password-hash",
  "zeroize",
 ]
 
@@ -204,7 +204,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6aeac2e1fe888769f34f05ac343bbef98b14d1ffb292ab69d4608b3abc86f2a2"
 dependencies = [
  "blowfish",
- "pbkdf2 0.12.2",
+ "pbkdf2",
  "sha2",
 ]
 
@@ -727,9 +727,9 @@ dependencies = [
 
 [[package]]
 name = "delegate"
-version = "0.12.0"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e018fccbeeb50ff26562ece792ed06659b9c2dae79ece77c4456bb10d9bf79b"
+checksum = "6178a82cf56c836a3ba61a7935cdb1c49bfaa6fa4327cd5bf554a503087de26b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2009,8 +2009,9 @@ dependencies = [
 
 [[package]]
 name = "pageant"
-version = "0.0.1-beta.3"
-source = "git+https://github.com/Eugeny/russh.git?rev=348e522e7462cb0ba8458db948fbbb6097a77109#348e522e7462cb0ba8458db948fbbb6097a77109"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "032d6201d2fb765158455ae0d5a510c016bb6da7232e5040e39e9c8db12b0afc"
 dependencies = [
  "bytes",
  "delegate",
@@ -2019,17 +2020,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "windows",
-]
-
-[[package]]
-name = "password-hash"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7676374caaee8a325c9e7a2ae557f216c5563a171d6997b0ef8a65af35147700"
-dependencies = [
- "base64ct",
- "rand_core 0.6.4",
- "subtle",
 ]
 
 [[package]]
@@ -2048,18 +2038,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pbkdf2"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
-dependencies = [
- "digest",
- "hmac",
- "password-hash 0.4.2",
- "sha2",
-]
 
 [[package]]
 name = "pbkdf2"
@@ -2188,7 +2166,7 @@ dependencies = [
  "aes",
  "cbc",
  "der",
- "pbkdf2 0.12.2",
+ "pbkdf2",
  "scrypt",
  "sha2",
  "spki",
@@ -2687,23 +2665,27 @@ dependencies = [
 
 [[package]]
 name = "russh-cryptovec"
-version = "0.7.3"
-source = "git+https://github.com/Eugeny/russh.git?rev=348e522e7462cb0ba8458db948fbbb6097a77109#348e522e7462cb0ba8458db948fbbb6097a77109"
+version = "0.48.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d8e7e854e1a87e4be00fa287c98cad23faa064d0464434beaa9f014ec3baa98"
 dependencies = [
  "libc",
+ "ssh-encoding",
  "winapi",
 ]
 
 [[package]]
 name = "russh-keys"
-version = "0.46.0-beta.3"
-source = "git+https://github.com/Eugeny/russh.git?rev=348e522e7462cb0ba8458db948fbbb6097a77109#348e522e7462cb0ba8458db948fbbb6097a77109"
+version = "0.49.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "788a2439ce385856585346beb37c48e7c9eb5de5f4f00736720a19ffdb3f5bb5"
 dependencies = [
  "aes",
  "async-trait",
  "bcrypt-pbkdf",
  "block-padding",
  "byteorder",
+ "bytes",
  "cbc",
  "ctr",
  "data-encoding",
@@ -2724,7 +2706,7 @@ dependencies = [
  "p384",
  "p521",
  "pageant",
- "pbkdf2 0.11.0",
+ "pbkdf2",
  "pkcs1",
  "pkcs5",
  "pkcs8",
@@ -2737,6 +2719,7 @@ dependencies = [
  "serde",
  "sha1",
  "sha2",
+ "signature",
  "spki",
  "ssh-encoding",
  "ssh-key",
@@ -2749,8 +2732,9 @@ dependencies = [
 
 [[package]]
 name = "russh-util"
-version = "0.1.0"
-source = "git+https://github.com/Eugeny/russh.git?rev=348e522e7462cb0ba8458db948fbbb6097a77109#348e522e7462cb0ba8458db948fbbb6097a77109"
+version = "0.48.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92c7dd577958c0cefbc8f8a2c05c48c88c42e2fdb760dbe9b96ae31d4de97a1f"
 dependencies = [
  "chrono",
  "tokio",
@@ -2873,7 +2857,7 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0516a385866c09368f0b5bcd1caff3366aace790fcd46e2bb032697bb172fd1f"
 dependencies = [
- "pbkdf2 0.12.2",
+ "pbkdf2",
  "salsa20 0.10.2",
  "sha2",
 ]
@@ -3154,6 +3138,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb9242b9ef4108a78e8cd1a2c98e193ef372437f8c22be363075233321dd4a15"
 dependencies = [
  "base64ct",
+ "bytes",
  "pem-rfc7468",
  "sha2",
 ]

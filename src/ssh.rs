@@ -5,7 +5,7 @@ use crate::secret_provider::{PsonoSecretProvider, SecretProvider};
 use anyhow::{bail, Context, Result};
 use russh_keys::agent::client::{AgentClient, AgentStream};
 use russh_keys::agent::Constraint;
-use russh_keys::key::KeyPair;
+use russh_keys::PrivateKey;
 use russh_keys::*;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -20,7 +20,7 @@ trait SshAgentProvider {
     fn add_identity(
         &self,
         agent_path: &Path,
-        keypair: &KeyPair,
+        private_key: &PrivateKey,
         constraints: &[Constraint],
     ) -> Result<()>;
 }
@@ -58,16 +58,16 @@ impl SshAgentProvider for SshAgentClient {
     fn add_identity(
         &self,
         agent_path: &Path,
-        keypair: &KeyPair,
+        private_key: &PrivateKey,
         constraints: &[Constraint],
     ) -> Result<()> {
         let runtime = Runtime::new()?;
         runtime.block_on(async move {
             let mut agent_client = get_agent_client(agent_path).await?;
             agent_client
-                .add_identity(keypair, constraints)
+                .add_identity(private_key, constraints)
                 .await
-                .context("adding key pair failed")?;
+                .context("adding private key failed")?;
             Ok(())
         })
     }
@@ -98,12 +98,12 @@ fn get_ssh_auth_sock_path(ssh_auth_socket_path: Option<PathBuf>) -> Result<PathB
     }
 }
 
-fn get_ssh_key_pair(
+fn get_ssh_private_key(
     secret_id: &Uuid,
     key_passphrase: &Option<String>,
     config: &Config,
     secret_provider: Box<dyn SecretProvider>,
-) -> Result<KeyPair> {
+) -> Result<PrivateKey> {
     let (secret, _) = secret_provider
         .get_secret(secret_id, config)
         .context("ssh_agent_add_identity loading secret from store failed")?;
@@ -119,7 +119,7 @@ fn get_ssh_key_pair(
         .context("private key not set")?;
 
     decode_secret_key(&ssh_private_key, key_passphrase.as_deref())
-        .context("decoding key pair failed")
+        .context("decoding private key failed")
 }
 
 fn get_constraints(key_lifetime: Option<u32>, key_confirmation: bool) -> Vec<Constraint> {
@@ -145,7 +145,7 @@ fn ssh_add(
     secret_provider: Box<dyn SecretProvider>,
 ) -> Result<()> {
     let agent_path = get_ssh_auth_sock_path(add_command.ssh_auth_sock_path)?;
-    let keypair = get_ssh_key_pair(
+    let private_key = get_ssh_private_key(
         &add_command.secret_id,
         &add_command.key_passphrase,
         &config,
@@ -153,7 +153,7 @@ fn ssh_add(
     )?;
     let constraints = get_constraints(add_command.key_lifetime, add_command.key_confirmation);
 
-    agent_client.add_identity(&agent_path, &keypair, &constraints)
+    agent_client.add_identity(&agent_path, &private_key, &constraints)
 }
 
 pub fn run_ssh_command(ssh_command: SshCommand, config: Config) -> Result<()> {
@@ -222,7 +222,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .returning(|_, _| Ok((Secret::new(SecretType::Bookmark), "".to_owned())));
 
         let error =
-            get_ssh_key_pair(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -244,7 +244,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .returning(|_, _| Ok((mock_ssh_key_secret(None, None), "".to_owned())));
 
         let error =
-            get_ssh_key_pair(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
         assert_eq!(error.to_string(), "private key not set");
     }
@@ -268,9 +268,9 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             });
 
         let error =
-            get_ssh_key_pair(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
-        assert_eq!(error.to_string(), "decoding key pair failed");
+        assert_eq!(error.to_string(), "decoding private key failed");
     }
 
     #[test]
@@ -291,12 +291,12 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
                 ))
             });
 
-        let key_pair =
-            get_ssh_key_pair(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap();
+        let private_key =
+            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap();
 
-        assert_eq!(key_pair.name(), "ssh-ed25519");
+        assert_eq!(private_key.algorithm().as_str(), "ssh-ed25519");
         assert_eq!(
-            key_pair.public_key_base64(),
+            private_key.public_key_base64(),
             "AAAAC3NzaC1lZDI1NTE5AAAAIMGLSPCVTp9+u4Mj/AMkwYDc7lraeZG5lj8Hh+cOo+bb"
         );
     }
@@ -320,9 +320,9 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             });
 
         let error =
-            get_ssh_key_pair(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
-        assert_eq!(error.to_string(), "decoding key pair failed");
+        assert_eq!(error.to_string(), "decoding private key failed");
     }
 
     #[test]
@@ -343,7 +343,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
                 ))
             });
 
-        let error = get_ssh_key_pair(
+        let error = get_ssh_private_key(
             &uuid,
             &Some("wrong password".to_owned()),
             &config,
@@ -351,7 +351,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
         )
         .unwrap_err();
 
-        assert_eq!(error.to_string(), "decoding key pair failed");
+        assert_eq!(error.to_string(), "decoding private key failed");
     }
 
     #[test]
@@ -372,7 +372,7 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
                 ))
             });
 
-        let key_pair = get_ssh_key_pair(
+        let private_key = get_ssh_private_key(
             &uuid,
             &Some("test".to_owned()),
             &config,
@@ -380,9 +380,9 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
         )
         .unwrap();
 
-        assert_eq!(key_pair.name(), "ssh-ed25519");
+        assert_eq!(private_key.algorithm().as_str(), "ssh-ed25519");
         assert_eq!(
-            key_pair.public_key_base64(),
+            private_key.public_key_base64(),
             "AAAAC3NzaC1lZDI1NTE5AAAAIL1uUc21yfi4EnbJSdqbDo7lTg01DR3PijsrxqazSlkf"
         );
     }
