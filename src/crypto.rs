@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
-use hex::{decode, encode};
-use rand::prelude::*;
 use crypto_secretbox::aead::Aead;
 use crypto_secretbox::{KeyInit, XSalsa20Poly1305};
+use hex::{decode, encode};
+use rand::prelude::*;
 
 pub const NONCE_LENGTH: usize = 24;
 pub const SECRET_LENGTH: usize = 32;

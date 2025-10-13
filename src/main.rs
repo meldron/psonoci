@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
+use clap::Parser;
 use env_vars::run_env_vars_command;
 use run::run_run_command;
-use clap::Parser;
 
 mod api;
 mod config;
@@ -124,9 +124,7 @@ fn main() -> Result<()> {
     match opt.command {
         Command::Secret { command } => run_secret_command(config, command)?,
         Command::ApiKey { command } => run_inspect_command(config, command)?,
-        Command::Config { command } => {
-            run_config_command(config_source, config, command)?
-        }
+        Command::Config { command } => run_config_command(config_source, config, command)?,
         Command::Run { run } => run_run_command(config, run)?,
         Command::EnvVars { command } => run_env_vars_command(command, config)?,
         Command::Totp { command } => run_totp_command(command, config)?,

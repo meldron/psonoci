@@ -4,13 +4,14 @@ use crate::opt::{GpgCommand, GpgSignCommand, GpgVerifyCommand};
 use crate::secret_provider::{PsonoSecretProvider, SecretProvider};
 use anyhow::{bail, Context, Result};
 use chrono::Local;
+use pgp::composed::{ArmorOptions, Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use pgp::ser::Serialize;
-use pgp::{types::{Password, KeyDetails}, composed::DetachedSignature};
 use pgp::{
-    composed::{ArmorOptions, Deserializable, SignedPublicKey, SignedSecretKey},
+    composed::DetachedSignature,
+    types::{KeyDetails, Password},
 };
 use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
@@ -68,7 +69,11 @@ fn create_signature(
     ];
 
     let signature_packet = sig_cfg
-        .sign(&signed_secret_key.primary_key, &Password::from(""), input_reader)
+        .sign(
+            &signed_secret_key.primary_key,
+            &Password::from(""),
+            input_reader,
+        )
         .context("Signing failed:")?;
 
     Ok(DetachedSignature::new(signature_packet))
