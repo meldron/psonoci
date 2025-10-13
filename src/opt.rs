@@ -3,8 +3,8 @@ use std::fmt::Display;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use structopt::StructOpt;
 use url::Url;
 use uuid::Uuid;
 
@@ -12,28 +12,29 @@ use crate::api::{parse_url, SecretValueType};
 use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
 
-#[derive(StructOpt, Debug)]
-#[structopt(
+#[derive(Parser, Debug)]
+#[clap(
     name = "psonoci",
     about = "Psono CI Client (https://github.com/meldron/psonoci)",
-    author = "Bernd Kaiser"
+    author = "Bernd Kaiser",
+    version
 )]
 pub struct Opt {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     pub command: Command,
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub raw_config: RawConfig,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct RawConfig {
     // psono server options
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub psono_settings: RawPsonoSettings,
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub http_options: HttpOptions,
 
-    #[structopt(
+    #[clap(
         long,
         name = "config_packed",
         env = "PSONO_CI_CONFIG_PACKED",
@@ -41,8 +42,8 @@ pub struct RawConfig {
     )]
     pub config_packed: Option<String>,
 
-    #[structopt(
-        short = "c",
+    #[clap(
+        short = 'c',
         long,
         name = "config_path",
         env = "PSONO_CI_CONFIG_PATH",
@@ -110,141 +111,173 @@ impl RawConfig {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct RawPsonoSettings {
-    #[structopt(
+    #[clap(
         long,
         env = "PSONO_CI_API_KEY_ID",
         help = "Api key as uuid",
-        required_unless_one(&["config_packed", "config_path"])
+        required_unless_present_any = ["config_packed", "config_path"]
     )]
     pub api_key_id: Option<Uuid>,
-    #[structopt(
+    #[clap(
         long,
         env = "PSONO_CI_API_SECRET_KEY_HEX",
-        parse(try_from_str = parse_secret_key),
+        value_parser = parse_secret_key,
         help = "Api secret key as 64 byte hex string",
-        required_unless_one(&["config_packed", "config_path"])
+        required_unless_present_any = ["config_packed", "config_path"]
     )]
     pub api_secret_key_hex: Option<String>,
-    #[structopt(
+    #[clap(
         long,
         env = "PSONO_CI_SERVER_URL",
-        parse(try_from_str = parse_url),
+        value_parser = parse_url,
         help = "Url of the psono backend server",
-        required_unless_one(&["config_packed", "config_path"])
+        required_unless_present_any = ["config_packed", "config_path"]
     )]
     pub server_url: Option<Url>,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum Command {
-    #[structopt(about = "Psono secret commands (/api-key-access/secret/)")]
-    Secret(SecretCommand),
-    #[structopt(about = "Psono api-key inspect (/api-key-access/inspect/)")]
-    ApiKey(ApiKeyCommand),
-    #[structopt(about = "Config commands (create, save, pack,...)")]
-    Config(ConfigCommand),
-    #[structopt(about = "Spawns processes with environment vars from the api-keys secrets")]
-    Run(RunCommand),
-    #[structopt(about = "Convenience commands on environment variable secrets")]
-    EnvVars(EnvVarsCommand),
-    #[structopt(about = "TOTP commands")]
-    Totp(TotpCommand),
-    #[structopt(about = "SSH commands")]
+    #[clap(about = "Psono secret commands (/api-key-access/secret/)")]
+    Secret {
+        #[clap(subcommand)]
+        command: SecretCommand,
+    },
+    #[clap(about = "Psono api-key inspect (/api-key-access/inspect/)")]
+    ApiKey {
+        #[clap(subcommand)]
+        command: ApiKeyCommand,
+    },
+    #[clap(about = "Config commands (create, save, pack,...)")]
+    Config {
+        #[clap(subcommand)]
+        command: ConfigCommand,
+    },
+    #[clap(about = "Spawns processes with environment vars from the api-keys secrets")]
+    Run {
+        #[clap(flatten)]
+        run: RunCommand,
+    },
+    #[clap(about = "Convenience commands on environment variable secrets")]
+    EnvVars {
+        #[clap(subcommand)]
+        command: EnvVarsCommand,
+    },
+    #[clap(about = "TOTP commands")]
+    Totp {
+        #[clap(subcommand)]
+        command: TotpCommand,
+    },
+    #[clap(about = "SSH commands")]
     #[cfg(unix)]
-    Ssh(SshCommand),
-    #[structopt(about = "GPG commands")]
-    Gpg(GpgCommand),
-    #[structopt(about = "Prints psonoci's license")]
+    Ssh {
+        #[clap(subcommand)]
+        command: SshCommand,
+    },
+    #[clap(about = "GPG commands")]
+    Gpg {
+        #[clap(subcommand)]
+        command: GpgCommand,
+    },
+    #[clap(about = "Prints psonoci's license")]
     License,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum SecretCommand {
-    #[structopt(about = "Get a psono secret")]
+    #[clap(about = "Get a psono secret")]
     Get {
-        #[structopt(required = true, help = "The secret's uuid")]
+        #[clap(required = true, help = "The secret's uuid")]
         secret_id: Uuid,
-        #[structopt(required = true, possible_values = &SecretValueType::variants(), case_insensitive = true, help = "Which secret value-type to return ('json' returns all value-types in a json object)")]
+        #[clap(
+            required = true,
+            value_enum,
+            ignore_case = true,
+            help = "Which secret value-type to return ('json' returns all value-types in a json object)"
+        )]
         secret_value_type: SecretValueType,
     },
-    #[structopt(about = "Set a psono secret")]
+    #[clap(about = "Set a psono secret")]
     Set {
-        #[structopt(required = true, help = "The secret's uuid")]
+        #[clap(required = true, help = "The secret's uuid")]
         secret_id: Uuid,
-        #[structopt(required = true, possible_values = &SecretValueType::variants(), case_insensitive = true, help = "Which secret value-type to set ('json' not yet supported)")]
+        #[clap(
+            required = true,
+            value_enum,
+            ignore_case = true,
+            help = "Which secret value-type to set ('json' not yet supported)"
+        )]
         secret_value_type: SecretValueType,
-        #[structopt(required = true, help = "The new value to set for type")]
+        #[clap(required = true, help = "The new value to set for type")]
         secret_new_value: String,
     },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum ApiKeyCommand {
-    #[structopt(about = "Prints the meta info of a api-key and lists all its secret ids")]
+    #[clap(about = "Prints the meta info of a api-key and lists all its secret ids")]
     Info,
-    #[structopt(about = "Prints all secrets of an api-key as JSON")]
+    #[clap(about = "Prints all secrets of an api-key as JSON")]
     Secrets,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum ConfigCommand {
-    #[structopt(
+    #[clap(
         about = "Pack psonoci config into base58 encoded MessagePack string which can be used by --config-packed"
     )]
     Pack,
-    #[structopt(
-        about = "Save psonoci config into a toml file which can be loaded with --config-path"
-    )]
+    #[clap(about = "Save psonoci config into a toml file which can be loaded with --config-path")]
     Save {
-        #[structopt(
+        #[clap(
             short,
             long,
             help = "Only if overwrite is set, psonoci will replace a config"
         )]
         overwrite: bool,
-        #[structopt(required = true, parse(from_os_str), help = "Output path")]
+        #[clap(required = true, parse(from_os_str), help = "Output path")]
         path: PathBuf,
     },
-    #[structopt(about = "Displays the current config in toml format")]
+    #[clap(about = "Displays the current config in toml format")]
     Show,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct RunCommand {
-    #[structopt(
+    #[clap(
         short,
         long,
         help = "Spawn process only with the env vars from the psono datastore"
     )]
     pub clear_env: bool,
-    #[structopt(
-        short = "f",
+    #[clap(
+        short = 'f',
         long,
         name = "secret_uuid",
         help = "Only include env vars from secrets explicitly supplied"
     )]
     pub filter: Option<Vec<Uuid>>,
-    #[structopt(
+    #[clap(
         parse(from_os_str),
         help = "The command you want to run. It's recommended to prefix it with '--' so additional flags won't be interpreted by psonoci"
     )]
     pub command_values: Vec<OsString>,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct PasswordCreationSettings {
-    #[structopt(
-        short = "n",
+    #[clap(
+        short = 'n',
         long,
         name = "num_chars",
         default_value = "21",
         help = "If a password needs to be created use l chars (unicode graphemes).\nImportant: if you are using unicode chars/graphemes with more than one byte per char, the password byte length will be bigger than the num of chars"
     )]
     pub password_length: usize,
-    #[structopt(
-        short = "a",
+    #[clap(
+        short = 'a',
         long,
         name = "allowed_password_chars",
         help = "By default psono uses alphanumeric chars ([a-zA-Z0-9]) for the created passwords.\nThis option overwrites the default charset.\nIMPORTANT: Make sure to supply enough chars, otherwise the password will be insecure."
@@ -261,134 +294,134 @@ impl Default for PasswordCreationSettings {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum EnvVarsCommand {
-    #[structopt(
+    #[clap(
         about = "Get or create env var for a specific secret. Will always get the first secret the first secret with the specified name in the env var list"
     )]
     GetOrCreate {
-        #[structopt(
+        #[clap(
             required = true,
             help = "The uuid of the secret containing the env var"
         )]
         secret_id: Uuid,
-        #[structopt(required = true, help = "The name of the env var")]
+        #[clap(required = true, help = "The name of the env var")]
         env_var_name: String,
-        #[structopt(flatten)]
+        #[clap(flatten)]
         password_creation_settings: PasswordCreationSettings,
     },
-    #[structopt(
+    #[clap(
         about = "Update or create env var for a specific secret and then returns the value. Will always update the first secret with the specified name in the env var list. If no new value is supplied, a random value will be created"
     )]
     UpdateOrCreate {
-        #[structopt(
+        #[clap(
             required = true,
             help = "The uuid of the secret containing the env var"
         )]
         secret_id: Uuid,
-        #[structopt(required = true, help = "The name of the env var")]
+        #[clap(required = true, help = "The name of the env var")]
         env_var_name: String,
-        #[structopt(
+        #[clap(
             help = "The value of the env var. If no value is provided, a random one will be created"
         )]
         env_var_value: Option<String>,
-        #[structopt(flatten)]
+        #[clap(flatten)]
         password_creation_settings: PasswordCreationSettings,
     },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum TotpCommand {
-    #[structopt(about = "Get the current token for a TOTP secret")]
+    #[clap(about = "Get the current token for a TOTP secret")]
     GetToken {
-        #[structopt(
+        #[clap(
             required = true,
             help = "The uuid of the secret containing the totp data"
         )]
         secret_id: Uuid,
     },
-    #[structopt(about = "Check if a token is currently valid for a TOTP Secret")]
+    #[clap(about = "Check if a token is currently valid for a TOTP Secret")]
     ValidateToken {
-        #[structopt(
+        #[clap(
             required = true,
             help = "The uuid of the secret containing the totp data"
         )]
         secret_id: Uuid,
-        #[structopt(required = true, help = "The token to validate")]
+        #[clap(required = true, help = "The token to validate")]
         token: String,
     },
-    #[structopt(about = "Get the otpauth url for a TOTP secret")]
+    #[clap(about = "Get the otpauth url for a TOTP secret")]
     GetUrl {
-        #[structopt(
+        #[clap(
             required = true,
             help = "The uuid of the secret containing the totp data"
         )]
         secret_id: Uuid,
-        #[structopt(long, help = "TOTP issuer for URL")]
+        #[clap(long, help = "TOTP issuer for URL")]
         issuer: Option<String>,
-        #[structopt(long, help = "TOTP account name for URL")]
+        #[clap(long, help = "TOTP account name for URL")]
         account_name: Option<String>,
     },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum SshCommand {
     Add(SshAddCommand),
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct SshAddCommand {
-    #[structopt(
+    #[clap(
         required = true,
         help = "The uuid of the secret containing the ssh key"
     )]
     pub secret_id: Uuid,
 
-    #[structopt(
+    #[clap(
         long,
         parse(from_os_str),
         help = "Path of the SSH_AUTH_SOCK (overwrites $SSH_AUTH_SOCK)"
     )]
     pub ssh_auth_sock_path: Option<PathBuf>,
 
-    #[structopt(long, help = "Optional passphrase which was used to encrypt the key")]
+    #[clap(long, help = "Optional passphrase which was used to encrypt the key")]
     pub key_passphrase: Option<String>,
 
-    #[structopt(
+    #[clap(
         long,
         help = "This constraint requests that the agent limit the key's lifetime by deleting it after the specified duration (in seconds) has elapsed from the time the key was added to the agent"
     )]
     pub key_lifetime: Option<u32>,
 
-    #[structopt(
+    #[clap(
         long,
         help = "This constraint requests that the agent require explicit user confirmation for each private key operation using the key"
     )]
     pub key_confirmation: bool,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum GpgCommand {
     Sign(GpgSignCommand),
     Verify(GpgVerifyCommand),
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct GpgSignCommand {
-    #[structopt(
+    #[clap(
         required = true,
         help = "The uuid of the secret containing the gpg private key"
     )]
     pub secret_id: Uuid,
 
-    #[structopt(
+    #[clap(
         parse(from_os_str),
         help = "Input file path. If no path is given, reads from stdin"
     )]
     pub input_file: Option<PathBuf>,
 
-    #[structopt(
-        short = "o",
+    #[clap(
+        short = 'o',
         long,
         parse(from_os_str),
         name = "output path",
@@ -396,26 +429,26 @@ pub struct GpgSignCommand {
     )]
     pub output: Option<PathBuf>,
 
-    #[structopt(short = "a", long, help = "Armor the gpg signature")]
+    #[clap(short = 'a', long, help = "Armor the gpg signature")]
     pub armor: bool,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct GpgVerifyCommand {
-    #[structopt(
+    #[clap(
         required = true,
         help = "The uuid of the secret containing the gpg private key"
     )]
     pub secret_id: Uuid,
 
-    #[structopt(
+    #[clap(
         parse(from_os_str),
         help = "Input file path. If no path is given, reads from stdin"
     )]
     pub input_file: Option<PathBuf>,
 
-    #[structopt(
-        short = "s",
+    #[clap(
+        short = 's',
         long,
         parse(from_os_str),
         name = "signature path",
@@ -423,9 +456,9 @@ pub struct GpgVerifyCommand {
     )]
     pub signature: PathBuf,
 
-    #[structopt(short = "q", long, help = "Do not print verification error")]
+    #[clap(short = 'q', long, help = "Do not print verification error")]
     pub quiet: bool,
 
-    #[structopt(short = "v", long, help = "Print success message")]
+    #[clap(short = 'v', long, help = "Print success message")]
     pub verbose: bool,
 }

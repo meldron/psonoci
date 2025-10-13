@@ -8,7 +8,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 // use attohttpc::Method;
 use chrono::{DateTime, Utc};
-use clap::arg_enum;
+use clap::ValueEnum;
 use rayon::prelude::*;
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, USER_AGENT};
@@ -65,45 +65,65 @@ impl SecretType {
     }
 }
 
-arg_enum! {
-    #[derive(Debug)]
-    #[allow(non_camel_case_types)]
+#[derive(ValueEnum, Debug, Clone)]
+#[allow(non_camel_case_types)]
+#[clap(rename_all = "kebab-case")]
 pub enum SecretValueType {
     json,
     notes,
     password,
     title,
     url,
+    #[clap(alias = "url_filter")]
     url_filter,
     username,
+    #[clap(alias = "gpg_key_email")]
     gpg_key_email,
+    #[clap(alias = "gpg_key_name")]
     gpg_key_name,
+    #[clap(alias = "gpg_key_private")]
     gpg_key_private,
+    #[clap(alias = "gpg_key_public")]
     gpg_key_public,
+    #[clap(alias = "secret_type")]
     secret_type,
+    #[clap(alias = "env_vars")]
     env_vars,
-        // SSHKey
+    // SSHKey
+    #[clap(alias = "ssh_key_public")]
     ssh_key_public,
+    #[clap(alias = "ssh_key_private")]
     ssh_key_private,
 
     // TOTP
+    #[clap(alias = "totp_period")]
     totp_period,
+    #[clap(alias = "totp_algorithm")]
     totp_algorithm,
+    #[clap(alias = "totp_digits")]
     totp_digits,
+    #[clap(alias = "totp_code")]
     totp_code,
 
     // CreditCard
+    #[clap(alias = "credit_card_number")]
     credit_card_number,
+    #[clap(alias = "credit_card_cvc")]
     credit_card_cvc,
+    #[clap(alias = "credit_card_name")]
     credit_card_name,
+    #[clap(alias = "credit_card_valid_through")]
     credit_card_valid_through,
+    #[clap(alias = "credit_card_pin")]
     credit_card_pin,
 
     // ElsterCertificate
+    #[clap(alias = "elster_certificate_file_content")]
     elster_certificate_file_content,
+    #[clap(alias = "elster_certificate_password")]
     elster_certificate_password,
+    #[clap(alias = "elster_certificate_retrieval_code")]
     elster_certificate_retrieval_code,
-}
 }
 
 impl SecretValueType {

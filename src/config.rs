@@ -8,7 +8,7 @@ use rmp_serde::Deserializer as MessagePackDeserializer;
 use rmp_serde::Serializer as MessagePackSerializer;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
-use structopt::StructOpt;
+use clap::Args;
 use url::Url;
 use uuid::Uuid;
 
@@ -70,12 +70,12 @@ impl ConfigLoader {
     }
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Args, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ConfigV1 {
     // psono server options
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub psono_settings: PsonoSettings,
-    #[structopt(flatten)]
+    #[clap(flatten)]
     #[serde(default)]
     pub http_options: HttpOptions,
 }
@@ -139,9 +139,9 @@ fn default_as_false() -> bool {
     false
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Args, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct HttpOptions {
-    #[structopt(
+    #[clap(
         long,
         env = "PSONO_CI_TIMEOUT",
         default_value = concatcp!(DEFAULT_TIMEOUT),
@@ -149,7 +149,7 @@ pub struct HttpOptions {
     )]
     #[serde(default = "default_timeout")]
     pub timeout: usize,
-    #[structopt(
+    #[clap(
         long,
         env = "PSONO_CI_MAX_REDIRECTS",
         default_value = concatcp!(DEFAULT_MAX_REDIRECTS),
@@ -158,29 +158,29 @@ pub struct HttpOptions {
     pub max_redirects: usize,
 
     // TLS options and flags
-    #[structopt(
+    #[clap(
         long,
         help = "Use native TLS implementation (for linux musl builds a vendored openssl is used)"
     )]
     #[serde(default = "default_as_false")]
     pub use_native_tls: bool,
-    #[structopt(
+    #[clap(
         long,
         help = "DANGER: completely disables all TLS (common name and certificate) verification. You should not use this. A better approach is just using plain http so there's no false sense of security (Psono secrets are still authenticated)"
     )]
     #[serde(default = "default_as_false")]
     pub danger_disable_tls_verification: bool,
-    #[structopt(
+    #[clap(
         long,
         env = "PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH",
-        parse(from_os_str),
+        value_parser,
         help = "Path to a DER encoded root certificate which should be added to the trust store"
     )]
     pub der_root_certificate_path: Option<PathBuf>,
-    #[structopt(
+    #[clap(
         long,
         env = "PSONO_CI_ADD_PEM_ROOT_CERTIFICATE_PATH",
-        parse(from_os_str),
+        value_parser,
         help = "Path to a pem encoded root certificate which should be added to the trust store"
     )]
     pub pem_root_certificate_path: Option<PathBuf>,
@@ -199,7 +199,7 @@ impl Default for HttpOptions {
     }
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Args, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct PsonoSettings {
     pub api_key_id: Uuid,
     #[serde(deserialize_with = "deserialize_secret_key")]

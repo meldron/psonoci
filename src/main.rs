@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use env_vars::run_env_vars_command;
 use run::run_run_command;
-use structopt::StructOpt;
+use clap::Parser;
 
 mod api;
 mod config;
@@ -117,23 +117,23 @@ fn run_config_command(
 }
 
 fn main() -> Result<()> {
-    let opt: Opt = Opt::from_args();
+    let opt: Opt = Opt::parse();
 
     let (config_source, config) = opt.raw_config.into_config()?;
 
     match opt.command {
-        Command::Secret(secret_command) => run_secret_command(config, secret_command)?,
-        Command::ApiKey(api_key_command) => run_inspect_command(config, api_key_command)?,
-        Command::Config(config_command) => {
-            run_config_command(config_source, config, config_command)?
+        Command::Secret { command } => run_secret_command(config, command)?,
+        Command::ApiKey { command } => run_inspect_command(config, command)?,
+        Command::Config { command } => {
+            run_config_command(config_source, config, command)?
         }
-        Command::Run(rc) => run_run_command(config, rc)?,
-        Command::EnvVars(env_command) => run_env_vars_command(env_command, config)?,
-        Command::Totp(tc) => run_totp_command(tc, config)?,
+        Command::Run { run } => run_run_command(config, run)?,
+        Command::EnvVars { command } => run_env_vars_command(command, config)?,
+        Command::Totp { command } => run_totp_command(command, config)?,
         Command::License => print_license(),
-        Command::Gpg(gpg_command) => run_gpg_command(gpg_command, config)?,
+        Command::Gpg { command } => run_gpg_command(command, config)?,
         #[cfg(unix)]
-        Command::Ssh(ssh_command) => run_ssh_command(ssh_command, config)?,
+        Command::Ssh { command } => run_ssh_command(command, config)?,
     }
 
     Ok(())

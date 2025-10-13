@@ -10,7 +10,7 @@ version = "0.5.0"
 anyhow = "1.0"
 bs58 = "0.5"
 chrono = { version = "0.4", features = ["serde"] }
-clap = "2"
+
 const_format = "0.2"
 hex = "0.4.3"
 lazy_static = "1.5"
@@ -26,7 +26,7 @@ reqwest = { version = "0.12", features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
-structopt = "0.3.26"
+
 toml = "0.9"
 totp-rs = { version = "5.7.0", features = ["otpauth"] }
 unicode-segmentation = "1.12"
@@ -34,6 +34,7 @@ url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.18", features = ["serde", "v4"] }
 crypto_secretbox = { version = "0.2.0-pre.0", default-features = true, features = ["salsa20"] }
 russh-keys = { version = "0.49" }
+clap = { version = "3.2", features = ["derive", "env", "wrap_help"] }
 tokio = "1.47"
 futures = "0.3.31"
 pgp = "0.17.0"
