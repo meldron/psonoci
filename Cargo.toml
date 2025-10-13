@@ -8,14 +8,14 @@ version = "0.5.0"
 
 [dependencies]
 anyhow = "1.0"
-bs58 = "0.5.0"
-chrono = { version = "0.4.26", features = ["serde"] }
+bs58 = "0.5"
+chrono = { version = "0.4", features = ["serde"] }
 clap = "2"
 const_format = "0.2"
 hex = "0.4.3"
-lazy_static = "1.4.0"
+lazy_static = "1.5"
 rand = "0.8"
-rayon = "1.7"
+rayon = "1.11"
 rmp = "0.8"
 rmp-serde = "1.1"
 reqwest = { version = "0.12", features = [
@@ -27,14 +27,14 @@ reqwest = { version = "0.12", features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 structopt = "0.3.26"
-toml = "0.8"
-totp-rs = { version = "5.1.0", features = ["otpauth"] }
-unicode-segmentation = "1.10"
-url = { version = "2.4", features = ["serde"] }
-uuid = { version = "1.4", features = ["serde", "v4"] }
-xsalsa20poly1305 = "0.9.1"
+toml = "0.9"
+totp-rs = { version = "5.7.0", features = ["otpauth"] }
+unicode-segmentation = "1.12"
+url = { version = "2.5", features = ["serde"] }
+uuid = { version = "1.18", features = ["serde", "v4"] }
+crypto_secretbox = { version = "0.2.0-pre.0", default-features = true, features = ["salsa20"] }
 russh-keys = { git = "https://github.com/Eugeny/russh.git", rev = "348e522e7462cb0ba8458db948fbbb6097a77109" }
-tokio = "1.40.0"
+tokio = "1.47"
 futures = "0.3.31"
 pgp = "0.14.0"
 

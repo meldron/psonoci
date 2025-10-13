@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use hex::{decode, encode};
 use rand::prelude::*;
-use xsalsa20poly1305::aead::generic_array::{typenum::U24, GenericArray};
-use xsalsa20poly1305::aead::Aead;
-use xsalsa20poly1305::{KeyInit, XSalsa20Poly1305};
+use crypto_secretbox::aead::Aead;
+use crypto_secretbox::{KeyInit, XSalsa20Poly1305};
 
 pub const NONCE_LENGTH: usize = 24;
 pub const SECRET_LENGTH: usize = 32;
@@ -13,13 +12,13 @@ pub trait FromHex: Sized {
     fn from_hex(bs: &str) -> Result<Self>;
 }
 
-pub type Nonce = GenericArray<u8, U24>;
+pub type Nonce = [u8; 24];
 
 impl FromHex for Nonce {
     fn from_hex(bs: &str) -> Result<Nonce> {
         let raw = decode_hex_with_length_check(bs, NONCE_LENGTH)?;
 
-        let nonce = GenericArray::clone_from_slice(&raw);
+        let nonce: Nonce = raw.try_into().unwrap();
 
         Ok(nonce)
     }
@@ -28,10 +27,9 @@ impl FromHex for Nonce {
 impl FromHex for XSalsa20Poly1305 {
     fn from_hex(bs: &str) -> Result<XSalsa20Poly1305> {
         let raw = decode_hex_with_length_check(bs, SECRET_LENGTH)?;
+        let key_array: [u8; SECRET_LENGTH] = raw.try_into().unwrap();
 
-        let key = GenericArray::from_slice(&raw);
-
-        Ok(XSalsa20Poly1305::new(key))
+        Ok(XSalsa20Poly1305::new((&key_array).into()))
     }
 }
 
@@ -75,7 +73,7 @@ pub fn open_secret_box(
     let cipher_message = decode(cipher_message_hex).context("cipher_message hex decode failed")?;
 
     let text = salsa
-        .decrypt(&nonce, cipher_message.as_slice())
+        .decrypt((&nonce).into(), cipher_message.as_slice())
         .map_err(|e| anyhow!(e))
         .context("open_secret_box failed")?;
 
@@ -96,7 +94,7 @@ pub fn seal_secret_box_hex(plaintext: &[u8], nonce_hex: &str, key_hex: &str) -> 
     let nonce = Nonce::from_hex(nonce_hex).context("nonce hex decode failed")?;
 
     let cipher_message = salsa
-        .encrypt(&nonce, plaintext)
+        .encrypt((&nonce).into(), plaintext)
         .map_err(|e| anyhow!(e))
         .context("seal_secret_box_hex failed")?;
 
