@@ -8,9 +8,9 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use pgp::ser::Serialize;
-use pgp::types::PublicKeyTrait;
+use pgp::{types::{Password, KeyDetails}, composed::DetachedSignature};
 use pgp::{
-    packet, ArmorOptions, Deserializable, SignedPublicKey, SignedSecretKey, StandaloneSignature,
+    composed::{ArmorOptions, Deserializable, SignedPublicKey, SignedSecretKey},
 };
 use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
@@ -55,27 +55,23 @@ fn get_signed_secret_key(gpg_key_private_raw: Option<String>) -> Result<SignedSe
 fn create_signature(
     signed_secret_key: &SignedSecretKey,
     input_reader: Box<dyn Read>,
-) -> Result<StandaloneSignature> {
+) -> Result<DetachedSignature> {
     let now = chrono::Utc::now();
     let mut sig_cfg = SignatureConfig::v4(
         SignatureType::Binary,
         PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA2_256,
+        HashAlgorithm::Sha256,
     );
     sig_cfg.hashed_subpackets = vec![
-        Subpacket::regular(SubpacketData::SignatureCreationTime(now)),
-        Subpacket::regular(SubpacketData::Issuer(signed_secret_key.key_id())),
+        Subpacket::regular(SubpacketData::SignatureCreationTime(now))?,
+        Subpacket::regular(SubpacketData::Issuer(signed_secret_key.key_id()))?,
     ];
 
     let signature_packet = sig_cfg
-        .sign(&signed_secret_key, || "".to_string(), input_reader)
+        .sign(&signed_secret_key.primary_key, &Password::from(""), input_reader)
         .context("Signing failed:")?;
 
-    let mut signature_bytes = Vec::with_capacity(1024);
-    packet::write_packet(&mut signature_bytes, &signature_packet)
-        .context("serializing signature failed")?;
-
-    Ok(StandaloneSignature::new(signature_packet))
+    Ok(DetachedSignature::new(signature_packet))
 }
 
 fn get_locked_stdin() -> Box<dyn Read + 'static> {
@@ -100,7 +96,7 @@ where
     Ok(reader)
 }
 
-fn format_signature(signature: StandaloneSignature, armored: bool) -> Result<Vec<u8>> {
+fn format_signature(signature: DetachedSignature, armored: bool) -> Result<Vec<u8>> {
     let formatted_signature = if armored {
         signature
             .to_armored_bytes(ArmorOptions::default())
@@ -145,8 +141,8 @@ fn gpg_sign(
     Ok(())
 }
 
-fn load_signature(signature_reader: Box<dyn Read>) -> Result<StandaloneSignature> {
-    let (signature, _) = StandaloneSignature::from_reader_single(signature_reader)?;
+fn load_signature(signature_reader: Box<dyn Read>) -> Result<DetachedSignature> {
+    let (signature, _) = DetachedSignature::from_reader_single(signature_reader)?;
 
     Ok(signature)
 }
@@ -161,7 +157,7 @@ fn load_input(mut input_reader: Box<dyn Read>) -> Result<Vec<u8>> {
 }
 
 fn format_success_message(
-    signature: &StandaloneSignature,
+    signature: &DetachedSignature,
     signed_public_key: &SignedPublicKey,
 ) -> String {
     let created_at = signature
@@ -497,13 +493,13 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
         let signed_public_key = SignedPublicKey::from_string(&GPG_PUBLIC_KEY)
             .expect("decoding key failed")
             .0;
-        let signature = StandaloneSignature::from_string(&SIGNATURE_RAW)
+        let signature = DetachedSignature::from_string(&SIGNATURE_RAW)
             .expect("decoding signature failed")
             .0;
 
         let success_message = format_success_message(&signature, &signed_public_key);
 
-        assert_eq!(success_message, "Signature made 2024-11-03T21:35:56+01:00\nGood signature from User ID: \"Tester <tester@test.invalid>\"".to_owned())
+        assert_eq!(success_message, "Signature made 2024-11-03T21:35:56+01:00\nGood signature from User ID: \"b\"Tester <tester@test.invalid>\"\"".to_owned())
     }
 
     #[test]

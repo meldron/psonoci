@@ -36,7 +36,7 @@ crypto_secretbox = { version = "0.2.0-pre.0", default-features = true, features 
 russh-keys = { git = "https://github.com/Eugeny/russh.git", rev = "348e522e7462cb0ba8458db948fbbb6097a77109" }
 tokio = "1.47"
 futures = "0.3.31"
-pgp = "0.14.0"
+pgp = "0.17.0"
 
 [dev-dependencies]
 mockall = "0.13.0"
