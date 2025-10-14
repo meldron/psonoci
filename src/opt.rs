@@ -13,11 +13,12 @@ use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
 
 #[derive(Parser, Debug)]
-#[clap(
+#[command(
     name = "psonoci",
     about = "Psono CI Client (https://github.com/meldron/psonoci)",
     author = "Bernd Kaiser",
-    version
+    version,
+    help_template = "{name} {version}\n{author-with-newline}{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}"
 )]
 pub struct Opt {
     #[clap(subcommand)]
@@ -237,7 +238,7 @@ pub enum ConfigCommand {
             help = "Only if overwrite is set, psonoci will replace a config"
         )]
         overwrite: bool,
-        #[clap(required = true, parse(from_os_str), help = "Output path")]
+        #[clap(required = true, help = "Output path")]
         path: PathBuf,
     },
     #[clap(about = "Displays the current config in toml format")]
@@ -260,7 +261,6 @@ pub struct RunCommand {
     )]
     pub filter: Option<Vec<Uuid>>,
     #[clap(
-        parse(from_os_str),
         help = "The command you want to run. It's recommended to prefix it with '--' so additional flags won't be interpreted by psonoci"
     )]
     pub command_values: Vec<OsString>,
@@ -379,7 +379,6 @@ pub struct SshAddCommand {
 
     #[clap(
         long,
-        parse(from_os_str),
         help = "Path of the SSH_AUTH_SOCK (overwrites $SSH_AUTH_SOCK)"
     )]
     pub ssh_auth_sock_path: Option<PathBuf>,
@@ -415,7 +414,6 @@ pub struct GpgSignCommand {
     pub secret_id: Uuid,
 
     #[clap(
-        parse(from_os_str),
         help = "Input file path. If no path is given, reads from stdin"
     )]
     pub input_file: Option<PathBuf>,
@@ -423,7 +421,6 @@ pub struct GpgSignCommand {
     #[clap(
         short = 'o',
         long,
-        parse(from_os_str),
         name = "output path",
         help = "Output file path. If no path is given, writes to stdout"
     )]
@@ -442,7 +439,6 @@ pub struct GpgVerifyCommand {
     pub secret_id: Uuid,
 
     #[clap(
-        parse(from_os_str),
         help = "Input file path. If no path is given, reads from stdin"
     )]
     pub input_file: Option<PathBuf>,
@@ -450,7 +446,6 @@ pub struct GpgVerifyCommand {
     #[clap(
         short = 's',
         long,
-        parse(from_os_str),
         name = "signature path",
         help = "Signature file path"
     )]
