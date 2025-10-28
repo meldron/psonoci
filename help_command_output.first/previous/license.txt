@@ -1,0 +1,9 @@
+psonoci-license 0.5.0
+Prints psonoci's license
+
+USAGE:
+    psonoci --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> license
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information

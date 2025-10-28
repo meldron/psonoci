@@ -1,0 +1,11 @@
+psonoci-totp-get-token 
+Get the current token for a TOTP secret
+
+USAGE:
+    psonoci totp get-token <SECRET_ID>
+
+ARGS:
+    <SECRET_ID>    The uuid of the secret containing the totp data
+
+OPTIONS:
+    -h, --help    Print help information

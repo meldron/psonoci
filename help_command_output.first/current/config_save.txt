@@ -1,0 +1,12 @@
+psonoci-config-save 
+Save psonoci config into a toml file which can be loaded with --config-path
+
+USAGE:
+    psonoci config save [OPTIONS] <PATH>
+
+ARGS:
+    <PATH>    Output path
+
+OPTIONS:
+    -h, --help         Print help information
+    -o, --overwrite    Only if overwrite is set, psonoci will replace a config

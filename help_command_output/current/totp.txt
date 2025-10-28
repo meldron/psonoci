@@ -1,0 +1,12 @@
+TOTP commands
+
+Usage: psonoci totp <COMMAND>
+
+Commands:
+  get-token       Get the current token for a TOTP secret
+  validate-token  Check if a token is currently valid for a TOTP Secret
+  get-url         Get the otpauth url for a TOTP secret
+  help            Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

@@ -1,0 +1,14 @@
+Convenience commands on environment variable secrets
+
+Usage: psonoci env-vars <COMMAND>
+
+Commands:
+  get-or-create     Get or create env var for a specific secret. Will always get the first secret
+                    the first secret with the specified name in the env var list
+  update-or-create  Update or create env var for a specific secret and then returns the value. Will
+                    always update the first secret with the specified name in the env var list. If
+                    no new value is supplied, a random value will be created
+  help              Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

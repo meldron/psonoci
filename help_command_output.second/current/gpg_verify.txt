@@ -1,0 +1,14 @@
+psonoci-gpg-verify 
+
+USAGE:
+    psonoci gpg verify [OPTIONS] --signature <signature path> <SECRET_ID> [INPUT_FILE]
+
+ARGS:
+    <SECRET_ID>     The uuid of the secret containing the gpg private key
+    <INPUT_FILE>    Input file path. If no path is given, reads from stdin
+
+OPTIONS:
+    -h, --help                          Print help information
+    -q, --quiet                         Do not print verification error
+    -s, --signature <signature path>    Signature file path
+    -v, --verbose                       Print success message

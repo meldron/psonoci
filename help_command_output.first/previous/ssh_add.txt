@@ -1,0 +1,20 @@
+psonoci-ssh-add 0.5.0
+
+USAGE:
+    psonoci ssh add [FLAGS] [OPTIONS] <secret-id>
+
+FLAGS:
+    -h, --help                Prints help information
+        --key-confirmation    This constraint requests that the agent require explicit user confirmation for each
+                              private key operation using the key
+    -V, --version             Prints version information
+
+OPTIONS:
+        --key-lifetime <key-lifetime>
+            This constraint requests that the agent limit the key's lifetime by deleting it after the specified duration
+            (in seconds) has elapsed from the time the key was added to the agent
+        --key-passphrase <key-passphrase>            Optional passphrase which was used to encrypt the key
+        --ssh-auth-sock-path <ssh-auth-sock-path>    Path of the SSH_AUTH_SOCK (overwrites $SSH_AUTH_SOCK)
+
+ARGS:
+    <secret-id>    The uuid of the secret containing the ssh key

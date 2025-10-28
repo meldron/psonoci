@@ -1,0 +1,9 @@
+psonoci-config-pack 0.5.0
+Pack psonoci config into base58 encoded MessagePack string which can be used by --config-packed
+
+USAGE:
+    psonoci config pack
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information

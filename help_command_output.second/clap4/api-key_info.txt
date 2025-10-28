@@ -1,0 +1,6 @@
+Prints the meta info of a api-key and lists all its secret ids
+
+Usage: psonoci api-key info
+
+Options:
+  -h, --help  Print help

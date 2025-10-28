@@ -1,0 +1,11 @@
+Get the otpauth url for a TOTP secret
+
+Usage: psonoci totp get-url [OPTIONS] <SECRET_ID>
+
+Arguments:
+  <SECRET_ID>  The uuid of the secret containing the totp data
+
+Options:
+      --issuer <ISSUER>              TOTP issuer for URL
+      --account-name <ACCOUNT_NAME>  TOTP account name for URL
+  -h, --help                         Print help

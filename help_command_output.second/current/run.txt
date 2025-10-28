@@ -1,0 +1,14 @@
+psonoci-run 
+Spawns processes with environment vars from the api-keys secrets
+
+USAGE:
+    psonoci run [OPTIONS] [COMMAND_VALUES]...
+
+ARGS:
+    <COMMAND_VALUES>...    The command you want to run. It's recommended to prefix it with '--'
+                           so additional flags won't be interpreted by psonoci
+
+OPTIONS:
+    -c, --clear-env               Spawn process only with the env vars from the psono datastore
+    -f, --filter <secret_uuid>    Only include env vars from secrets explicitly supplied
+    -h, --help                    Print help information

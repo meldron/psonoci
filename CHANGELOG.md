@@ -1,3 +1,8 @@
+# Unreleased
+
+- Upgrade clap from 3.2 to 4.5
+- Minor help output formatting changes due to clap 4 upgrade
+
 # v0.5.0 (`2024-11-25`)
 
 - Add `gpg` sub command

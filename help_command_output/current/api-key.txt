@@ -1,0 +1,11 @@
+Psono api-key inspect (/api-key-access/inspect/)
+
+Usage: psonoci api-key <COMMAND>
+
+Commands:
+  info     Prints the meta info of a api-key and lists all its secret ids
+  secrets  Prints all secrets of an api-key as JSON
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

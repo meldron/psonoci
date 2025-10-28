@@ -1,0 +1,14 @@
+psonoci-api-key 0.5.0
+Psono api-key inspect (/api-key-access/inspect/)
+
+USAGE:
+    psonoci --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> api-key <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    help       Prints this message or the help of the given subcommand(s)
+    info       Prints the meta info of a api-key and lists all its secret ids
+    secrets    Prints all secrets of an api-key as JSON

@@ -1,0 +1,8 @@
+psonoci-license 
+Prints psonoci's license
+
+USAGE:
+    psonoci license
+
+OPTIONS:
+    -h, --help    Print help information

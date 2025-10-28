@@ -1,0 +1,9 @@
+psonoci-config-show 0.5.0
+Displays the current config in toml format
+
+USAGE:
+    psonoci config show
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information

@@ -1,0 +1,16 @@
+psonoci-gpg-sign 0.5.0
+
+USAGE:
+    psonoci gpg sign [FLAGS] [OPTIONS] <secret-id> [input-file]
+
+FLAGS:
+    -a, --armor      Armor the gpg signature
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -o, --output <output path>    Output file path. If no path is given, writes to stdout
+
+ARGS:
+    <secret-id>     The uuid of the secret containing the gpg private key
+    <input-file>    Input file path. If no path is given, reads from stdin

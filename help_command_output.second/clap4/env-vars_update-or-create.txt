@@ -1,0 +1,22 @@
+Update or create env var for a specific secret and then returns the value. Will always update the
+first secret with the specified name in the env var list. If no new value is supplied, a random
+value will be created
+
+Usage: psonoci env-vars update-or-create [OPTIONS] <SECRET_ID> <ENV_VAR_NAME> [ENV_VAR_VALUE]
+
+Arguments:
+  <SECRET_ID>      The uuid of the secret containing the env var
+  <ENV_VAR_NAME>   The name of the env var
+  [ENV_VAR_VALUE]  The value of the env var. If no value is provided, a random one will be created
+
+Options:
+  -n, --password-length <num_chars>
+          If a password needs to be created use l chars (unicode graphemes).
+          Important: if you are using unicode chars/graphemes with more than one byte per char, the
+          password byte length will be bigger than the num of chars [default: 21]
+  -a, --danger-password-allowed-chars <allowed_password_chars>
+          By default psono uses alphanumeric chars ([a-zA-Z0-9]) for the created passwords.
+          This option overwrites the default charset.
+          IMPORTANT: Make sure to supply enough chars, otherwise the password will be insecure.
+  -h, --help
+          Print help

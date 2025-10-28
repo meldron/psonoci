@@ -1,0 +1,6 @@
+Displays the current config in toml format
+
+Usage: psonoci config show
+
+Options:
+  -h, --help  Print help

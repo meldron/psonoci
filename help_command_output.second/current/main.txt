@@ -1,0 +1,62 @@
+psonoci 0.5.0
+Bernd Kaiser
+Psono CI Client (https://github.com/meldron/psonoci)
+
+USAGE:
+    psonoci [OPTIONS] <SUBCOMMAND>
+
+OPTIONS:
+        --api-key-id <API_KEY_ID>
+            Api key as uuid [env: PSONO_CI_API_KEY_ID=]
+
+        --api-secret-key-hex <API_SECRET_KEY_HEX>
+            Api secret key as 64 byte hex string [env: PSONO_CI_API_SECRET_KEY_HEX=]
+
+    -c, --config-path <config_path>
+            psonoci config path [env: PSONO_CI_CONFIG_PATH=]
+
+        --config-packed <config_packed>
+            psonci config as packed string [env: PSONO_CI_CONFIG_PACKED=]
+
+        --danger-disable-tls-verification
+            DANGER: completely disables all TLS (common name and certificate) verification. You
+            should not use this. A better approach is just using plain http so there's no false
+            sense of security (Psono secrets are still authenticated)
+
+        --der-root-certificate-path <DER_ROOT_CERTIFICATE_PATH>
+            Path to a DER encoded root certificate which should be added to the trust store [env:
+            PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH=]
+
+    -h, --help
+            Print help information
+
+        --max-redirects <MAX_REDIRECTS>
+            Maximum numbers of redirects [env: PSONO_CI_MAX_REDIRECTS=] [default: 0]
+
+        --pem-root-certificate-path <PEM_ROOT_CERTIFICATE_PATH>
+            Path to a pem encoded root certificate which should be added to the trust store [env:
+            PSONO_CI_ADD_PEM_ROOT_CERTIFICATE_PATH=]
+
+        --server-url <SERVER_URL>
+            Url of the psono backend server [env: PSONO_CI_SERVER_URL=]
+
+        --timeout <TIMEOUT>
+            Connection timeout in seconds [env: PSONO_CI_TIMEOUT=] [default: 60]
+
+        --use-native-tls
+            Use native TLS implementation (for linux musl builds a vendored openssl is used)
+
+    -V, --version
+            Print version information
+
+SUBCOMMANDS:
+    api-key     Psono api-key inspect (/api-key-access/inspect/)
+    config      Config commands (create, save, pack,...)
+    env-vars    Convenience commands on environment variable secrets
+    gpg         GPG commands
+    help        Print this message or the help of the given subcommand(s)
+    license     Prints psonoci's license
+    run         Spawns processes with environment vars from the api-keys secrets
+    secret      Psono secret commands (/api-key-access/secret/)
+    ssh         SSH commands
+    totp        TOTP commands

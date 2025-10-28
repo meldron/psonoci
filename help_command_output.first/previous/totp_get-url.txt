@@ -1,0 +1,16 @@
+psonoci-totp-get-url 0.5.0
+Get the otpauth url for a TOTP secret
+
+USAGE:
+    psonoci totp get-url [OPTIONS] <secret-id>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+        --account-name <account-name>    TOTP account name for URL
+        --issuer <issuer>                TOTP issuer for URL
+
+ARGS:
+    <secret-id>    The uuid of the secret containing the totp data

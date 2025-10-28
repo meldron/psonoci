@@ -1,0 +1,10 @@
+Usage: psonoci gpg sign [OPTIONS] <SECRET_ID> [INPUT_FILE]
+
+Arguments:
+  <SECRET_ID>   The uuid of the secret containing the gpg private key
+  [INPUT_FILE]  Input file path. If no path is given, reads from stdin
+
+Options:
+  -o, --output <output path>  Output file path. If no path is given, writes to stdout
+  -a, --armor                 Armor the gpg signature
+  -h, --help                  Print help

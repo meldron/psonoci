@@ -1,0 +1,12 @@
+psonoci-totp-validate-token 
+Check if a token is currently valid for a TOTP Secret
+
+USAGE:
+    psonoci totp validate-token <SECRET_ID> <TOKEN>
+
+ARGS:
+    <SECRET_ID>    The uuid of the secret containing the totp data
+    <TOKEN>        The token to validate
+
+OPTIONS:
+    -h, --help    Print help information

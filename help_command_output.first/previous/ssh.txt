@@ -1,0 +1,13 @@
+psonoci-ssh 0.5.0
+SSH commands
+
+USAGE:
+    psonoci --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> ssh <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    add     
+    help    Prints this message or the help of the given subcommand(s)
