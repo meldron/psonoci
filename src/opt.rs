@@ -377,10 +377,7 @@ pub struct SshAddCommand {
     )]
     pub secret_id: Uuid,
 
-    #[clap(
-        long,
-        help = "Path of the SSH_AUTH_SOCK (overwrites $SSH_AUTH_SOCK)"
-    )]
+    #[clap(long, help = "Path of the SSH_AUTH_SOCK (overwrites $SSH_AUTH_SOCK)")]
     pub ssh_auth_sock_path: Option<PathBuf>,
 
     #[clap(long, help = "Optional passphrase which was used to encrypt the key")]
@@ -413,9 +410,7 @@ pub struct GpgSignCommand {
     )]
     pub secret_id: Uuid,
 
-    #[clap(
-        help = "Input file path. If no path is given, reads from stdin"
-    )]
+    #[clap(help = "Input file path. If no path is given, reads from stdin")]
     pub input_file: Option<PathBuf>,
 
     #[clap(
@@ -438,9 +433,7 @@ pub struct GpgVerifyCommand {
     )]
     pub secret_id: Uuid,
 
-    #[clap(
-        help = "Input file path. If no path is given, reads from stdin"
-    )]
+    #[clap(help = "Input file path. If no path is given, reads from stdin")]
     pub input_file: Option<PathBuf>,
 
     #[clap(
