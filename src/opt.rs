@@ -12,7 +12,7 @@ use crate::api::{parse_url, SecretValueType};
 use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 #[command(
     name = "psonoci",
     about = "Psono CI Client (https://github.com/meldron/psonoci)",
@@ -27,7 +27,7 @@ pub struct Opt {
     pub raw_config: RawConfig,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 pub struct RawConfig {
     // psono server options
     #[clap(flatten)]
@@ -112,7 +112,7 @@ impl RawConfig {
     }
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 pub struct RawPsonoSettings {
     #[clap(
         long,
@@ -139,7 +139,7 @@ pub struct RawPsonoSettings {
     pub server_url: Option<Url>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum Command {
     #[clap(about = "Psono secret commands (/api-key-access/secret/)")]
     Secret {
@@ -186,7 +186,7 @@ pub enum Command {
     License,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum SecretCommand {
     #[clap(about = "Get a psono secret")]
     Get {
@@ -216,7 +216,7 @@ pub enum SecretCommand {
     },
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum ApiKeyCommand {
     #[clap(about = "Prints the meta info of a api-key and lists all its secret ids")]
     Info,
@@ -224,7 +224,7 @@ pub enum ApiKeyCommand {
     Secrets,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum ConfigCommand {
     #[clap(
         about = "Pack psonoci config into base58 encoded MessagePack string which can be used by --config-packed"
@@ -245,7 +245,7 @@ pub enum ConfigCommand {
     Show,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 pub struct RunCommand {
     #[clap(
         short,
@@ -266,7 +266,7 @@ pub struct RunCommand {
     pub command_values: Vec<OsString>,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 pub struct PasswordCreationSettings {
     #[clap(
         short = 'n',
@@ -294,7 +294,7 @@ impl Default for PasswordCreationSettings {
     }
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum EnvVarsCommand {
     #[clap(
         about = "Get or create env var for a specific secret. Will always get the first secret the first secret with the specified name in the env var list"
@@ -330,7 +330,7 @@ pub enum EnvVarsCommand {
     },
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum TotpCommand {
     #[clap(about = "Get the current token for a TOTP secret")]
     GetToken {
@@ -364,12 +364,12 @@ pub enum TotpCommand {
     },
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum SshCommand {
     Add(SshAddCommand),
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 pub struct SshAddCommand {
     #[clap(
         required = true,
@@ -396,13 +396,13 @@ pub struct SshAddCommand {
     pub key_confirmation: bool,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize)]
 pub enum GpgCommand {
     Sign(GpgSignCommand),
     Verify(GpgVerifyCommand),
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 pub struct GpgSignCommand {
     #[clap(
         required = true,
@@ -425,7 +425,7 @@ pub struct GpgSignCommand {
     pub armor: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize)]
 pub struct GpgVerifyCommand {
     #[clap(
         required = true,

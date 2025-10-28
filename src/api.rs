@@ -65,7 +65,7 @@ impl SecretType {
     }
 }
 
-#[derive(ValueEnum, Debug, Clone)]
+#[derive(ValueEnum, Debug, Clone, Serialize)]
 #[allow(non_camel_case_types)]
 #[clap(rename_all = "kebab-case")]
 pub enum SecretValueType {

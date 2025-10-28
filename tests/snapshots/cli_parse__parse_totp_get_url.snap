@@ -1,0 +1,12 @@
+---
+source: tests/cli_parse.rs
+expression: "OptView::from(&opt)"
+---
+{
+  "command": {
+    "command": "totp"
+  },
+  "api_key_id": "00000000-0000-0000-0000-000000000000",
+  "api_secret_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+  "server_url": "https://psono.pw/server"
+}
