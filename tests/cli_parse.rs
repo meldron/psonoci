@@ -1,145 +1,7 @@
-use clap::{Parser, ValueEnum};
-use serde::Serialize;
-use uuid::Uuid;
+use clap::Parser;
 
-// Import the library crate to access Opt and enums
-use psonoci::api::SecretValueType;
-use psonoci::opt::{ApiKeyCommand, Command, Opt, SecretCommand};
-
-#[derive(Serialize)]
-struct CommandView {
-    command: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    subcommand: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    secret_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    secret_value_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    secret_new_value: Option<String>,
-}
-
-fn svt_kebab(s: &SecretValueType) -> String {
-    s.to_possible_value()
-        .map(|pv| pv.get_name().to_string())
-        .unwrap_or_else(|| s.as_str().to_string())
-}
-
-impl From<&Command> for CommandView {
-    fn from(c: &Command) -> Self {
-        match c {
-            Command::Secret { command } => match command {
-                SecretCommand::Get {
-                    secret_id,
-                    secret_value_type,
-                } => CommandView {
-                    command: "secret",
-                    subcommand: Some("get"),
-                    secret_id: Some(secret_id.to_string()),
-                    secret_value_type: Some(svt_kebab(secret_value_type)),
-                    secret_new_value: None,
-                },
-                SecretCommand::Set {
-                    secret_id,
-                    secret_value_type,
-                    secret_new_value,
-                } => CommandView {
-                    command: "secret",
-                    subcommand: Some("set"),
-                    secret_id: Some(secret_id.to_string()),
-                    secret_value_type: Some(svt_kebab(secret_value_type)),
-                    secret_new_value: Some(secret_new_value.clone()),
-                },
-            },
-            Command::ApiKey { command } => match command {
-                ApiKeyCommand::Info => CommandView {
-                    command: "api-key",
-                    subcommand: Some("info"),
-                    secret_id: None,
-                    secret_value_type: None,
-                    secret_new_value: None,
-                },
-                ApiKeyCommand::Secrets => CommandView {
-                    command: "api-key",
-                    subcommand: Some("secrets"),
-                    secret_id: None,
-                    secret_value_type: None,
-                    secret_new_value: None,
-                },
-            },
-            Command::Config { .. } => CommandView {
-                command: "config",
-                subcommand: None,
-                secret_id: None,
-                secret_value_type: None,
-                secret_new_value: None,
-            },
-            Command::Run { .. } => CommandView {
-                command: "run",
-                subcommand: None,
-                secret_id: None,
-                secret_value_type: None,
-                secret_new_value: None,
-            },
-            Command::EnvVars { .. } => CommandView {
-                command: "env-vars",
-                subcommand: None,
-                secret_id: None,
-                secret_value_type: None,
-                secret_new_value: None,
-            },
-            Command::Totp { .. } => CommandView {
-                command: "totp",
-                subcommand: None,
-                secret_id: None,
-                secret_value_type: None,
-                secret_new_value: None,
-            },
-            #[cfg(unix)]
-            Command::Ssh { .. } => CommandView {
-                command: "ssh",
-                subcommand: None,
-                secret_id: None,
-                secret_value_type: None,
-                secret_new_value: None,
-            },
-            Command::Gpg { .. } => CommandView {
-                command: "gpg",
-                subcommand: None,
-                secret_id: None,
-                secret_value_type: None,
-                secret_new_value: None,
-            },
-            Command::License => CommandView {
-                command: "license",
-                subcommand: None,
-                secret_id: None,
-                secret_value_type: None,
-                secret_new_value: None,
-            },
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct OptView<'a> {
-    command: CommandView,
-    api_key_id: Option<String>,
-    api_secret_key_hex: Option<&'a str>,
-    server_url: Option<String>,
-}
-
-impl<'a> From<&'a Opt> for OptView<'a> {
-    fn from(o: &'a Opt) -> Self {
-        let ps = &o.raw_config.psono_settings;
-        Self {
-            command: CommandView::from(&o.command),
-            api_key_id: ps.api_key_id.as_ref().map(Uuid::to_string),
-            api_secret_key_hex: ps.api_secret_key_hex.as_deref(),
-            server_url: ps.server_url.as_ref().map(|u| u.to_string()),
-        }
-    }
-}
+// Import library crate to access Opt and enums
+use psonoci::opt::Opt;
 
 fn clear_env() {
     // Ensure clap env readers don't influence parsing
@@ -157,6 +19,140 @@ fn clear_env() {
         std::env::remove_var(k);
     }
 }
+
+fn test_secret_value_type(value_type: &str, snapshot_name: &str) {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "secret",
+        "get",
+        "11111111-1111-1111-1111-111111111111",
+        value_type,
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(snapshot_name, &opt);
+}
+
+// Helper function for secret set value type tests to enable IntelliSense support
+fn test_secret_set_value_type(value_type: &str, snapshot_name: &str) {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "secret",
+        "set",
+        "11111111-1111-1111-1111-111111111111",
+        value_type,
+        "new-value",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(snapshot_name, &opt);
+}
+
+// Simplified macro that generates thin test wrappers calling the helper function
+macro_rules! secret_value_type_test {
+    ($test_name:ident, $value_type:expr) => {
+        #[test]
+        fn $test_name() {
+            test_secret_value_type($value_type, stringify!($test_name));
+        }
+    };
+}
+
+// Macro for secret set value type tests to generate thin test wrappers calling the helper function
+macro_rules! secret_set_value_type_test {
+    ($test_name:ident, $value_type:expr) => {
+        #[test]
+        fn $test_name() {
+            test_secret_set_value_type($value_type, stringify!($test_name));
+        }
+    };
+}
+
+secret_value_type_test!(parse_secret_get_password, "password");
+secret_value_type_test!(parse_secret_get_username, "username");
+secret_value_type_test!(parse_secret_get_notes, "notes");
+secret_value_type_test!(parse_secret_get_url, "url");
+secret_value_type_test!(parse_secret_get_title, "title");
+secret_value_type_test!(parse_secret_get_secret_type, "secret_type");
+secret_value_type_test!(parse_secret_get_env_vars, "env_vars");
+secret_value_type_test!(parse_secret_get_totp_period, "totp_period");
+secret_value_type_test!(parse_secret_get_totp_algorithm, "totp_algorithm");
+secret_value_type_test!(parse_secret_get_totp_digits, "totp_digits");
+secret_value_type_test!(parse_secret_get_totp_code, "totp_code");
+secret_value_type_test!(parse_secret_get_ssh_key_public, "ssh_key_public");
+secret_value_type_test!(parse_secret_get_ssh_key_private, "ssh_key_private");
+secret_value_type_test!(parse_secret_get_gpg_key_email, "gpg_key_email");
+secret_value_type_test!(parse_secret_get_gpg_key_name, "gpg_key_name");
+secret_value_type_test!(parse_secret_get_gpg_key_private, "gpg_key_private");
+secret_value_type_test!(parse_secret_get_gpg_key_public, "gpg_key_public");
+secret_value_type_test!(parse_secret_get_credit_card_number, "credit_card_number");
+secret_value_type_test!(parse_secret_get_credit_card_cvc, "credit_card_cvc");
+secret_value_type_test!(parse_secret_get_credit_card_name, "credit_card_name");
+secret_value_type_test!(
+    parse_secret_get_credit_card_valid_through,
+    "credit_card_valid_through"
+);
+secret_value_type_test!(parse_secret_get_credit_card_pin, "credit_card_pin");
+secret_value_type_test!(
+    parse_secret_get_elster_certificate_file_content,
+    "elster_certificate_file_content"
+);
+secret_value_type_test!(
+    parse_secret_get_elster_certificate_password,
+    "elster_certificate_password"
+);
+secret_value_type_test!(
+    parse_secret_get_elster_certificate_retrieval_code,
+    "elster_certificate_retrieval_code"
+);
+secret_value_type_test!(parse_secret_get_json, "json");
+
+// Secret set tests for all value types to ensure comprehensive coverage
+secret_set_value_type_test!(parse_secret_set_json, "json");
+secret_set_value_type_test!(parse_secret_set_notes, "notes");
+secret_set_value_type_test!(parse_secret_set_password, "password");
+secret_set_value_type_test!(parse_secret_set_title, "title");
+secret_set_value_type_test!(parse_secret_set_url, "url");
+secret_set_value_type_test!(parse_secret_set_url_filter, "url_filter");
+secret_set_value_type_test!(parse_secret_set_username, "username");
+secret_set_value_type_test!(parse_secret_set_gpg_key_email, "gpg_key_email");
+secret_set_value_type_test!(parse_secret_set_gpg_key_name, "gpg_key_name");
+secret_set_value_type_test!(parse_secret_set_gpg_key_private, "gpg_key_private");
+secret_set_value_type_test!(parse_secret_set_gpg_key_public, "gpg_key_public");
+secret_set_value_type_test!(parse_secret_set_secret_type, "secret_type");
+secret_set_value_type_test!(parse_secret_set_env_vars, "env_vars");
+secret_set_value_type_test!(parse_secret_set_ssh_key_public, "ssh_key_public");
+secret_set_value_type_test!(parse_secret_set_ssh_key_private, "ssh_key_private");
+secret_set_value_type_test!(parse_secret_set_totp_period, "totp_period");
+secret_set_value_type_test!(parse_secret_set_totp_algorithm, "totp_algorithm");
+secret_set_value_type_test!(parse_secret_set_totp_digits, "totp_digits");
+secret_set_value_type_test!(parse_secret_set_totp_code, "totp_code");
+secret_set_value_type_test!(parse_secret_set_credit_card_number, "credit_card_number");
+secret_set_value_type_test!(parse_secret_set_credit_card_cvc, "credit_card_cvc");
+secret_set_value_type_test!(parse_secret_set_credit_card_name, "credit_card_name");
+secret_set_value_type_test!(parse_secret_set_credit_card_valid_through, "credit_card_valid_through");
+secret_set_value_type_test!(parse_secret_set_credit_card_pin, "credit_card_pin");
+secret_set_value_type_test!(parse_secret_set_elster_certificate_file_content, "elster_certificate_file_content");
+secret_set_value_type_test!(parse_secret_set_elster_certificate_password, "elster_certificate_password");
+secret_set_value_type_test!(parse_secret_set_elster_certificate_retrieval_code, "elster_certificate_retrieval_code");
 
 #[test]
 fn parse_secret_set_accepts_legacy_snake_case() {
@@ -180,7 +176,7 @@ fn parse_secret_set_accepts_legacy_snake_case() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -205,7 +201,50 @@ fn parse_secret_set_kebab_case() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
+}
+
+// Individual tests for API key commands to ensure deterministic snapshot naming
+#[test]
+fn parse_api_key_commands_info() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "api-key",
+        "info",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_api_key_commands_secrets() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "api-key",
+        "secrets",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -226,7 +265,7 @@ fn parse_api_key_info() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -247,7 +286,95 @@ fn parse_api_key_secrets() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
+}
+
+// Individual tests for config commands to ensure deterministic snapshot naming
+#[test]
+fn parse_config_commands_pack() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "config",
+        "pack",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_config_commands_save_with_overwrite() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "config",
+        "save",
+        "--overwrite",
+        "/path/to/config.toml",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_config_commands_save_no_overwrite() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "config",
+        "save",
+        "/path/to/config.toml",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_config_commands_show() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "config",
+        "show",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -268,7 +395,7 @@ fn parse_config_pack() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -291,7 +418,7 @@ fn parse_config_save() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -312,7 +439,7 @@ fn parse_config_show() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -338,7 +465,110 @@ fn parse_run() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
+}
+
+// Individual tests for env-vars commands to ensure deterministic snapshot naming
+#[test]
+fn parse_env_vars_commands_get_or_create_with_options() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "env-vars",
+        "get-or-create",
+        "11111111-1111-1111-1111-111111111111",
+        "MY_VAR",
+        "--danger-password-allowed-chars",
+        "ABC123",
+        "--password-length",
+        "12",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_env_vars_commands_update_or_create_with_options() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "env-vars",
+        "update-or-create",
+        "11111111-1111-1111-1111-111111111111",
+        "MY_VAR",
+        "--danger-password-allowed-chars",
+        "xyz789",
+        "--password-length",
+        "8",
+        "new_value",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_env_vars_commands_get_or_create_minimal() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "env-vars",
+        "get-or-create",
+        "11111111-1111-1111-1111-111111111111",
+        "MY_VAR",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_env_vars_commands_update_or_create_minimal() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "env-vars",
+        "update-or-create",
+        "11111111-1111-1111-1111-111111111111",
+        "MY_VAR",
+        "new_value",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -363,7 +593,7 @@ fn parse_env_vars_get_or_create() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -387,7 +617,80 @@ fn parse_env_vars_update_or_create() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
+}
+
+// Parameterized tests for TOTP commands
+// Individual tests for TOTP commands to ensure deterministic snapshot naming
+#[test]
+fn parse_totp_commands_get_token() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "totp",
+        "get-token",
+        "11111111-1111-1111-1111-111111111111",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_totp_commands_validate_token() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "totp",
+        "validate-token",
+        "11111111-1111-1111-1111-111111111111",
+        "123456",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_totp_commands_get_url() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "totp",
+        "get-url",
+        "11111111-1111-1111-1111-111111111111",
+        "--issuer",
+        "MyApp",
+        "--account-name",
+        "user@example.com",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -409,7 +712,7 @@ fn parse_totp_get_token() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -432,7 +735,7 @@ fn parse_totp_validate_token() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -458,7 +761,7 @@ fn parse_totp_get_url() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -482,7 +785,7 @@ fn parse_ssh_add() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -507,7 +810,7 @@ fn parse_gpg_sign() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -532,7 +835,7 @@ fn parse_gpg_verify() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -552,7 +855,7 @@ fn parse_license() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
@@ -575,7 +878,7 @@ fn parse_secret_get() {
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
-    insta::assert_json_snapshot!(OptView::from(&opt));
+    insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
