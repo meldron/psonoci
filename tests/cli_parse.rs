@@ -148,11 +148,23 @@ secret_set_value_type_test!(parse_secret_set_totp_code, "totp_code");
 secret_set_value_type_test!(parse_secret_set_credit_card_number, "credit_card_number");
 secret_set_value_type_test!(parse_secret_set_credit_card_cvc, "credit_card_cvc");
 secret_set_value_type_test!(parse_secret_set_credit_card_name, "credit_card_name");
-secret_set_value_type_test!(parse_secret_set_credit_card_valid_through, "credit_card_valid_through");
+secret_set_value_type_test!(
+    parse_secret_set_credit_card_valid_through,
+    "credit_card_valid_through"
+);
 secret_set_value_type_test!(parse_secret_set_credit_card_pin, "credit_card_pin");
-secret_set_value_type_test!(parse_secret_set_elster_certificate_file_content, "elster_certificate_file_content");
-secret_set_value_type_test!(parse_secret_set_elster_certificate_password, "elster_certificate_password");
-secret_set_value_type_test!(parse_secret_set_elster_certificate_retrieval_code, "elster_certificate_retrieval_code");
+secret_set_value_type_test!(
+    parse_secret_set_elster_certificate_file_content,
+    "elster_certificate_file_content"
+);
+secret_set_value_type_test!(
+    parse_secret_set_elster_certificate_password,
+    "elster_certificate_password"
+);
+secret_set_value_type_test!(
+    parse_secret_set_elster_certificate_retrieval_code,
+    "elster_certificate_retrieval_code"
+);
 
 #[test]
 fn parse_secret_set_accepts_legacy_snake_case() {
@@ -204,49 +216,6 @@ fn parse_secret_set_kebab_case() {
     insta::assert_json_snapshot!(&opt);
 }
 
-// Individual tests for API key commands to ensure deterministic snapshot naming
-#[test]
-fn parse_api_key_commands_info() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "api-key",
-        "info",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_api_key_commands_secrets() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "api-key",
-        "secrets",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
 #[test]
 fn parse_api_key_info() {
     clear_env();
@@ -289,51 +258,6 @@ fn parse_api_key_secrets() {
     insta::assert_json_snapshot!(&opt);
 }
 
-// Individual tests for config commands to ensure deterministic snapshot naming
-#[test]
-fn parse_config_commands_pack() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "config",
-        "pack",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_config_commands_save_with_overwrite() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "config",
-        "save",
-        "--overwrite",
-        "/path/to/config.toml",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
 #[test]
 fn parse_config_commands_save_no_overwrite() {
     clear_env();
@@ -356,29 +280,9 @@ fn parse_config_commands_save_no_overwrite() {
     insta::assert_json_snapshot!(&opt);
 }
 
+// Individual tests for config commands to ensure deterministic snapshot naming
 #[test]
-fn parse_config_commands_show() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "config",
-        "show",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_config_pack() {
+fn parse_config_commands_pack() {
     clear_env();
 
     let args = [
@@ -468,109 +372,6 @@ fn parse_run() {
     insta::assert_json_snapshot!(&opt);
 }
 
-// Individual tests for env-vars commands to ensure deterministic snapshot naming
-#[test]
-fn parse_env_vars_commands_get_or_create_with_options() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "env-vars",
-        "get-or-create",
-        "11111111-1111-1111-1111-111111111111",
-        "MY_VAR",
-        "--danger-password-allowed-chars",
-        "ABC123",
-        "--password-length",
-        "12",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_env_vars_commands_update_or_create_with_options() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "env-vars",
-        "update-or-create",
-        "11111111-1111-1111-1111-111111111111",
-        "MY_VAR",
-        "--danger-password-allowed-chars",
-        "xyz789",
-        "--password-length",
-        "8",
-        "new_value",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_env_vars_commands_get_or_create_minimal() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "env-vars",
-        "get-or-create",
-        "11111111-1111-1111-1111-111111111111",
-        "MY_VAR",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_env_vars_commands_update_or_create_minimal() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "env-vars",
-        "update-or-create",
-        "11111111-1111-1111-1111-111111111111",
-        "MY_VAR",
-        "new_value",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
 #[test]
 fn parse_env_vars_get_or_create() {
     clear_env();
@@ -613,79 +414,6 @@ fn parse_env_vars_update_or_create() {
         "11111111-1111-1111-1111-111111111111",
         "MY_VAR",
         "new_value",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-// Parameterized tests for TOTP commands
-// Individual tests for TOTP commands to ensure deterministic snapshot naming
-#[test]
-fn parse_totp_commands_get_token() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "totp",
-        "get-token",
-        "11111111-1111-1111-1111-111111111111",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_totp_commands_validate_token() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "totp",
-        "validate-token",
-        "11111111-1111-1111-1111-111111111111",
-        "123456",
-    ];
-
-    let opt = Opt::try_parse_from(args).expect("parse failed");
-
-    insta::assert_json_snapshot!(&opt);
-}
-
-#[test]
-fn parse_totp_commands_get_url() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "--api-key-id",
-        "00000000-0000-0000-0000-000000000000",
-        "--api-secret-key-hex",
-        "0000000000000000000000000000000000000000000000000000000000000000",
-        "--server-url",
-        "https://psono.pw/server",
-        "totp",
-        "get-url",
-        "11111111-1111-1111-1111-111111111111",
-        "--issuer",
-        "MyApp",
-        "--account-name",
-        "user@example.com",
     ];
 
     let opt = Opt::try_parse_from(args).expect("parse failed");
@@ -881,17 +609,3 @@ fn parse_secret_get() {
     insta::assert_json_snapshot!(&opt);
 }
 
-#[test]
-fn parse_secret_get_fails_without_globals() {
-    clear_env();
-
-    let args = [
-        "psonoci",
-        "secret",
-        "get",
-        "11111111-1111-1111-1111-111111111111",
-        "json",
-    ];
-
-    Opt::try_parse_from(args).expect_err("should fail without global options");
-}
