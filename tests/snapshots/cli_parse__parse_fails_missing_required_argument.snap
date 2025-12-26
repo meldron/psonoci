@@ -1,0 +1,11 @@
+---
+source: tests/cli_parse.rs
+expression: error
+---
+error: the following required arguments were not provided:
+  <SECRET_ID>
+  <SECRET_VALUE_TYPE>
+
+Usage: psonoci secret get <SECRET_ID> <SECRET_VALUE_TYPE>
+
+For more information, try '--help'.

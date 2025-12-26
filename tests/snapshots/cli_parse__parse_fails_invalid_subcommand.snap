@@ -1,0 +1,9 @@
+---
+source: tests/cli_parse.rs
+expression: error
+---
+error: unrecognized subcommand 'invalid-command'
+
+Usage: psonoci [OPTIONS] <COMMAND>
+
+For more information, try '--help'.

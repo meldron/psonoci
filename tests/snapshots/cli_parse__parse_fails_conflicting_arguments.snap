@@ -1,0 +1,9 @@
+---
+source: tests/cli_parse.rs
+expression: error
+---
+error: the argument '--overwrite' cannot be used multiple times
+
+Usage: psonoci config save [OPTIONS] <PATH>
+
+For more information, try '--help'.

@@ -1,0 +1,7 @@
+---
+source: tests/cli_parse.rs
+expression: error
+---
+error: invalid value 'invalid-uuid-format' for '--api-key-id <API_KEY_ID>': invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1
+
+For more information, try '--help'.

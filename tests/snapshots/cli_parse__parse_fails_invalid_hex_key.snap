@@ -1,0 +1,7 @@
+---
+source: tests/cli_parse.rs
+expression: error
+---
+error: invalid value 'invalid-hex-format' for '--api-secret-key-hex <API_SECRET_KEY_HEX>': Invalid key length (18). Key must be supplied as 64 byte hex string.
+
+For more information, try '--help'.

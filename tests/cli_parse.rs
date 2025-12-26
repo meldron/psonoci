@@ -609,3 +609,162 @@ fn parse_secret_get() {
     insta::assert_json_snapshot!(&opt);
 }
 
+#[test]
+fn parse_secret_get_fails_without_globals() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "secret",
+        "get",
+        "11111111-1111-1111-1111-111111111111",
+        "json",
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail without global options");
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_invalid_subcommand() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "invalid-command",
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail with invalid subcommand");
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_missing_required_argument() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "secret",
+        "get",
+        // Missing secret_id argument
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail missing required argument");
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_invalid_value_type() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "secret",
+        "get",
+        "11111111-1111-1111-1111-111111111111",
+        "invalid-type",
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail with invalid value type");
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_invalid_api_key_format() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "invalid-uuid-format",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "api-key",
+        "info",
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail with invalid API key format");
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_missing_server_url() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        // Missing --server-url
+        "api-key",
+        "info",
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail missing server URL");
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_invalid_hex_key() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "invalid-hex-format",
+        "--server-url",
+        "https://psono.pw/server",
+        "api-key",
+        "info",
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail with invalid hex key");
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_conflicting_arguments() {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "config",
+        "save",
+        "--overwrite",
+        "/path/to/config.toml",
+        "--overwrite", // Duplicate flag
+    ];
+
+    let error = Opt::try_parse_from(args).expect_err("should fail with conflicting arguments");
+    insta::assert_snapshot!(error.to_string());
+}
