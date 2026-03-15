@@ -247,7 +247,10 @@ mod tests {
     use mockall::predicate::eq;
     use std::env;
     use std::io::{BufReader, Cursor};
+    use std::sync::{LazyLock, Mutex};
     use tempfile::NamedTempFile;
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     lazy_static! {
         static ref GPG_PRIVATE_KEY: String = r#"-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -493,7 +496,8 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
 
     #[test]
     fn format_success_message__format() {
-        env::set_var("TZ", "Europe/Berlin");
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        unsafe { env::set_var("TZ", "Europe/Berlin") };
 
         let signed_public_key = SignedPublicKey::from_string(&GPG_PUBLIC_KEY)
             .expect("decoding key failed")

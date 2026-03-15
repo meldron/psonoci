@@ -1,10 +1,14 @@
 use clap::Parser;
+use std::sync::{LazyLock, Mutex};
 
 // Import library crate to access Opt and enums
 use psonoci::opt::Opt;
 
-fn clear_env() {
-    // Ensure clap env readers don't influence parsing
+static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+fn with_cleared_env<T>(f: impl FnOnce() -> T) -> T {
+    let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+
     for k in [
         "PSONO_CI_API_KEY_ID",
         "PSONO_CI_API_SECRET_KEY_HEX",
@@ -16,13 +20,23 @@ fn clear_env() {
         "PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH",
         "PSONO_CI_ADD_PEM_ROOT_CERTIFICATE_PATH",
     ] {
-        std::env::remove_var(k);
+        unsafe { std::env::remove_var(k) };
     }
+
+    f()
+}
+
+fn parse_opt(args: impl IntoIterator<Item = impl Into<std::ffi::OsString> + Clone>) -> Opt {
+    with_cleared_env(|| Opt::try_parse_from(args).expect("parse failed"))
+}
+
+fn parse_opt_error(
+    args: impl IntoIterator<Item = impl Into<std::ffi::OsString> + Clone>,
+) -> clap::Error {
+    with_cleared_env(|| Opt::try_parse_from(args).expect_err("expected parse failure"))
 }
 
 fn test_secret_value_type(value_type: &str, snapshot_name: &str) {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -37,14 +51,12 @@ fn test_secret_value_type(value_type: &str, snapshot_name: &str) {
         value_type,
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(snapshot_name, &opt);
 }
 
 fn parse_secret_value_type(value_type: &str) -> serde_json::Value {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -59,15 +71,13 @@ fn parse_secret_value_type(value_type: &str) -> serde_json::Value {
         value_type,
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     serde_json::to_value(&opt).expect("serialization failed")
 }
 
 // Helper function for secret set value type tests to enable IntelliSense support
 fn test_secret_set_value_type(value_type: &str, snapshot_name: &str) {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -83,14 +93,12 @@ fn test_secret_set_value_type(value_type: &str, snapshot_name: &str) {
         "new-value",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(snapshot_name, &opt);
 }
 
 fn parse_secret_set_value_type(value_type: &str) -> serde_json::Value {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -106,14 +114,14 @@ fn parse_secret_set_value_type(value_type: &str) -> serde_json::Value {
         "new-value",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     serde_json::to_value(&opt).expect("serialization failed")
 }
 
 // Simplified macro that generates thin test wrappers calling the helper function
 macro_rules! secret_value_type_test {
-    ($test_name:ident, $value_type:expr) => {
+    ($test_name:ident, $value_type:literal) => {
         #[test]
         fn $test_name() {
             test_secret_value_type($value_type, stringify!($test_name));
@@ -123,7 +131,7 @@ macro_rules! secret_value_type_test {
 
 // Macro for secret set value type tests to generate thin test wrappers calling the helper function
 macro_rules! secret_set_value_type_test {
-    ($test_name:ident, $value_type:expr) => {
+    ($test_name:ident, $value_type:literal) => {
         #[test]
         fn $test_name() {
             test_secret_set_value_type($value_type, stringify!($test_name));
@@ -254,8 +262,6 @@ secret_set_value_type_test!(
 
 #[test]
 fn parse_secret_set_accepts_legacy_snake_case() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -272,15 +278,13 @@ fn parse_secret_set_accepts_legacy_snake_case() {
         "new-value",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_secret_set_kebab_case() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -297,7 +301,7 @@ fn parse_secret_set_kebab_case() {
         "new-value",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
@@ -345,8 +349,6 @@ fn parse_secret_set_accepts_snake_case_and_kebab_case_for_all_multi_word_value_t
 
 #[test]
 fn parse_api_key_info() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -359,15 +361,13 @@ fn parse_api_key_info() {
         "info",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_api_key_secrets() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -380,15 +380,13 @@ fn parse_api_key_secrets() {
         "secrets",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_config_commands_save_no_overwrite() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -402,7 +400,7 @@ fn parse_config_commands_save_no_overwrite() {
         "/path/to/config.toml",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
@@ -410,8 +408,6 @@ fn parse_config_commands_save_no_overwrite() {
 // Individual tests for config commands to ensure deterministic snapshot naming
 #[test]
 fn parse_config_commands_pack() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -424,15 +420,13 @@ fn parse_config_commands_pack() {
         "pack",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_config_save() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -447,15 +441,13 @@ fn parse_config_save() {
         "/path/to/config.toml",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_config_show() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -468,15 +460,13 @@ fn parse_config_show() {
         "show",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_run() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -494,15 +484,13 @@ fn parse_run() {
         "hello",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_env_vars_get_or_create() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -519,15 +507,13 @@ fn parse_env_vars_get_or_create() {
         "16",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_env_vars_update_or_create() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -543,15 +529,13 @@ fn parse_env_vars_update_or_create() {
         "new_value",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_totp_get_token() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -565,15 +549,13 @@ fn parse_totp_get_token() {
         "11111111-1111-1111-1111-111111111111",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_totp_validate_token() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -588,15 +570,13 @@ fn parse_totp_validate_token() {
         "123456",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_totp_get_url() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -614,15 +594,13 @@ fn parse_totp_get_url() {
         "user@example.com",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_ssh_add() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -638,15 +616,13 @@ fn parse_ssh_add() {
         "3600",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_gpg_sign() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -663,15 +639,13 @@ fn parse_gpg_sign() {
         "/path/to/output",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_gpg_verify() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -688,15 +662,13 @@ fn parse_gpg_verify() {
         "--verbose",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_license() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -708,15 +680,13 @@ fn parse_license() {
         "license",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_secret_get() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -731,15 +701,13 @@ fn parse_secret_get() {
         "json",
     ];
 
-    let opt = Opt::try_parse_from(args).expect("parse failed");
+    let opt = parse_opt(args);
 
     insta::assert_json_snapshot!(&opt);
 }
 
 #[test]
 fn parse_secret_get_fails_without_globals() {
-    clear_env();
-
     let args = [
         "psonoci",
         "secret",
@@ -748,14 +716,12 @@ fn parse_secret_get_fails_without_globals() {
         "json",
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail without global options");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
 
 #[test]
 fn parse_fails_invalid_subcommand() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -767,14 +733,12 @@ fn parse_fails_invalid_subcommand() {
         "invalid-command",
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail with invalid subcommand");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
 
 #[test]
 fn parse_fails_missing_required_argument() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -788,14 +752,12 @@ fn parse_fails_missing_required_argument() {
         // Missing secret_id argument
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail missing required argument");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
 
 #[test]
 fn parse_fails_invalid_value_type() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -810,14 +772,12 @@ fn parse_fails_invalid_value_type() {
         "invalid-type",
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail with invalid value type");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
 
 #[test]
 fn parse_fails_invalid_api_key_format() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -830,14 +790,12 @@ fn parse_fails_invalid_api_key_format() {
         "info",
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail with invalid API key format");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
 
 #[test]
 fn parse_fails_missing_server_url() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -849,14 +807,12 @@ fn parse_fails_missing_server_url() {
         "info",
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail missing server URL");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
 
 #[test]
 fn parse_fails_invalid_hex_key() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -869,14 +825,12 @@ fn parse_fails_invalid_hex_key() {
         "info",
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail with invalid hex key");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
 
 #[test]
 fn parse_fails_conflicting_arguments() {
-    clear_env();
-
     let args = [
         "psonoci",
         "--api-key-id",
@@ -892,6 +846,6 @@ fn parse_fails_conflicting_arguments() {
         "--overwrite", // Duplicate flag
     ];
 
-    let error = Opt::try_parse_from(args).expect_err("should fail with conflicting arguments");
+    let error = parse_opt_error(args);
     insta::assert_snapshot!(error.to_string());
 }
