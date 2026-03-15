@@ -38,6 +38,7 @@ pub enum SecretType {
     Website,
     Application,
     Note,
+    Identity,
     GPGKey,
     Bookmark,
     EnvVars,
@@ -54,6 +55,7 @@ impl SecretType {
             SecretType::Website => "website",
             SecretType::Application => "application",
             SecretType::Note => "note",
+            SecretType::Identity => "identity",
             SecretType::GPGKey => "gpg_key",
             SecretType::Bookmark => "bookmark",
             SecretType::EnvVars => "env_vars",
@@ -77,6 +79,30 @@ pub enum SecretValueType {
     #[clap(alias = "url_filter")]
     url_filter,
     username,
+    #[clap(alias = "identity_title")]
+    identity_title,
+    #[clap(alias = "identity_first_name")]
+    identity_first_name,
+    #[clap(alias = "identity_last_name")]
+    identity_last_name,
+    #[clap(alias = "identity_company")]
+    identity_company,
+    #[clap(alias = "identity_address")]
+    identity_address,
+    #[clap(alias = "identity_city")]
+    identity_city,
+    #[clap(alias = "identity_postal_code")]
+    identity_postal_code,
+    #[clap(alias = "identity_state")]
+    identity_state,
+    #[clap(alias = "identity_country")]
+    identity_country,
+    #[clap(alias = "identity_phone_number")]
+    identity_phone_number,
+    #[clap(alias = "identity_email")]
+    identity_email,
+    #[clap(alias = "identity_notes")]
+    identity_notes,
     #[clap(alias = "gpg_key_email")]
     gpg_key_email,
     #[clap(alias = "gpg_key_name")]
@@ -136,6 +162,18 @@ impl SecretValueType {
             SecretValueType::url => "url",
             SecretValueType::url_filter => "url_filter",
             SecretValueType::username => "username",
+            SecretValueType::identity_title => "identity_title",
+            SecretValueType::identity_first_name => "identity_first_name",
+            SecretValueType::identity_last_name => "identity_last_name",
+            SecretValueType::identity_company => "identity_company",
+            SecretValueType::identity_address => "identity_address",
+            SecretValueType::identity_city => "identity_city",
+            SecretValueType::identity_postal_code => "identity_postal_code",
+            SecretValueType::identity_state => "identity_state",
+            SecretValueType::identity_country => "identity_country",
+            SecretValueType::identity_phone_number => "identity_phone_number",
+            SecretValueType::identity_email => "identity_email",
+            SecretValueType::identity_notes => "identity_notes",
             SecretValueType::gpg_key_email => "gpg_key_email",
             SecretValueType::gpg_key_name => "gpg_key_name",
             SecretValueType::gpg_key_private => "gpg_key_private",
@@ -449,6 +487,20 @@ pub struct GenericSecret {
     pub note_notes: Option<String>,
     pub note_title: Option<String>,
 
+    // identity
+    pub identity_title: Option<String>,
+    pub identity_first_name: Option<String>,
+    pub identity_last_name: Option<String>,
+    pub identity_company: Option<String>,
+    pub identity_address: Option<String>,
+    pub identity_city: Option<String>,
+    pub identity_postal_code: Option<String>,
+    pub identity_state: Option<String>,
+    pub identity_country: Option<String>,
+    pub identity_phone_number: Option<String>,
+    pub identity_email: Option<String>,
+    pub identity_notes: Option<String>,
+
     // environment variables
     pub environment_variables_title: Option<String>,
     pub environment_variables_notes: Option<String>,
@@ -503,6 +555,18 @@ impl GenericSecret {
             mail_gpg_own_key_title: None,
             note_notes: None,
             note_title: None,
+            identity_title: None,
+            identity_first_name: None,
+            identity_last_name: None,
+            identity_company: None,
+            identity_address: None,
+            identity_city: None,
+            identity_postal_code: None,
+            identity_state: None,
+            identity_country: None,
+            identity_phone_number: None,
+            identity_email: None,
+            identity_notes: None,
             website_password_notes: None,
             website_password_password: None,
             website_password_title: None,
@@ -609,6 +673,22 @@ pub struct SSHKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Identity {
+    pub title: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub company: Option<String>,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub postal_code: Option<String>,
+    pub state: Option<String>,
+    pub country: Option<String>,
+    pub phone_number: Option<String>,
+    pub email: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Totp {
     pub period: Option<u32>,
     pub algorithm: Option<String>,
@@ -655,6 +735,7 @@ pub struct Secret {
     pub gpg_key_name: Option<String>,
     pub gpg_key_email: Option<String>,
 
+    pub identity: Option<Identity>,
     pub env_vars: Option<Vec<EnvironmentVariable>>,
     pub ssh_key: Option<SSHKey>,
     pub totp: Option<Totp>,
@@ -670,6 +751,7 @@ impl Secret {
             gpg_key_name: None,
             gpg_key_private: None,
             gpg_key_public: None,
+            identity: None,
             notes: None,
             password: None,
             title: None,
@@ -705,6 +787,22 @@ impl Secret {
             SecretType::Note => {
                 gs.note_notes = self.notes.clone();
                 gs.note_title = self.title.clone();
+            }
+            SecretType::Identity => {
+                let identity = self.identity.as_ref().expect("identity must be set");
+
+                gs.identity_title = self.title.clone().or_else(|| identity.title.clone());
+                gs.identity_first_name = identity.first_name.clone();
+                gs.identity_last_name = identity.last_name.clone();
+                gs.identity_company = identity.company.clone();
+                gs.identity_address = identity.address.clone();
+                gs.identity_city = identity.city.clone();
+                gs.identity_postal_code = identity.postal_code.clone();
+                gs.identity_state = identity.state.clone();
+                gs.identity_country = identity.country.clone();
+                gs.identity_phone_number = identity.phone_number.clone();
+                gs.identity_email = identity.email.clone();
+                gs.identity_notes = self.notes.clone().or_else(|| identity.notes.clone());
             }
             SecretType::GPGKey => {
                 gs.mail_gpg_own_key_email = self.gpg_key_email.clone();
@@ -778,6 +876,7 @@ impl Secret {
             "notes": &self.notes,
             "url": &self.url,
             "url_filter": &self.url_filter,
+            "identity": &self.identity,
             "gpg_key_email": &self.gpg_key_email,
             "gpg_key_name": &self.gpg_key_name,
             "gpg_key_private": &self.gpg_key_private,
@@ -800,6 +899,18 @@ impl Secret {
             SecretValueType::url => self.url,
             SecretValueType::url_filter => self.url_filter,
             SecretValueType::username => self.username,
+            SecretValueType::identity_title => self.identity.and_then(|i| i.title),
+            SecretValueType::identity_first_name => self.identity.and_then(|i| i.first_name),
+            SecretValueType::identity_last_name => self.identity.and_then(|i| i.last_name),
+            SecretValueType::identity_company => self.identity.and_then(|i| i.company),
+            SecretValueType::identity_address => self.identity.and_then(|i| i.address),
+            SecretValueType::identity_city => self.identity.and_then(|i| i.city),
+            SecretValueType::identity_postal_code => self.identity.and_then(|i| i.postal_code),
+            SecretValueType::identity_state => self.identity.and_then(|i| i.state),
+            SecretValueType::identity_country => self.identity.and_then(|i| i.country),
+            SecretValueType::identity_phone_number => self.identity.and_then(|i| i.phone_number),
+            SecretValueType::identity_email => self.identity.and_then(|i| i.email),
+            SecretValueType::identity_notes => self.identity.and_then(|i| i.notes),
             SecretValueType::gpg_key_email => self.gpg_key_email,
             SecretValueType::gpg_key_name => self.gpg_key_name,
             SecretValueType::gpg_key_private => self.gpg_key_private,
@@ -857,6 +968,131 @@ impl Secret {
             // NOTE
             (SecretType::Note, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::Note, SecretValueType::title) => self.title = Some(value),
+            // IDENTITY
+            (SecretType::Identity, SecretValueType::title) => {
+                self.title = Some(value.clone());
+                if let Some(identity) = &mut self.identity {
+                    identity.title = Some(value);
+                } else {
+                    return Err(anyhow!("Identity is None when trying to set title"));
+                }
+            }
+            (SecretType::Identity, SecretValueType::notes) => {
+                self.notes = Some(value.clone());
+                if let Some(identity) = &mut self.identity {
+                    identity.notes = Some(value);
+                } else {
+                    return Err(anyhow!("Identity is None when trying to set notes"));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_title) => {
+                self.title = Some(value.clone());
+                if let Some(identity) = &mut self.identity {
+                    identity.title = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_title"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_first_name) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.first_name = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_first_name"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_last_name) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.last_name = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_last_name"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_company) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.company = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_company"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_address) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.address = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_address"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_city) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.city = Some(value);
+                } else {
+                    return Err(anyhow!("Identity is None when trying to set identity_city"));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_postal_code) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.postal_code = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_postal_code"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_state) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.state = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_state"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_country) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.country = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_country"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_phone_number) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.phone_number = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_phone_number"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_email) => {
+                if let Some(identity) = &mut self.identity {
+                    identity.email = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_email"
+                    ));
+                }
+            }
+            (SecretType::Identity, SecretValueType::identity_notes) => {
+                self.notes = Some(value.clone());
+                if let Some(identity) = &mut self.identity {
+                    identity.notes = Some(value);
+                } else {
+                    return Err(anyhow!(
+                        "Identity is None when trying to set identity_notes"
+                    ));
+                }
+            }
             // GPGKey
             (SecretType::GPGKey, SecretValueType::title) => self.title = Some(value),
             (SecretType::GPGKey, SecretValueType::notes) => self.notes = Some(value),
@@ -1096,6 +1332,41 @@ impl DataTransform<GenericSecret, Secret> for Secret {
 
             secret.notes = s.note_notes;
             secret.title = s.note_title;
+
+            return Ok(secret);
+        }
+
+        if s.identity_title.is_some()
+            || s.identity_first_name.is_some()
+            || s.identity_last_name.is_some()
+            || s.identity_company.is_some()
+            || s.identity_address.is_some()
+            || s.identity_city.is_some()
+            || s.identity_postal_code.is_some()
+            || s.identity_state.is_some()
+            || s.identity_country.is_some()
+            || s.identity_phone_number.is_some()
+            || s.identity_email.is_some()
+            || s.identity_notes.is_some()
+        {
+            let mut secret = Secret::new(SecretType::Identity);
+
+            secret.title = s.identity_title.clone();
+            secret.notes = s.identity_notes.clone();
+            secret.identity = Some(Identity {
+                title: s.identity_title,
+                first_name: s.identity_first_name,
+                last_name: s.identity_last_name,
+                company: s.identity_company,
+                address: s.identity_address,
+                city: s.identity_city,
+                postal_code: s.identity_postal_code,
+                state: s.identity_state,
+                country: s.identity_country,
+                phone_number: s.identity_phone_number,
+                email: s.identity_email,
+                notes: s.identity_notes,
+            });
 
             return Ok(secret);
         }
@@ -1446,6 +1717,27 @@ mod tests {
         cert_path
     }
 
+    fn debug_identity_secret() -> Secret {
+        let mut secret = Secret::new(SecretType::Identity);
+        secret.title = Some("Jane Doe".to_string());
+        secret.notes = Some("employee badge holder".to_string());
+        secret.identity = Some(Identity {
+            title: Some("Jane Doe".to_string()),
+            first_name: Some("Jane".to_string()),
+            last_name: Some("Doe".to_string()),
+            company: Some("ACME".to_string()),
+            address: Some("123 Main St".to_string()),
+            city: Some("Berlin".to_string()),
+            postal_code: Some("10115".to_string()),
+            state: Some("Berlin".to_string()),
+            country: Some("DE".to_string()),
+            phone_number: Some("+49 30 123456".to_string()),
+            email: Some("jane@example.com".to_string()),
+            notes: Some("employee badge holder".to_string()),
+        });
+        secret
+    }
+
     #[allow(dead_code)]
     pub fn debug_api_settings() -> Config {
         Config {
@@ -1660,6 +1952,118 @@ mod tests {
                     value: "PASSWORD".to_string(),
                 },
             ])
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn generic_secret_to_identity_secret() {
+        let mut gs = GenericSecret::new();
+        gs.identity_title = Some("Jane Doe".to_string());
+        gs.identity_first_name = Some("Jane".to_string());
+        gs.identity_last_name = Some("Doe".to_string());
+        gs.identity_company = Some("ACME".to_string());
+        gs.identity_address = Some("123 Main St".to_string());
+        gs.identity_city = Some("Berlin".to_string());
+        gs.identity_postal_code = Some("10115".to_string());
+        gs.identity_state = Some("Berlin".to_string());
+        gs.identity_country = Some("DE".to_string());
+        gs.identity_phone_number = Some("+49 30 123456".to_string());
+        gs.identity_email = Some("jane@example.com".to_string());
+        gs.identity_notes = Some("employee badge holder".to_string());
+
+        let secret = Secret::transform(gs).expect("transform failed");
+
+        assert_eq!(secret.secret_type, SecretType::Identity);
+        assert_eq!(secret.title, Some("Jane Doe".to_string()));
+        assert_eq!(secret.notes, Some("employee badge holder".to_string()));
+        assert_eq!(
+            secret.identity,
+            Some(Identity {
+                title: Some("Jane Doe".to_string()),
+                first_name: Some("Jane".to_string()),
+                last_name: Some("Doe".to_string()),
+                company: Some("ACME".to_string()),
+                address: Some("123 Main St".to_string()),
+                city: Some("Berlin".to_string()),
+                postal_code: Some("10115".to_string()),
+                state: Some("Berlin".to_string()),
+                country: Some("DE".to_string()),
+                phone_number: Some("+49 30 123456".to_string()),
+                email: Some("jane@example.com".to_string()),
+                notes: Some("employee badge holder".to_string()),
+            })
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn identity_secret_get_value_fields() {
+        let secret = debug_identity_secret();
+
+        assert_eq!(
+            secret.clone().get_value(&SecretValueType::identity_email),
+            Some("jane@example.com".to_string())
+        );
+        assert_eq!(
+            secret
+                .clone()
+                .get_value(&SecretValueType::identity_phone_number),
+            Some("+49 30 123456".to_string())
+        );
+        assert_eq!(
+            secret.get_value(&SecretValueType::identity_notes),
+            Some("employee badge holder".to_string())
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn identity_secret_as_json_contains_nested_identity() {
+        let secret = debug_identity_secret();
+        let value: serde_json::Value =
+            serde_json::from_str(&secret.as_json().expect("json serialization failed"))
+                .expect("json parse failed");
+
+        assert_eq!(value["type"], "identity");
+        assert_eq!(value["title"], "Jane Doe");
+        assert_eq!(value["notes"], "employee badge holder");
+        assert_eq!(value["identity"]["email"], "jane@example.com");
+        assert_eq!(value["identity"]["first_name"], "Jane");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn identity_secret_round_trip_generic_secret() {
+        let secret = debug_identity_secret();
+        let generic_secret = secret.as_generic_secret();
+
+        assert_eq!(generic_secret.identity_title, Some("Jane Doe".to_string()));
+        assert_eq!(generic_secret.identity_first_name, Some("Jane".to_string()));
+        assert_eq!(generic_secret.identity_last_name, Some("Doe".to_string()));
+        assert_eq!(generic_secret.identity_company, Some("ACME".to_string()));
+        assert_eq!(
+            generic_secret.identity_address,
+            Some("123 Main St".to_string())
+        );
+        assert_eq!(generic_secret.identity_city, Some("Berlin".to_string()));
+        assert_eq!(
+            generic_secret.identity_postal_code,
+            Some("10115".to_string())
+        );
+        assert_eq!(generic_secret.identity_state, Some("Berlin".to_string()));
+        assert_eq!(generic_secret.identity_country, Some("DE".to_string()));
+        assert_eq!(
+            generic_secret.identity_phone_number,
+            Some("+49 30 123456".to_string())
+        );
+        assert_eq!(
+            generic_secret.identity_email,
+            Some("jane@example.com".to_string())
+        );
+        assert_eq!(
+            generic_secret.identity_notes,
+            Some("employee badge holder".to_string())
         );
     }
 }

@@ -145,6 +145,24 @@ secret_value_type_test!(parse_secret_get_notes, "notes");
 secret_value_type_test!(parse_secret_get_url, "url");
 secret_value_type_test!(parse_secret_get_title, "title");
 secret_value_type_test!(parse_secret_get_secret_type, "secret_type");
+secret_value_type_test!(parse_secret_get_identity_title, "identity_title");
+secret_value_type_test!(parse_secret_get_identity_first_name, "identity_first_name");
+secret_value_type_test!(parse_secret_get_identity_last_name, "identity_last_name");
+secret_value_type_test!(parse_secret_get_identity_company, "identity_company");
+secret_value_type_test!(parse_secret_get_identity_address, "identity_address");
+secret_value_type_test!(parse_secret_get_identity_city, "identity_city");
+secret_value_type_test!(
+    parse_secret_get_identity_postal_code,
+    "identity_postal_code"
+);
+secret_value_type_test!(parse_secret_get_identity_state, "identity_state");
+secret_value_type_test!(parse_secret_get_identity_country, "identity_country");
+secret_value_type_test!(
+    parse_secret_get_identity_phone_number,
+    "identity_phone_number"
+);
+secret_value_type_test!(parse_secret_get_identity_email, "identity_email");
+secret_value_type_test!(parse_secret_get_identity_notes, "identity_notes");
 secret_value_type_test!(parse_secret_get_env_vars, "env_vars");
 secret_value_type_test!(parse_secret_get_totp_period, "totp_period");
 secret_value_type_test!(parse_secret_get_totp_algorithm, "totp_algorithm");
@@ -187,6 +205,18 @@ fn parse_secret_get_accepts_snake_case_and_kebab_case_for_all_multi_word_value_t
         ("gpg_key_private", "gpg-key-private"),
         ("gpg_key_public", "gpg-key-public"),
         ("secret_type", "secret-type"),
+        ("identity_title", "identity-title"),
+        ("identity_first_name", "identity-first-name"),
+        ("identity_last_name", "identity-last-name"),
+        ("identity_company", "identity-company"),
+        ("identity_address", "identity-address"),
+        ("identity_city", "identity-city"),
+        ("identity_postal_code", "identity-postal-code"),
+        ("identity_state", "identity-state"),
+        ("identity_country", "identity-country"),
+        ("identity_phone_number", "identity-phone-number"),
+        ("identity_email", "identity-email"),
+        ("identity_notes", "identity-notes"),
         ("env_vars", "env-vars"),
         ("ssh_key_public", "ssh-key-public"),
         ("ssh_key_private", "ssh-key-private"),
@@ -232,6 +262,24 @@ secret_set_value_type_test!(parse_secret_set_gpg_key_name, "gpg_key_name");
 secret_set_value_type_test!(parse_secret_set_gpg_key_private, "gpg_key_private");
 secret_set_value_type_test!(parse_secret_set_gpg_key_public, "gpg_key_public");
 secret_set_value_type_test!(parse_secret_set_secret_type, "secret_type");
+secret_set_value_type_test!(parse_secret_set_identity_title, "identity_title");
+secret_set_value_type_test!(parse_secret_set_identity_first_name, "identity_first_name");
+secret_set_value_type_test!(parse_secret_set_identity_last_name, "identity_last_name");
+secret_set_value_type_test!(parse_secret_set_identity_company, "identity_company");
+secret_set_value_type_test!(parse_secret_set_identity_address, "identity_address");
+secret_set_value_type_test!(parse_secret_set_identity_city, "identity_city");
+secret_set_value_type_test!(
+    parse_secret_set_identity_postal_code,
+    "identity_postal_code"
+);
+secret_set_value_type_test!(parse_secret_set_identity_state, "identity_state");
+secret_set_value_type_test!(parse_secret_set_identity_country, "identity_country");
+secret_set_value_type_test!(
+    parse_secret_set_identity_phone_number,
+    "identity_phone_number"
+);
+secret_set_value_type_test!(parse_secret_set_identity_email, "identity_email");
+secret_set_value_type_test!(parse_secret_set_identity_notes, "identity_notes");
 secret_set_value_type_test!(parse_secret_set_env_vars, "env_vars");
 secret_set_value_type_test!(parse_secret_set_ssh_key_public, "ssh_key_public");
 secret_set_value_type_test!(parse_secret_set_ssh_key_private, "ssh_key_private");
@@ -315,6 +363,18 @@ fn parse_secret_set_accepts_snake_case_and_kebab_case_for_all_multi_word_value_t
         ("gpg_key_private", "gpg-key-private"),
         ("gpg_key_public", "gpg-key-public"),
         ("secret_type", "secret-type"),
+        ("identity_title", "identity-title"),
+        ("identity_first_name", "identity-first-name"),
+        ("identity_last_name", "identity-last-name"),
+        ("identity_company", "identity-company"),
+        ("identity_address", "identity-address"),
+        ("identity_city", "identity-city"),
+        ("identity_postal_code", "identity-postal-code"),
+        ("identity_state", "identity-state"),
+        ("identity_country", "identity-country"),
+        ("identity_phone_number", "identity-phone-number"),
+        ("identity_email", "identity-email"),
+        ("identity_notes", "identity-notes"),
         ("env_vars", "env-vars"),
         ("ssh_key_public", "ssh-key-public"),
         ("ssh_key_private", "ssh-key-private"),

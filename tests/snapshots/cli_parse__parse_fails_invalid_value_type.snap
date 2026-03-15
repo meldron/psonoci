@@ -1,8 +1,8 @@
 ---
 source: tests/cli_parse.rs
-expression: error
+expression: error.to_string()
 ---
 error: invalid value 'invalid-type' for '<SECRET_VALUE_TYPE>'
-  [possible values: json, notes, password, title, url, url-filter, username, gpg-key-email, gpg-key-name, gpg-key-private, gpg-key-public, secret-type, env-vars, ssh-key-public, ssh-key-private, totp-period, totp-algorithm, totp-digits, totp-code, credit-card-number, credit-card-cvc, credit-card-name, credit-card-valid-through, credit-card-pin, elster-certificate-file-content, elster-certificate-password, elster-certificate-retrieval-code]
+  [possible values: json, notes, password, title, url, url-filter, username, identity-title, identity-first-name, identity-last-name, identity-company, identity-address, identity-city, identity-postal-code, identity-state, identity-country, identity-phone-number, identity-email, identity-notes, gpg-key-email, gpg-key-name, gpg-key-private, gpg-key-public, secret-type, env-vars, ssh-key-public, ssh-key-private, totp-period, totp-algorithm, totp-digits, totp-code, credit-card-number, credit-card-cvc, credit-card-name, credit-card-valid-through, credit-card-pin, elster-certificate-file-content, elster-certificate-password, elster-certificate-retrieval-code]
 
 For more information, try '--help'.
