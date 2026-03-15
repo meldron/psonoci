@@ -11,4 +11,3 @@ pub mod secret_provider;
 #[cfg(unix)]
 pub mod ssh;
 pub mod totp;
-
