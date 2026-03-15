@@ -1,7 +1,11 @@
-# Unreleased
+# v0.6.0 (`2026-03-15`)
 
+- Add Identity secret type support
 - Upgrade clap from 3.2 to 4.5
 - Minor help output formatting changes due to clap 4 upgrade
+- Keep legacy snake_case secret value types working alongside the canonical kebab-case clap output
+- Upgrade Rust toolchain to `1.94.0`
+- Dependency update
 
 # v0.5.0 (`2024-11-25`)
 

@@ -11,59 +11,55 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 `psonoci --help`
 
 ```
-psonoci 0.5.0
+psonoci 0.6.0
 Bernd Kaiser
 Psono CI Client (https://github.com/meldron/psonoci)
 
-USAGE:
-    psonoci [FLAGS] [OPTIONS] --api-key-id <api-key-id> --api-secret-key-hex <api-secret-key-hex> --server-url <server-url> <SUBCOMMAND>
+Usage: psonoci [OPTIONS] <COMMAND>
 
-FLAGS:
-        --danger-disable-tls-verification    DANGER: completely disables all TLS (common name and certificate)
-                                             verification. You should not use this. A better approach is just using
-                                             plain http so there's no false sense of security (Psono secrets are still
-                                             authenticated)
-    -h, --help                               Prints help information
-        --use-native-tls                     Use native TLS implementation (for linux musl builds a vendored openssl is
-                                             used)
-    -V, --version                            Prints version information
+Commands:
+  secret    Psono secret commands (/api-key-access/secret/)
+  api-key   Psono api-key inspect (/api-key-access/inspect/)
+  config    Config commands (create, save, pack,...)
+  run       Spawns processes with environment vars from the api-keys secrets
+  env-vars  Convenience commands on environment variable secrets
+  totp      TOTP commands
+  ssh       SSH commands
+  gpg       GPG commands
+  license   Prints psonoci's license
+  help      Print this message or the help of the given subcommand(s)
 
-OPTIONS:
-        --api-key-id <api-key-id>                                  Api key as uuid [env: PSONO_CI_API_KEY_ID=]
-        --api-secret-key-hex <api-secret-key-hex>
-            Api secret key as 64 byte hex string [env: PSONO_CI_API_SECRET_KEY_HEX=]
-
-        --config-packed <config_packed>
-            psonci config as packed string [env: PSONO_CI_CONFIG_PACKED=]
-
-    -c, --config-path <config_path>                                psonoci config path [env: PSONO_CI_CONFIG_PATH=]
-        --der-root-certificate-path <der-root-certificate-path>
-            Path to a DER encoded root certificate which should be added to the trust store [env:
-            PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH=]
-        --max-redirects <max-redirects>
-            Maximum numbers of redirects [env: PSONO_CI_MAX_REDIRECTS=]  [default: 0]
-
-        --pem-root-certificate-path <pem-root-certificate-path>
-            Path to a pem encoded root certificate which should be added to the trust store [env:
-            PSONO_CI_ADD_PEM_ROOT_CERTIFICATE_PATH=]
-        --server-url <server-url>
-            Url of the psono backend server [env: PSONO_CI_SERVER_URL=]
-
-        --timeout <timeout>
-            Connection timeout in seconds [env: PSONO_CI_TIMEOUT=]  [default: 60]
-
-
-SUBCOMMANDS:
-    api-key     Psono api-key inspect (/api-key-access/inspect/)
-    config      Config commands (create, save, pack,...)
-    env-vars    Convenience commands on environment variable secrets
-    gpg         GPG commands
-    help        Prints this message or the help of the given subcommand(s)
-    license     Prints psonoci's license
-    run         Spawns processes with environment vars from the api-keys secrets
-    secret      Psono secret commands (/api-key-access/secret/)
-    ssh         SSH commands
-    totp        TOTP commands
+Options:
+      --api-key-id <API_KEY_ID>
+          Api key as uuid [env: PSONO_CI_API_KEY_ID=]
+      --api-secret-key-hex <API_SECRET_KEY_HEX>
+          Api secret key as 64 byte hex string [env: PSONO_CI_API_SECRET_KEY_HEX=]
+      --server-url <SERVER_URL>
+          Url of the psono backend server [env: PSONO_CI_SERVER_URL=]
+      --timeout <TIMEOUT>
+          Connection timeout in seconds [env: PSONO_CI_TIMEOUT=] [default: 60]
+      --max-redirects <MAX_REDIRECTS>
+          Maximum numbers of redirects [env: PSONO_CI_MAX_REDIRECTS=] [default: 0]
+      --use-native-tls
+          Use native TLS implementation (for linux musl builds a vendored openssl is used)
+      --danger-disable-tls-verification
+          DANGER: completely disables all TLS (common name and certificate) verification. You should
+          not use this. A better approach is just using plain http so there's no false sense of
+          security (Psono secrets are still authenticated)
+      --der-root-certificate-path <DER_ROOT_CERTIFICATE_PATH>
+          Path to a DER encoded root certificate which should be added to the trust store [env:
+          PSONO_CI_ADD_DER_ROOT_CERTIFICATE_PATH=]
+      --pem-root-certificate-path <PEM_ROOT_CERTIFICATE_PATH>
+          Path to a pem encoded root certificate which should be added to the trust store [env:
+          PSONO_CI_ADD_PEM_ROOT_CERTIFICATE_PATH=]
+      --config-packed <config_packed>
+          psonci config as packed string [env: PSONO_CI_CONFIG_PACKED=]
+  -c, --config-path <config_path>
+          psonoci config path [env: PSONO_CI_CONFIG_PATH=]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 ### Required Options
@@ -72,11 +68,15 @@ These three options must be supplied (and be in front of the subcommand):
 
 | Option                   | Env var                     | Type               | Required | Default | Description                                                               |
 | ------------------------ | --------------------------- | ------------------ | -------- | ------- | ------------------------------------------------------------------------- |
-| --api_key_id             | PSONO_CI_API_KEY_ID         | UUID               | yes      | None    | The UUID of your API key                                                  |
-| --api_key_secret_key_hex | PSONO_CI_API_SECRET_KEY_HEX | 64 byte hex string | yes      | None    | Secret key used for decryption of the user's secret key                   |
-| --server_url             | PSONO_CI_SERVER_URL         | URL                | yes      | None    | Address of the PSONO's backend server - e.g.: https://www.psono.pw/server |
+| --api-key-id             | PSONO_CI_API_KEY_ID         | UUID               | yes      | None    | The UUID of your API key                                                  |
+| --api-secret-key-hex     | PSONO_CI_API_SECRET_KEY_HEX | 64 byte hex string | yes      | None    | Secret key used for decryption of the user's secret key                   |
+| --server-url             | PSONO_CI_SERVER_URL         | URL                | yes      | None    | Address of the PSONO's backend server - e.g.: https://www.psono.pw/server |
 
 There are several more options, please use the `help` commands for more info.
+
+`psonoci` now uses `clap` for command-line parsing. The canonical option and enum value spelling shown in help output is kebab-case (for example `url-filter`), but for backward compatibility the legacy snake_case forms (for example `url_filter`) are still accepted for secret value types.
+
+Identity secrets are available through the same `secret get` interface as the other typed secrets. For example, `psonoci secret get <uuid> identity-email` returns the stored email address, while `psonoci secret get <uuid> json` includes the nested `identity` object in the JSON output.
 
 ## SSH
 
@@ -136,15 +136,15 @@ Besides the standard functionality to read and write the secret info (`secret` s
 
 ### get-token
 
-`psonoci topt get-token secret-id`: returns a currently valid TOTP token.
+`psonoci totp get-token secret-id`: returns a currently valid TOTP token.
 
 ### validate-token
 
-`psonoci topt validate-token secret-id token`: checks if a token is currently valid. Returns with exit code `0` if valid, otherwise displays an error and returns with exit code `1`.
+`psonoci totp validate-token secret-id token`: checks if a token is currently valid. Returns with exit code `0` if valid, otherwise displays an error and returns with exit code `1`.
 
 ### get-url
 
-Also there is the option to export the token [otpauth url](https://github.com/google/google-authenticator/wiki/Key-Uri-Format) with `psonoci topt get-url secret-id`.
+Also there is the option to export the token [otpauth url](https://github.com/google/google-authenticator/wiki/Key-Uri-Format) with `psonoci totp get-url secret-id`.
 ## Run With Protected Environments
 
 `psonoci` can now inject environment variables from your secrets right into you programs!
@@ -297,6 +297,7 @@ PSONO_CI_CONFIG_PACKED="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ys
 -   Website
 -   Application
 -   Note
+-   Identity
 -   GPGKey
 -   Bookmark
 -   Environment Variables
@@ -310,7 +311,7 @@ PSONO_CI_CONFIG_PACKED="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ys
 
 If you have rust installed just run `cargo build --release`.
 
-The current version is tested with Rust `1.71.1`.
+The current version is tested with Rust `1.94.0`.
 
 ### cross
 
@@ -352,4 +353,4 @@ Download `psonoci` binary, make executable (`chmod +x psonoci`), and place into 
 
 [The MIT License](https://opensource.org/licenses/MIT)
 
-Copyright (c) 2020, 2021, 2022, 2023 Bernd Kaiser
+Copyright (c) 2020-2026 Bernd Kaiser

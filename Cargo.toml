@@ -2,7 +2,7 @@
 authors = ["Bernd Kaiser <bk@dfjk.eu>"]
 edition = "2024"
 name = "psonoci"
-version = "0.5.0"
+version = "0.6.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
