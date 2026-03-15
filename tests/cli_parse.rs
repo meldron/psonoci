@@ -42,6 +42,28 @@ fn test_secret_value_type(value_type: &str, snapshot_name: &str) {
     insta::assert_json_snapshot!(snapshot_name, &opt);
 }
 
+fn parse_secret_value_type(value_type: &str) -> serde_json::Value {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "secret",
+        "get",
+        "11111111-1111-1111-1111-111111111111",
+        value_type,
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    serde_json::to_value(&opt).expect("serialization failed")
+}
+
 // Helper function for secret set value type tests to enable IntelliSense support
 fn test_secret_set_value_type(value_type: &str, snapshot_name: &str) {
     clear_env();
@@ -64,6 +86,29 @@ fn test_secret_set_value_type(value_type: &str, snapshot_name: &str) {
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
     insta::assert_json_snapshot!(snapshot_name, &opt);
+}
+
+fn parse_secret_set_value_type(value_type: &str) -> serde_json::Value {
+    clear_env();
+
+    let args = [
+        "psonoci",
+        "--api-key-id",
+        "00000000-0000-0000-0000-000000000000",
+        "--api-secret-key-hex",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "--server-url",
+        "https://psono.pw/server",
+        "secret",
+        "set",
+        "11111111-1111-1111-1111-111111111111",
+        value_type,
+        "new-value",
+    ];
+
+    let opt = Opt::try_parse_from(args).expect("parse failed");
+
+    serde_json::to_value(&opt).expect("serialization failed")
 }
 
 // Simplified macro that generates thin test wrappers calling the helper function
@@ -124,6 +169,47 @@ secret_value_type_test!(
     "elster_certificate_retrieval_code"
 );
 secret_value_type_test!(parse_secret_get_json, "json");
+
+#[test]
+fn parse_secret_get_accepts_snake_case_and_kebab_case_for_all_multi_word_value_types() {
+    for (snake_case, kebab_case) in [
+        ("url_filter", "url-filter"),
+        ("gpg_key_email", "gpg-key-email"),
+        ("gpg_key_name", "gpg-key-name"),
+        ("gpg_key_private", "gpg-key-private"),
+        ("gpg_key_public", "gpg-key-public"),
+        ("secret_type", "secret-type"),
+        ("env_vars", "env-vars"),
+        ("ssh_key_public", "ssh-key-public"),
+        ("ssh_key_private", "ssh-key-private"),
+        ("totp_period", "totp-period"),
+        ("totp_algorithm", "totp-algorithm"),
+        ("totp_digits", "totp-digits"),
+        ("totp_code", "totp-code"),
+        ("credit_card_number", "credit-card-number"),
+        ("credit_card_cvc", "credit-card-cvc"),
+        ("credit_card_name", "credit-card-name"),
+        ("credit_card_valid_through", "credit-card-valid-through"),
+        ("credit_card_pin", "credit-card-pin"),
+        (
+            "elster_certificate_file_content",
+            "elster-certificate-file-content",
+        ),
+        ("elster_certificate_password", "elster-certificate-password"),
+        (
+            "elster_certificate_retrieval_code",
+            "elster-certificate-retrieval-code",
+        ),
+    ] {
+        let snake_case_opt = parse_secret_value_type(snake_case);
+        let kebab_case_opt = parse_secret_value_type(kebab_case);
+
+        assert_eq!(
+            snake_case_opt, kebab_case_opt,
+            "snake_case and kebab-case should parse identically for {snake_case}"
+        );
+    }
+}
 
 // Secret set tests for all value types to ensure comprehensive coverage
 secret_set_value_type_test!(parse_secret_set_json, "json");
@@ -214,6 +300,47 @@ fn parse_secret_set_kebab_case() {
     let opt = Opt::try_parse_from(args).expect("parse failed");
 
     insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_secret_set_accepts_snake_case_and_kebab_case_for_all_multi_word_value_types() {
+    for (snake_case, kebab_case) in [
+        ("url_filter", "url-filter"),
+        ("gpg_key_email", "gpg-key-email"),
+        ("gpg_key_name", "gpg-key-name"),
+        ("gpg_key_private", "gpg-key-private"),
+        ("gpg_key_public", "gpg-key-public"),
+        ("secret_type", "secret-type"),
+        ("env_vars", "env-vars"),
+        ("ssh_key_public", "ssh-key-public"),
+        ("ssh_key_private", "ssh-key-private"),
+        ("totp_period", "totp-period"),
+        ("totp_algorithm", "totp-algorithm"),
+        ("totp_digits", "totp-digits"),
+        ("totp_code", "totp-code"),
+        ("credit_card_number", "credit-card-number"),
+        ("credit_card_cvc", "credit-card-cvc"),
+        ("credit_card_name", "credit-card-name"),
+        ("credit_card_valid_through", "credit-card-valid-through"),
+        ("credit_card_pin", "credit-card-pin"),
+        (
+            "elster_certificate_file_content",
+            "elster-certificate-file-content",
+        ),
+        ("elster_certificate_password", "elster-certificate-password"),
+        (
+            "elster_certificate_retrieval_code",
+            "elster-certificate-retrieval-code",
+        ),
+    ] {
+        let snake_case_opt = parse_secret_set_value_type(snake_case);
+        let kebab_case_opt = parse_secret_set_value_type(kebab_case);
+
+        assert_eq!(
+            snake_case_opt, kebab_case_opt,
+            "snake_case and kebab-case should parse identically for {snake_case}"
+        );
+    }
 }
 
 #[test]
