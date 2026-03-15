@@ -4,6 +4,7 @@ pub mod crypto;
 pub mod env_vars;
 pub mod gpg;
 pub mod license;
+pub mod onboarding;
 pub mod opt;
 pub mod passwords;
 pub mod run;

@@ -13,6 +13,12 @@ use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
 use crate::sensitive::SensitiveString;
 
+#[derive(Debug, Serialize)]
+pub struct Opt {
+    pub command: Command,
+    pub raw_config: RawConfig,
+}
+
 #[derive(Parser, Debug, Serialize)]
 #[command(
     name = "psonoci",
@@ -21,11 +27,52 @@ use crate::sensitive::SensitiveString;
     version,
     help_template = "{name} {version}\n{author-with-newline}{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}"
 )]
-pub struct Opt {
+struct ParsedOpt {
     #[clap(subcommand)]
-    pub command: Command,
+    command: Command,
     #[clap(flatten)]
-    pub raw_config: RawConfig,
+    raw_config: RawConfig,
+}
+
+#[derive(Parser, Debug, Serialize)]
+#[command(
+    name = "psonoci",
+    about = "Psono CI Client (https://github.com/meldron/psonoci)",
+    author = "Bernd Kaiser",
+    version,
+    help_template = "{name} {version}\n{author-with-newline}{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}"
+)]
+struct ParsedOnboardingOpt {
+    #[clap(subcommand)]
+    command: Command,
+    #[clap(flatten)]
+    raw_config: OnboardingRawConfig,
+}
+
+impl Opt {
+    pub fn parse() -> Self {
+        Self::try_parse_from(std::env::args_os()).unwrap_or_else(|err| err.exit())
+    }
+
+    pub fn try_parse_from<I, T>(itr: I) -> std::result::Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        let args: Vec<OsString> = itr.into_iter().map(Into::into).collect();
+
+        if is_onboarding_invocation(&args) {
+            ParsedOnboardingOpt::try_parse_from(args).map(|parsed| Self {
+                command: parsed.command,
+                raw_config: parsed.raw_config.into(),
+            })
+        } else {
+            ParsedOpt::try_parse_from(args).map(|parsed| Self {
+                command: parsed.command,
+                raw_config: parsed.raw_config,
+            })
+        }
+    }
 }
 
 #[derive(Parser, Debug, Serialize)]
@@ -52,6 +99,46 @@ pub struct RawConfig {
         help = "psonoci config path"
     )]
     pub config_path: Option<PathBuf>,
+}
+
+#[derive(Parser, Debug, Serialize)]
+struct OnboardingRawConfig {
+    #[clap(flatten)]
+    psono_settings: OnboardingRawPsonoSettings,
+    #[clap(flatten)]
+    http_options: HttpOptions,
+
+    #[clap(
+        long,
+        name = "config_packed",
+        env = "PSONO_CI_CONFIG_PACKED",
+        help = "psonci config as packed string"
+    )]
+    config_packed: Option<String>,
+
+    #[clap(
+        short = 'c',
+        long,
+        name = "config_path",
+        env = "PSONO_CI_CONFIG_PATH",
+        help = "psonoci config path"
+    )]
+    config_path: Option<PathBuf>,
+}
+
+impl From<OnboardingRawConfig> for RawConfig {
+    fn from(value: OnboardingRawConfig) -> Self {
+        Self {
+            psono_settings: RawPsonoSettings {
+                api_key_id: value.psono_settings.api_key_id,
+                api_secret_key_hex: value.psono_settings.api_secret_key_hex,
+                server_url: value.psono_settings.server_url,
+            },
+            http_options: value.http_options,
+            config_packed: value.config_packed,
+            config_path: value.config_path,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -94,13 +181,19 @@ impl RawConfig {
             ));
         } else {
             psono_settings = PsonoSettings {
-                api_key_id: self.psono_settings.api_key_id.expect("api_key_id not set"),
+                api_key_id: self
+                    .psono_settings
+                    .api_key_id
+                    .ok_or_else(|| anyhow::anyhow!("api_key_id not set"))?,
                 api_secret_key_hex: self
                     .psono_settings
                     .api_secret_key_hex
                     .map(SensitiveString::from)
-                    .expect("api_secret_key_hex not set"),
-                server_url: self.psono_settings.server_url.expect("server_url not set"),
+                    .ok_or_else(|| anyhow::anyhow!("api_secret_key_hex not set"))?,
+                server_url: self
+                    .psono_settings
+                    .server_url
+                    .ok_or_else(|| anyhow::anyhow!("server_url not set"))?,
             }
         }
 
@@ -111,6 +204,40 @@ impl RawConfig {
                 http_options: self.http_options,
             },
         ))
+    }
+
+    pub fn into_onboarding_settings(self) -> Result<(ConfigSource, Url, HttpOptions)> {
+        if let Some(config_packed) = self.config_packed {
+            let config = ConfigLoader::from_str(
+                &config_packed,
+                crate::config::ConfigSaveFormat::MessagePackBase58,
+            )?;
+
+            return Ok((
+                ConfigSource::Pack,
+                config.psono_settings.server_url,
+                config.http_options,
+            ));
+        }
+
+        if let Some(config_path) = self.config_path {
+            let path_str = config_path.as_path().display().to_string();
+            let config = ConfigLoader::load(&config_path, crate::config::ConfigSaveFormat::Toml)
+                .context("loading config failed")?;
+
+            return Ok((
+                ConfigSource::File(path_str),
+                config.psono_settings.server_url,
+                config.http_options,
+            ));
+        }
+
+        let server_url = self
+            .psono_settings
+            .server_url
+            .ok_or_else(|| anyhow::anyhow!("server_url not set"))?;
+
+        Ok((ConfigSource::Args, server_url, self.http_options))
     }
 }
 
@@ -139,6 +266,65 @@ pub struct RawPsonoSettings {
         required_unless_present_any = ["config_packed", "config_path"]
     )]
     pub server_url: Option<Url>,
+}
+
+#[derive(Parser, Debug, Serialize)]
+struct OnboardingRawPsonoSettings {
+    #[clap(long, env = "PSONO_CI_API_KEY_ID", help = "Api key as uuid")]
+    api_key_id: Option<Uuid>,
+    #[clap(
+        long,
+        env = "PSONO_CI_API_SECRET_KEY_HEX",
+        value_parser = parse_secret_key,
+        help = "Api secret key as 64 byte hex string"
+    )]
+    api_secret_key_hex: Option<String>,
+    #[clap(
+        long,
+        env = "PSONO_CI_SERVER_URL",
+        value_parser = parse_url,
+        help = "Url of the psono backend server",
+        required_unless_present_any = ["config_packed", "config_path"]
+    )]
+    server_url: Option<Url>,
+}
+
+fn is_onboarding_invocation(args: &[OsString]) -> bool {
+    let mut positionals = Vec::new();
+    let mut skip_next = false;
+
+    for arg in args.iter().skip(1) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+
+        let arg_str = arg.to_string_lossy();
+        if matches!(
+            arg_str.as_ref(),
+            "--api-key-id"
+                | "--api-secret-key-hex"
+                | "--server-url"
+                | "--timeout"
+                | "--max-redirects"
+                | "--der-root-certificate-path"
+                | "--pem-root-certificate-path"
+                | "--config-packed"
+                | "--config-path"
+                | "-c"
+        ) {
+            skip_next = true;
+            continue;
+        }
+
+        if arg_str.starts_with('-') {
+            continue;
+        }
+
+        positionals.push(arg_str.into_owned());
+    }
+
+    matches!(positionals.as_slice(), [command, subcommand, ..] if command == "config" && subcommand == "onboard")
 }
 
 #[derive(Subcommand, Debug, Serialize)]
@@ -245,6 +431,17 @@ pub enum ConfigCommand {
     },
     #[clap(about = "Displays the current config in toml format")]
     Show,
+    #[clap(about = "Bootstraps a psonoci config via device authentication")]
+    Onboard {
+        #[clap(short, long, help = "Output path for the generated config")]
+        path: Option<PathBuf>,
+        #[clap(
+            short,
+            long,
+            help = "Only if overwrite is set, psonoci will replace an existing config"
+        )]
+        overwrite: bool,
+    },
 }
 
 #[derive(Parser, Debug, Serialize)]

@@ -1,4 +1,3 @@
-use clap::Parser;
 use std::sync::{LazyLock, Mutex};
 
 // Import library crate to access Opt and enums
@@ -518,6 +517,24 @@ fn parse_config_show() {
         "https://psono.pw/server",
         "config",
         "show",
+    ];
+
+    let opt = parse_opt(args);
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_config_onboard() {
+    let args = [
+        "psonoci",
+        "--server-url",
+        "https://psono.pw/server",
+        "config",
+        "onboard",
+        "--path",
+        "/path/to/config.toml",
+        "--overwrite",
     ];
 
     let opt = parse_opt(args);

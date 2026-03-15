@@ -1,5 +1,4 @@
 use anyhow::{Context, Result, anyhow};
-use clap::Parser;
 use env_vars::run_env_vars_command;
 use run::run_run_command;
 
@@ -9,6 +8,7 @@ mod crypto;
 mod env_vars;
 mod gpg;
 mod license;
+mod onboarding;
 mod opt;
 mod passwords;
 mod run;
@@ -24,6 +24,7 @@ use crate::ssh::run_ssh_command;
 use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
 use config::{Config, ConfigSaveFormat};
 use license::print_license;
+use onboarding::run_onboard_command;
 use opt::{ApiKeyCommand, Command, ConfigCommand, ConfigSource, Opt, SecretCommand};
 use totp::run_totp_command;
 
@@ -112,27 +113,44 @@ fn run_config_command(
                 .context("serializing config to toml failed")?;
             println!("{}", c);
         }
+        ConfigCommand::Onboard { .. } => {
+            unreachable!("config onboard is handled before config loading")
+        }
     }
 
     Ok(())
 }
 
 fn main() -> Result<()> {
-    let opt: Opt = Opt::parse();
+    let Opt {
+        command,
+        raw_config,
+    }: Opt = Opt::parse();
 
-    let (config_source, config) = opt.raw_config.into_config()?;
+    match command {
+        Command::Config {
+            command: ConfigCommand::Onboard { path, overwrite },
+        } => {
+            let (config_source, server_url, http_options) =
+                raw_config.into_onboarding_settings()?;
+            run_onboard_command(config_source, server_url, http_options, path, overwrite)?;
+        }
+        command => {
+            let (config_source, config) = raw_config.into_config()?;
 
-    match opt.command {
-        Command::Secret { command } => run_secret_command(config, command)?,
-        Command::ApiKey { command } => run_inspect_command(config, command)?,
-        Command::Config { command } => run_config_command(config_source, config, command)?,
-        Command::Run { run } => run_run_command(config, run)?,
-        Command::EnvVars { command } => run_env_vars_command(command, config)?,
-        Command::Totp { command } => run_totp_command(command, config)?,
-        Command::License => print_license(),
-        Command::Gpg { command } => run_gpg_command(command, config)?,
-        #[cfg(unix)]
-        Command::Ssh { command } => run_ssh_command(command, config)?,
+            match command {
+                Command::Secret { command } => run_secret_command(config, command)?,
+                Command::ApiKey { command } => run_inspect_command(config, command)?,
+                Command::Config { command } => run_config_command(config_source, config, command)?,
+                Command::Run { run } => run_run_command(config, run)?,
+                Command::EnvVars { command } => run_env_vars_command(command, config)?,
+                Command::Totp { command } => run_totp_command(command, config)?,
+                Command::License => print_license(),
+                Command::Gpg { command } => run_gpg_command(command, config)?,
+                #[cfg(unix)]
+                Command::Ssh { command } => run_ssh_command(command, config)?,
+            }
+        }
     }
 
     Ok(())
