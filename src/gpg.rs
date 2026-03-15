@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::opt::{GpgCommand, GpgSignCommand, GpgVerifyCommand};
 use crate::secret_provider::{PsonoSecretProvider, SecretProvider};
 use anyhow::{bail, Context, Result};
-use chrono::Local;
+use chrono::{DateTime, Local};
 use pgp::composed::{ArmorOptions, Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
@@ -11,8 +11,9 @@ use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use pgp::ser::Serialize;
 use pgp::{
     composed::DetachedSignature,
-    types::{KeyDetails, Password},
+    types::{KeyDetails, KeyVersion, Password, Timestamp},
 };
+use rand::thread_rng;
 use std::fs::File;
 use std::io::{stdin, stdout, Read, Write};
 use std::path::PathBuf;
@@ -57,16 +58,32 @@ fn create_signature(
     signed_secret_key: &SignedSecretKey,
     input_reader: Box<dyn Read>,
 ) -> Result<DetachedSignature> {
-    let now = chrono::Utc::now();
-    let mut sig_cfg = SignatureConfig::v4(
-        SignatureType::Binary,
-        PublicKeyAlgorithm::RSA,
-        HashAlgorithm::Sha256,
-    );
+    let mut sig_cfg = match signed_secret_key.primary_key.version() {
+        KeyVersion::V4 => SignatureConfig::v4(
+            SignatureType::Binary,
+            PublicKeyAlgorithm::RSA,
+            HashAlgorithm::Sha256,
+        ),
+        KeyVersion::V6 => SignatureConfig::v6(
+            &mut thread_rng(),
+            SignatureType::Binary,
+            PublicKeyAlgorithm::RSA,
+            HashAlgorithm::Sha256,
+        )?,
+        version => bail!("unsupported key version: {:?}", version),
+    };
     sig_cfg.hashed_subpackets = vec![
-        Subpacket::regular(SubpacketData::SignatureCreationTime(now))?,
-        Subpacket::regular(SubpacketData::Issuer(signed_secret_key.key_id()))?,
+        Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
+        Subpacket::regular(SubpacketData::IssuerFingerprint(
+            signed_secret_key.primary_key.fingerprint(),
+        ))?,
     ];
+
+    if signed_secret_key.primary_key.version() <= KeyVersion::V4 {
+        sig_cfg.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
+            signed_secret_key.primary_key.legacy_key_id(),
+        ))?];
+    }
 
     let signature_packet = sig_cfg
         .sign(
@@ -168,13 +185,17 @@ fn format_success_message(
     let created_at = signature
         .signature
         .created()
-        .map(|f| f.with_timezone(&Local).to_rfc3339())
+        .map(|f| DateTime::<Local>::from(std::time::SystemTime::from(f)).to_rfc3339())
         .unwrap_or("'".to_string());
     let created_by: String = signed_public_key
         .details
         .users
         .iter()
-        .map(|u| u.id.to_string())
+        .map(|u| {
+            u.id.as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| String::from_utf8_lossy(u.id.id()).into_owned())
+        })
         .collect::<Vec<String>>()
         .join(", ");
 
@@ -245,6 +266,8 @@ mod tests {
     use crate::secret_provider::MockSecretProvider;
     use lazy_static::lazy_static;
     use mockall::predicate::eq;
+    use pgp::composed::{KeyType, SecretKeyParamsBuilder};
+    use rand::thread_rng;
     use std::env;
     use std::io::{BufReader, Cursor};
     use std::sync::{LazyLock, Mutex};
@@ -452,6 +475,26 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
         secret
     }
 
+    fn generate_signing_key(version: pgp::types::KeyVersion) -> SignedSecretKey {
+        let key_type = match version {
+            pgp::types::KeyVersion::V4 => KeyType::Ed25519Legacy,
+            pgp::types::KeyVersion::V6 => KeyType::Ed25519,
+            _ => unreachable!("test helper only supports V4 and V6"),
+        };
+
+        SecretKeyParamsBuilder::default()
+            .version(version)
+            .key_type(key_type)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("Tester <tester@test.invalid>".into())
+            .passphrase(None)
+            .build()
+            .expect("failed to build test key params")
+            .generate(thread_rng())
+            .expect("failed to generate test signing key")
+    }
+
     #[test]
     fn create_and_verify_signature__success() {
         let signed_secret_key = SignedSecretKey::from_string(&GPG_PRIVATE_KEY)
@@ -495,6 +538,49 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
     }
 
     #[test]
+    fn format_signature__armor_outputs_ascii_armored_signature() {
+        let signed_secret_key = SignedSecretKey::from_string(&GPG_PRIVATE_KEY)
+            .expect("decoding key failed")
+            .0;
+        let input_reader: Box<dyn Read> = Box::new(BufReader::new("Test".as_bytes()));
+
+        let signature =
+            create_signature(&signed_secret_key, input_reader).expect("sig creation failed");
+        let armored = format_signature(signature, true).expect("armoring signature failed");
+        let armored = String::from_utf8(armored).expect("armored output must be utf8");
+
+        assert!(armored.starts_with("-----BEGIN PGP SIGNATURE-----"));
+        DetachedSignature::from_string(&armored).expect("armored signature should parse");
+    }
+
+    #[test]
+    fn create_signature__sets_issuer_subpackets_for_v4_and_v6_keys() {
+        for version in [pgp::types::KeyVersion::V4, pgp::types::KeyVersion::V6] {
+            let signed_secret_key = generate_signing_key(version);
+            let signed_public_key = signed_secret_key.to_public_key();
+            let input = b"Test";
+            let input_reader: Box<dyn Read> = Box::new(BufReader::new(input.as_slice()));
+
+            let signature =
+                create_signature(&signed_secret_key, input_reader).expect("sig creation failed");
+
+            assert_eq!(signature.signature.issuer_fingerprint().len(), 1);
+            assert_eq!(
+                signature.signature.issuer_key_id().len(),
+                if version == pgp::types::KeyVersion::V4 {
+                    1
+                } else {
+                    0
+                }
+            );
+
+            signature
+                .verify(&signed_public_key, input)
+                .expect("signature verification failed");
+        }
+    }
+
+    #[test]
     fn format_success_message__format() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         unsafe { env::set_var("TZ", "Europe/Berlin") };
@@ -508,7 +594,10 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
 
         let success_message = format_success_message(&signature, &signed_public_key);
 
-        assert_eq!(success_message, "Signature made 2024-11-03T21:35:56+01:00\nGood signature from User ID: \"b\"Tester <tester@test.invalid>\"\"".to_owned())
+        assert_eq!(
+            success_message,
+            "Signature made 2024-11-03T21:35:56+01:00\nGood signature from Tester <tester@test.invalid>".to_owned()
+        )
     }
 
     #[test]
