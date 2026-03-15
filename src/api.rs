@@ -327,15 +327,13 @@ pub fn make_request(
         .redirect(redirect_policy)
         .timeout(Duration::from_secs(http_options.timeout as u64));
 
-    if http_options.der_root_certificate_path.is_some() {
-        let cert_der_path = http_options.der_root_certificate_path.as_ref().unwrap();
+    if let Some(cert_der_path) = &http_options.der_root_certificate_path {
         let cert_der = load_root_certificate(CertificateEncoding::Der, cert_der_path)
             .context("adding DER root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_der);
     }
 
-    if http_options.pem_root_certificate_path.is_some() {
-        let cert_pem_path = http_options.pem_root_certificate_path.as_ref().unwrap();
+    if let Some(cert_pem_path) = &http_options.pem_root_certificate_path {
         let cert_pem = load_root_certificate(CertificateEncoding::Pem, cert_pem_path)
             .context("adding PEM root certificate failed")?;
         client_builder = client_builder.add_root_certificate(cert_pem);
@@ -602,6 +600,12 @@ impl GenericSecret {
     }
 }
 
+impl Default for GenericSecret {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // pub trait PsonoSecret: Sized {
 //     fn from_generic_secret(s: &GenericSecret) -> Result<Self>;
 
@@ -703,14 +707,6 @@ pub struct CreditCard {
     pub name: Option<String>,
     pub valid_through: Option<String>,
     pub pin: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GPGKey {
-    pub key_private: Option<String>,
-    pub key_public: Option<String>,
-    pub name: Option<String>,
-    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
