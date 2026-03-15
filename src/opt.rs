@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::api::{parse_url, SecretValueType};
+use crate::api::{SecretValueType, parse_url};
 use crate::config::{Config, ConfigLoader, HttpOptions, PsonoSettings};
 use crate::crypto::parse_secret_key;
+use crate::sensitive::SensitiveString;
 
 #[derive(Parser, Debug, Serialize)]
 #[command(
@@ -97,6 +98,7 @@ impl RawConfig {
                 api_secret_key_hex: self
                     .psono_settings
                     .api_secret_key_hex
+                    .map(SensitiveString::from)
                     .expect("api_secret_key_hex not set"),
                 server_url: self.psono_settings.server_url.expect("server_url not set"),
             }

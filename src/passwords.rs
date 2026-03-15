@@ -1,5 +1,5 @@
 use rand::distributions::{Alphanumeric, Uniform};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::iter;
 use unicode_segmentation::UnicodeSegmentation;
 

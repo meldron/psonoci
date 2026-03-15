@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::ErrorKind;
-use std::process::{exit, Command, ExitStatus};
+use std::process::{Command, ExitStatus, exit};
 
 use anyhow::{Context, Result};
 use uuid::Uuid;
 
-use crate::api::{api_key_get_secrets, Secret};
+use crate::api::{Secret, api_key_get_secrets};
 use crate::config::Config;
 use crate::opt::RunCommand;
 

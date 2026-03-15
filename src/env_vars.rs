@@ -1,11 +1,12 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
 use crate::{
-    api::{get_secret, set_secret, EnvironmentVariable, Secret, SecretType},
+    api::{EnvironmentVariable, Secret, SecretType, get_secret, set_secret},
     config::Config,
     opt::{EnvVarsCommand, PasswordCreationSettings},
     passwords::create_random_password,
+    sensitive::SensitiveString,
 };
 
 pub fn run_env_vars_command(env_command: EnvVarsCommand, config: Config) -> Result<()> {
@@ -59,7 +60,7 @@ pub fn get_or_create_env_value_by_name(
     Ok(secret_value)
 }
 
-fn get_env_var_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, String)> {
+fn get_env_var_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, SensitiveString)> {
     let (secret, secret_key_hex) = get_secret(secret_id, config)
         .context("get_or_create_env_value_by_name loading secret from store failed")?;
 

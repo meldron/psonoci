@@ -2,7 +2,8 @@ use crate::api::SecretType;
 use crate::config::Config;
 use crate::opt::{GpgCommand, GpgSignCommand, GpgVerifyCommand};
 use crate::secret_provider::{PsonoSecretProvider, SecretProvider};
-use anyhow::{bail, Context, Result};
+use crate::sensitive::SensitiveString;
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local};
 use pgp::composed::{ArmorOptions, Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::crypto::hash::HashAlgorithm;
@@ -15,7 +16,7 @@ use pgp::{
 };
 use rand::thread_rng;
 use std::fs::File;
-use std::io::{stdin, stdout, Read, Write};
+use std::io::{Read, Write, stdin, stdout};
 use std::path::PathBuf;
 use std::process::exit;
 use uuid::Uuid;
@@ -24,7 +25,7 @@ fn get_gpg_key_pair(
     secret_id: &Uuid,
     config: &Config,
     secret_provider: Box<dyn SecretProvider>,
-) -> Result<(Option<String>, Option<String>)> {
+) -> Result<(Option<SensitiveString>, Option<SensitiveString>)> {
     let (secret, _) = secret_provider
         .get_secret(secret_id, config)
         .context("ssh_agent_add_identity loading secret from store failed")?;
@@ -33,22 +34,25 @@ fn get_gpg_key_pair(
         bail!("the specified secret is not an GPGKey secret");
     }
 
-    Ok((secret.gpg_key_private, secret.gpg_key_public))
+    Ok((
+        secret.gpg_key_private.map(SensitiveString::from),
+        secret.gpg_key_public.map(SensitiveString::from),
+    ))
 }
 
-fn get_signed_public_key(gpg_key_public_raw: Option<String>) -> Result<SignedPublicKey> {
+fn get_signed_public_key(gpg_key_public_raw: Option<SensitiveString>) -> Result<SignedPublicKey> {
     let gpg_key_public = gpg_key_public_raw.context("gpg_key_public not set for secret")?;
 
-    let (signed_public_key, _) = SignedPublicKey::from_string(&gpg_key_public)
+    let (signed_public_key, _) = SignedPublicKey::from_string(gpg_key_public.expose_secret())
         .context("failed to decode gpg_key_private")?;
 
     Ok(signed_public_key)
 }
 
-fn get_signed_secret_key(gpg_key_private_raw: Option<String>) -> Result<SignedSecretKey> {
+fn get_signed_secret_key(gpg_key_private_raw: Option<SensitiveString>) -> Result<SignedSecretKey> {
     let gpg_key_private = gpg_key_private_raw.context("gpg_key_private not set for secret")?;
 
-    let (signed_secret_key, _) = SignedSecretKey::from_string(&gpg_key_private)
+    let (signed_secret_key, _) = SignedSecretKey::from_string(gpg_key_private.expose_secret())
         .context("failed to decode gpg_key_private")?;
 
     Ok(signed_secret_key)
@@ -640,8 +644,8 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
         let uuid = Uuid::new_v4();
         let config = debug_config_v1();
 
-        let secret_key_expected = Some("SK".to_owned());
-        let public_key_expected = Some("PK".to_owned());
+        let secret_key_expected = Some(SensitiveString::from("SK"));
+        let public_key_expected = Some(SensitiveString::from("PK"));
 
         secret_provider_mock
             .expect_get_secret()
@@ -650,7 +654,7 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
             .returning(move |_, _| {
                 Ok((
                     mock_gpg_key_secret(Some("SK".to_owned()), Some("PK".to_owned())),
-                    "".to_owned(),
+                    SensitiveString::from(""),
                 ))
             });
 
@@ -673,7 +677,9 @@ Mth6hCcb7ra1le4m9EYSXDPj02tSfBEnhOhJSe9zqdpgNxeNr+Ygprcg5HYzQaBW
             .expect_get_secret()
             .times(1)
             .with(eq(uuid), eq(config.clone()))
-            .returning(move |_, _| Ok((Secret::new(SecretType::Bookmark), "".to_owned())));
+            .returning(move |_, _| {
+                Ok((Secret::new(SecretType::Bookmark), SensitiveString::from("")))
+            });
 
         let result = get_gpg_key_pair(&uuid, &config, Box::new(secret_provider_mock));
         let error = result.unwrap_err().to_string();

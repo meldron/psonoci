@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use env_vars::run_env_vars_command;
 use run::run_run_command;
@@ -13,6 +13,7 @@ mod opt;
 mod passwords;
 mod run;
 mod secret_provider;
+mod sensitive;
 #[cfg(unix)]
 mod ssh;
 mod totp;

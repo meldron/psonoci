@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use crypto_secretbox::aead::Aead;
 use crypto_secretbox::{KeyInit, XSalsa20Poly1305};
 use hex::{decode, encode};

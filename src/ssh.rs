@@ -2,10 +2,11 @@ use crate::api::SecretType;
 use crate::config::Config;
 use crate::opt::{SshAddCommand, SshCommand};
 use crate::secret_provider::{PsonoSecretProvider, SecretProvider};
-use anyhow::{bail, Context, Result};
-use russh_keys::agent::client::{AgentClient, AgentStream};
-use russh_keys::agent::Constraint;
+use crate::sensitive::SensitiveString;
+use anyhow::{Context, Result, bail};
 use russh_keys::PrivateKey;
+use russh_keys::agent::Constraint;
+use russh_keys::agent::client::{AgentClient, AgentStream};
 use russh_keys::*;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -100,7 +101,7 @@ fn get_ssh_auth_sock_path(ssh_auth_socket_path: Option<PathBuf>) -> Result<PathB
 
 fn get_ssh_private_key(
     secret_id: &Uuid,
-    key_passphrase: &Option<String>,
+    key_passphrase: Option<&SensitiveString>,
     config: &Config,
     secret_provider: Box<dyn SecretProvider>,
 ) -> Result<PrivateKey> {
@@ -112,14 +113,19 @@ fn get_ssh_private_key(
         bail!("the specified secret is not an SSHKey secret");
     }
 
-    let ssh_private_key = secret
-        .ssh_key
-        .context("ssh key not set")?
-        .key_private
-        .context("private key not set")?;
+    let ssh_private_key = SensitiveString::from(
+        secret
+            .ssh_key
+            .context("ssh key not set")?
+            .key_private
+            .context("private key not set")?,
+    );
 
-    decode_secret_key(&ssh_private_key, key_passphrase.as_deref())
-        .context("decoding private key failed")
+    decode_secret_key(
+        ssh_private_key.expose_secret(),
+        key_passphrase.map(|s| s.expose_secret()),
+    )
+    .context("decoding private key failed")
 }
 
 fn get_constraints(key_lifetime: Option<u32>, key_confirmation: bool) -> Vec<Constraint> {
@@ -145,9 +151,13 @@ fn ssh_add(
     secret_provider: Box<dyn SecretProvider>,
 ) -> Result<()> {
     let agent_path = get_ssh_auth_sock_path(add_command.ssh_auth_sock_path)?;
+    let key_passphrase = add_command
+        .key_passphrase
+        .as_deref()
+        .map(SensitiveString::from);
     let private_key = get_ssh_private_key(
         &add_command.secret_id,
-        &add_command.key_passphrase,
+        key_passphrase.as_ref(),
         &config,
         secret_provider,
     )?;
@@ -219,10 +229,10 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .expect_get_secret()
             .times(1)
             .with(eq(uuid), eq(config.clone()))
-            .returning(|_, _| Ok((Secret::new(SecretType::Bookmark), "".to_owned())));
+            .returning(|_, _| Ok((Secret::new(SecretType::Bookmark), SensitiveString::from(""))));
 
         let error =
-            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -241,10 +251,10 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .expect_get_secret()
             .times(1)
             .with(eq(uuid), eq(config.clone()))
-            .returning(|_, _| Ok((mock_ssh_key_secret(None, None), "".to_owned())));
+            .returning(|_, _| Ok((mock_ssh_key_secret(None, None), SensitiveString::from(""))));
 
         let error =
-            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
         assert_eq!(error.to_string(), "private key not set");
     }
@@ -263,12 +273,12 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .returning(|_, _| {
                 Ok((
                     mock_ssh_key_secret(Some("invalid".to_owned()), None),
-                    "".to_owned(),
+                    SensitiveString::from(""),
                 ))
             });
 
         let error =
-            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
         assert_eq!(error.to_string(), "decoding private key failed");
     }
@@ -287,12 +297,12 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .returning(|_, _| {
                 Ok((
                     mock_ssh_key_secret(Some(SSH_PRIVATE_KEY.to_owned()), None),
-                    "".to_owned(),
+                    SensitiveString::from(""),
                 ))
             });
 
         let private_key =
-            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap();
+            get_ssh_private_key(&uuid, None, &config, Box::new(secret_provider_mock)).unwrap();
 
         assert_eq!(private_key.algorithm().as_str(), "ssh-ed25519");
         assert_eq!(
@@ -315,12 +325,12 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .returning(|_, _| {
                 Ok((
                     mock_ssh_key_secret(Some(SSH_PRIVATE_KEY_ENCRYPTED.to_owned()), None),
-                    "".to_owned(),
+                    SensitiveString::from(""),
                 ))
             });
 
         let error =
-            get_ssh_private_key(&uuid, &None, &config, Box::new(secret_provider_mock)).unwrap_err();
+            get_ssh_private_key(&uuid, None, &config, Box::new(secret_provider_mock)).unwrap_err();
 
         assert_eq!(error.to_string(), "decoding private key failed");
     }
@@ -339,13 +349,14 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .returning(|_, _| {
                 Ok((
                     mock_ssh_key_secret(Some(SSH_PRIVATE_KEY_ENCRYPTED.to_owned()), None),
-                    "".to_owned(),
+                    SensitiveString::from(""),
                 ))
             });
 
+        let passphrase = SensitiveString::from("wrong password");
         let error = get_ssh_private_key(
             &uuid,
-            &Some("wrong password".to_owned()),
+            Some(&passphrase),
             &config,
             Box::new(secret_provider_mock),
         )
@@ -368,13 +379,14 @@ LyJ8KFD6VrTBU5pj881bJv8YqItvmUROnBZQQ=
             .returning(|_, _| {
                 Ok((
                     mock_ssh_key_secret(Some(SSH_PRIVATE_KEY_ENCRYPTED.to_owned()), None),
-                    "".to_owned(),
+                    SensitiveString::from(""),
                 ))
             });
 
+        let passphrase = SensitiveString::from("test");
         let private_key = get_ssh_private_key(
             &uuid,
-            &Some("test".to_owned()),
+            Some(&passphrase),
             &config,
             Box::new(secret_provider_mock),
         )

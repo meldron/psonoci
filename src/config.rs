@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use const_format::concatcp;
 use rmp_serde::Deserializer as MessagePackDeserializer;
@@ -13,6 +13,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::crypto::parse_secret_key;
+use crate::sensitive::SensitiveString;
 
 static CONFIG_LOADER_BASE58_ERROR: &str = "decoding base58 failed";
 
@@ -203,17 +204,19 @@ impl Default for HttpOptions {
 pub struct PsonoSettings {
     pub api_key_id: Uuid,
     #[serde(deserialize_with = "deserialize_secret_key")]
-    pub api_secret_key_hex: String,
+    pub api_secret_key_hex: SensitiveString,
     pub server_url: Url,
 }
 
-fn deserialize_secret_key<'de, D>(deserializer: D) -> Result<String, D::Error>
+fn deserialize_secret_key<'de, D>(deserializer: D) -> Result<SensitiveString, D::Error>
 where
     D: Deserializer<'de>,
 {
     let buf = String::deserialize(deserializer)?;
 
-    parse_secret_key(&buf).map_err(serde::de::Error::custom)
+    parse_secret_key(&buf)
+        .map(SensitiveString::from)
+        .map_err(serde::de::Error::custom)
 }
 
 #[cfg(test)]
@@ -227,8 +230,9 @@ pub mod tests {
             psono_settings: PsonoSettings {
                 api_key_id: Uuid::from_str("0e1ed23d-cac8-4a04-868b-275bf43b81cd")
                     .expect("api_key_id error"),
-                api_secret_key_hex:
-                    "acf25040d90e3c73abf1c395e7262bc3b5f9b1e35b96c74dcf72faba4663e98b".to_string(),
+                api_secret_key_hex: SensitiveString::from(
+                    "acf25040d90e3c73abf1c395e7262bc3b5f9b1e35b96c74dcf72faba4663e98b",
+                ),
                 server_url: Url::from_str("https://www.psono.pw/server").expect("serer_url error"),
             },
             http_options: HttpOptions {

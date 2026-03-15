@@ -5,24 +5,26 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 // use attohttpc::Method;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use rayon::prelude::*;
-use reqwest::blocking::{Client, ClientBuilder};
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, USER_AGENT};
-use reqwest::redirect::Policy;
 use reqwest::Certificate;
 use reqwest::Method;
+use reqwest::blocking::{Client, ClientBuilder};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT};
+use reqwest::redirect::Policy;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use crate::config::{Config, HttpOptions};
 use crate::crypto::{create_nonce_hex, open_secret_box, seal_secret_box_hex};
+use crate::sensitive::SensitiveString;
 use crate::totp::{is_valid_totp_algorithm, is_valid_totp_digit};
 
 static USER_AGENT_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
@@ -262,23 +264,30 @@ pub struct EncryptedResponse {
 }
 
 impl EncryptedResponse {
-    pub fn open<I, O>(&self, api_key_secret_key_hex: &str) -> Result<(O, String)>
+    pub fn open<I, O>(
+        &self,
+        api_key_secret_key_hex: &SensitiveString,
+    ) -> Result<(O, SensitiveString)>
     where
         I: DeserializeOwned + Debug,
         O: DataTransform<I, O> + Debug,
     {
-        let encryption_key_raw = open_secret_box(
-            &self.secret_key,
-            &self.secret_key_nonce,
-            api_key_secret_key_hex,
-        )
-        .context("decrypting secret key failed")?;
+        let encryption_key_raw = Zeroizing::new(
+            open_secret_box(
+                &self.secret_key,
+                &self.secret_key_nonce,
+                api_key_secret_key_hex.expose_secret(),
+            )
+            .context("decrypting secret key failed")?,
+        );
 
         let encryption_key = std::str::from_utf8(&encryption_key_raw)
             .context("decrypted secret key is not valid utf-8")?;
 
-        let encrypted_raw = open_secret_box(&self.data, &self.data_nonce, encryption_key)
-            .context("decrypting secret failed")?;
+        let encrypted_raw = Zeroizing::new(
+            open_secret_box(&self.data, &self.data_nonce, encryption_key)
+                .context("decrypting secret failed")?,
+        );
 
         // let raw_string = String::from_utf8_lossy(&encrypted_raw);
         // println!("{}", raw_string);
@@ -288,7 +297,7 @@ impl EncryptedResponse {
 
         let output = O::transform(input).context("transforming input into output failed")?;
 
-        Ok((output, encryption_key.to_owned()))
+        Ok((output, SensitiveString::from(encryption_key)))
     }
 }
 
@@ -948,7 +957,7 @@ impl Secret {
         match (&self.secret_type, secret_value_type) {
             // WEBSITE
             (_, SecretValueType::json) => {
-                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED))
+                return Err(anyhow!(SECRET_KEY_SET_WITH_JSON_NOT_YET_SUPPORTED));
             }
             (SecretType::Website, SecretValueType::notes) => self.notes = Some(value),
             (SecretType::Website, SecretValueType::password) => self.password = Some(value),
@@ -1139,7 +1148,7 @@ impl Secret {
                         Err(_) => {
                             return Err(anyhow!(
                                 "Failed to parse totp period as a number from the provided value"
-                            ))
+                            ));
                         }
                     }
                 } else {
@@ -1172,7 +1181,7 @@ impl Secret {
                         Err(_) => {
                             return Err(anyhow!(
                                 "Failed to parse totp digits as a number from the provided value"
-                            ))
+                            ));
                         }
                     }
                 } else {
@@ -1241,7 +1250,9 @@ impl Secret {
                 if let Some(elster_certificate) = &mut self.elster_certificate {
                     elster_certificate.file_content = Some(value);
                 } else {
-                    return Err(anyhow!("ElsterCertificate is None when trying to set elster_certificate_file_content"));
+                    return Err(anyhow!(
+                        "ElsterCertificate is None when trying to set elster_certificate_file_content"
+                    ));
                 }
             }
             (SecretType::ElsterCertificate, SecretValueType::elster_certificate_password) => {
@@ -1257,7 +1268,9 @@ impl Secret {
                 if let Some(elster_certificate) = &mut self.elster_certificate {
                     elster_certificate.retrieval_code = Some(value);
                 } else {
-                    return Err(anyhow!("ElsterCertificate is None when trying to set elster_certificate_retrieval_code"));
+                    return Err(anyhow!(
+                        "ElsterCertificate is None when trying to set elster_certificate_retrieval_code"
+                    ));
                 }
             }
             (_, _) => {
@@ -1265,7 +1278,7 @@ impl Secret {
                     "cannot set {:?} for {:?}",
                     secret_value_type,
                     self.secret_type
-                ))
+                ));
             }
         }
 
@@ -1479,7 +1492,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
     }
 }
 
-pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, String)> {
+pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, SensitiveString)> {
     let body = GetSecretRequestBody {
         api_key_id: config
             .psono_settings
@@ -1514,15 +1527,20 @@ pub fn set_secret(
     secret_id: &Uuid,
     config: &Config,
     secret: &Secret,
-    secret_key_hex: &str,
+    secret_key_hex: &SensitiveString,
 ) -> Result<()> {
     let nonce_hex = create_nonce_hex();
     let generic_secret = secret.as_generic_secret();
-    let plaintext = serde_json::to_string(&generic_secret).context("serializing secret failed")?;
+    let plaintext = Zeroizing::new(
+        serde_json::to_string(&generic_secret).context("serializing secret failed")?,
+    );
 
-    let secret_encrypted_hex =
-        seal_secret_box_hex(plaintext.as_bytes(), &nonce_hex, secret_key_hex)
-            .context("encrypting secret failed")?;
+    let secret_encrypted_hex = seal_secret_box_hex(
+        plaintext.as_bytes(),
+        &nonce_hex,
+        secret_key_hex.expose_secret(),
+    )
+    .context("encrypting secret failed")?;
 
     let body = SetSecretRequestBody {
         api_key_id: config
@@ -1686,8 +1704,9 @@ mod tests {
         PsonoSettings {
             api_key_id: Uuid::parse_str("d65eda03-2362-498e-b9d6-8b34025572ab")
                 .expect("debug uuid parsing failed"),
-            api_secret_key_hex: "dc6e4d49390041e6ac6e96493aac300fa7327f9d6d71b58cd161ea17da164fbf"
-                .to_string(),
+            api_secret_key_hex: SensitiveString::from(
+                "dc6e4d49390041e6ac6e96493aac300fa7327f9d6d71b58cd161ea17da164fbf",
+            ),
             server_url: Url::parse("https://psono.pw/server").expect("debug url parsing failed"),
         }
     }

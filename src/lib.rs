@@ -8,6 +8,7 @@ pub mod opt;
 pub mod passwords;
 pub mod run;
 pub mod secret_provider;
+pub mod sensitive;
 #[cfg(unix)]
 pub mod ssh;
 pub mod totp;

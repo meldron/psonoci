@@ -1,11 +1,12 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use totp_rs::{Algorithm, Secret as TotpSecret, TOTP};
 use uuid::Uuid;
 
 use crate::{
-    api::{get_secret, Secret as PsonoSecret, SecretType, Totp as TOTPSecret},
+    api::{Secret as PsonoSecret, SecretType, Totp as TOTPSecret, get_secret},
     config::Config,
     opt::TotpCommand,
+    sensitive::SensitiveString,
 };
 
 fn parse_algorithm(s: &str) -> Result<Algorithm> {
@@ -66,7 +67,7 @@ fn create_totp(
     .context("Could not create TOTP Instance")
 }
 
-fn get_token_secret(secret_id: &Uuid, config: &Config) -> Result<(PsonoSecret, String)> {
+fn get_token_secret(secret_id: &Uuid, config: &Config) -> Result<(PsonoSecret, SensitiveString)> {
     let (secret, secret_key_hex) = get_secret(secret_id, config)
         .context("get_token_secret loading secret from store failed")?;
 
