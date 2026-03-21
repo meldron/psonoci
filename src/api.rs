@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-// use attohttpc::Method;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use rayon::prelude::*;
@@ -27,7 +26,7 @@ use crate::crypto::{create_nonce_hex, open_secret_box, seal_secret_box_hex};
 use crate::sensitive::SensitiveString;
 use crate::totp::{is_valid_totp_algorithm, is_valid_totp_digit};
 
-static USER_AGENT_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+pub const USER_AGENT_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 static CERTIFICATE_ERROR_DECODE: &str = "could not decode certificate";
 static CERTIFICATE_ERROR_OPEN: &str = "could not open certificate";
