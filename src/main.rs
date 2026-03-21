@@ -1,32 +1,15 @@
 use anyhow::{Context, Result, anyhow};
-use env_vars::run_env_vars_command;
-use run::run_run_command;
-
-mod api;
-mod config;
-mod crypto;
-mod env_vars;
-mod gpg;
-mod license;
-mod onboarding;
-mod opt;
-mod passwords;
-mod run;
-mod secret_provider;
-mod sensitive;
+use psonoci::api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
+use psonoci::config::{Config, ConfigSaveFormat};
+use psonoci::env_vars::run_env_vars_command;
+use psonoci::gpg::run_gpg_command;
+use psonoci::license::print_license;
+use psonoci::onboarding::run_onboard_command;
+use psonoci::opt::{ApiKeyCommand, Command, ConfigCommand, ConfigSource, Opt, SecretCommand};
+use psonoci::run::run_run_command;
 #[cfg(unix)]
-mod ssh;
-mod totp;
-
-use crate::gpg::run_gpg_command;
-#[cfg(unix)]
-use crate::ssh::run_ssh_command;
-use api::{api_key_get_secrets, api_key_info, get_secret, set_secret};
-use config::{Config, ConfigSaveFormat};
-use license::print_license;
-use onboarding::run_onboard_command;
-use opt::{ApiKeyCommand, Command, ConfigCommand, ConfigSource, Opt, SecretCommand};
-use totp::run_totp_command;
+use psonoci::ssh::run_ssh_command;
+use psonoci::totp::run_totp_command;
 
 fn run_secret_command(config: Config, command: SecretCommand) -> Result<()> {
     match command {
@@ -113,9 +96,6 @@ fn run_config_command(
                 .context("serializing config to toml failed")?;
             println!("{}", c);
         }
-        ConfigCommand::Onboard { .. } => {
-            unreachable!("config onboard is handled before config loading")
-        }
     }
 
     Ok(())
@@ -128,17 +108,15 @@ fn main() -> Result<()> {
     }: Opt = Opt::parse();
 
     match command {
-        Command::Config {
-            command: ConfigCommand::Onboard { path, overwrite },
-        } => {
-            let (config_source, server_url, http_options) =
-                raw_config.into_onboarding_settings()?;
-            run_onboard_command(config_source, server_url, http_options, path, overwrite)?;
+        Command::Onboard(command) => {
+            let (_, server_url, http_options) = raw_config.into_onboarding_settings()?;
+            run_onboard_command(server_url, http_options, command)?;
         }
         command => {
             let (config_source, config) = raw_config.into_config()?;
 
             match command {
+                Command::Onboard(_) => unreachable!("onboard is handled before config loading"),
                 Command::Secret { command } => run_secret_command(config, command)?,
                 Command::ApiKey { command } => run_inspect_command(config, command)?,
                 Command::Config { command } => run_config_command(config_source, config, command)?,
