@@ -41,8 +41,17 @@ pgp = "0.19.0"
 secrecy = "0.10.3"
 zeroize = "1.8.2"
 crypto_box = "0.9"
+ratatui = { version = "0.30.0", features = ["scrolling-regions"] }
+crossterm = "0.29.0"
+tempfile = "3.13"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+] }
 
 [dev-dependencies]
 mockall = "0.13.0"
-tempfile = "3.13"
 insta = { version = "1.39", features = ["json"] }

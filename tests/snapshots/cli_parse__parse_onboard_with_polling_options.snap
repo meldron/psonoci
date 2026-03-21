@@ -1,0 +1,35 @@
+---
+source: tests/cli_parse.rs
+assertion_line: 577
+expression: "&opt"
+---
+{
+  "command": {
+    "Onboard": {
+      "path": null,
+      "stdout": true,
+      "plain": false,
+      "format": "toml",
+      "polling_timeout": 90,
+      "polling_interval": 5,
+      "overwrite": false
+    }
+  },
+  "raw_config": {
+    "psono_settings": {
+      "api_key_id": null,
+      "api_secret_key_hex": null,
+      "server_url": "https://psono.pw/server"
+    },
+    "http_options": {
+      "timeout": 60,
+      "max_redirects": 0,
+      "use_native_tls": false,
+      "danger_disable_tls_verification": false,
+      "der_root_certificate_path": null,
+      "pem_root_certificate_path": null
+    },
+    "config_packed": null,
+    "config_path": null
+  }
+}

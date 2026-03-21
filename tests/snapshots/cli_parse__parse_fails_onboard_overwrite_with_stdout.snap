@@ -1,0 +1,10 @@
+---
+source: tests/cli_parse.rs
+assertion_line: 1061
+expression: error.to_string()
+---
+error: the argument '--stdout' cannot be used with '--overwrite'
+
+Usage: psonoci onboard <--path <PATH>|--stdout>
+
+For more information, try '--help'.

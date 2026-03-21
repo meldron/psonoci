@@ -1,0 +1,11 @@
+---
+source: tests/cli_parse.rs
+assertion_line: 975
+expression: error.to_string()
+---
+error: the following required arguments were not provided:
+  <--path <PATH>|--stdout>
+
+Usage: psonoci onboard <--path <PATH>|--stdout>
+
+For more information, try '--help'.

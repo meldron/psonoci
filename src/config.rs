@@ -1,6 +1,8 @@
 use std::fs;
+use std::fs::Permissions;
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use clap::Args;
@@ -9,6 +11,7 @@ use rmp_serde::Deserializer as MessagePackDeserializer;
 use rmp_serde::Serializer as MessagePackSerializer;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
+use tempfile::NamedTempFile;
 use url::Url;
 use uuid::Uuid;
 
@@ -123,10 +126,189 @@ impl ConfigV1 {
 
         let serialized = self.to_string(format)?;
 
-        fs::write(path, serialized).context("writing serialized toml to file failed")?;
+        #[cfg(unix)]
+        save_unix(path, &serialized)?;
+
+        #[cfg(windows)]
+        save_windows(path, &serialized)?;
+
+        #[cfg(not(any(unix, windows)))]
+        save_default(path, &serialized)?;
 
         Ok(())
     }
+}
+
+fn create_tmp_file(parent: &Path, permissions: Option<Permissions>) -> Result<NamedTempFile> {
+    use tempfile::Builder;
+
+    let mut builder = Builder::new();
+    builder.prefix(".psonoci-config-").suffix(".tmp");
+
+    if let Some(perms) = permissions {
+        builder.permissions(perms);
+    }
+
+    builder
+        .tempfile_in(parent)
+        .context("failed to create named temporary config file")
+}
+
+#[cfg(unix)]
+fn save_unix(path: &Path, serialized: &str) -> Result<()> {
+    use std::fs::{File, Permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let owner_only_rw_permissions = Permissions::from_mode(0o600);
+
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+
+    let mut temp_file = create_tmp_file(parent, Some(owner_only_rw_permissions.clone()))?;
+
+    temp_file
+        .as_file_mut()
+        .write_all(serialized.as_bytes())
+        .context("writing serialized config failed to temporary file")?;
+    temp_file
+        .as_file()
+        .sync_all()
+        .context("syncing temporary config file failed")?;
+    fs::set_permissions(temp_file.path(), owner_only_rw_permissions.clone())
+        .context("setting temporary config file permissions failed")?;
+
+    temp_file.persist(path).map_err(|err| {
+        anyhow!(
+            "renaming temporary config file failed from {} to {}: {}",
+            err.file.path().display(),
+            path.display(),
+            err.error
+        )
+    })?;
+    fs::set_permissions(path, owner_only_rw_permissions)
+        .context("setting final config file permissions failed")?;
+    File::open(parent)
+        .and_then(|dir| dir.sync_all())
+        .with_context(|| format!("syncing config directory failed at {}", parent.display()))?;
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn save_unix(_path: &Path, _serialized: &str) -> Result<()> {
+    unreachable!("save_unix is only available on unix targets")
+}
+
+#[cfg(windows)]
+fn save_windows(path: &Path, serialized: &str) -> Result<()> {
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::Builder;
+
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+
+    // 1. Create a secure temp file with your "psonoci" branding
+    // On Windows, tempfile creates the file with restricted access by default.
+    let mut temp_file = create_tmp_file(parent, None);
+
+    // 2. Apply your secure DACL immediately (before writing data)
+    // This ensures only the user can read the content we are about to write.
+    apply_windows_secure_dacl(temp_file.path())?;
+
+    // 3. Write and Sync
+    temp_file
+        .write_all(serialized.as_bytes())
+        .context("writing serialized config failed")?;
+    temp_file
+        .as_file()
+        .sync_all()
+        .context("syncing temporary file failed")?;
+
+    // 4. Atomic Replace
+    // persist() on Windows uses MoveFileEx which is atomic if on the same drive.
+    temp_file.persist(path).map_err(|err| {
+        anyhow!(
+            "failed to replace config file: {}. Temp file left at: {}",
+            err.error,
+            err.file.path().display()
+        )
+    })?;
+
+    // 5. Final DACL check
+    // MoveFileEx usually preserves the DACL of the source (the temp file),
+    // but it's good practice to ensure the final path is locked down.
+    apply_windows_secure_dacl(path)?;
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn apply_windows_secure_dacl(path: &Path) -> Result<()> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null_mut;
+
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Authorization::{
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    };
+    use windows_sys::Win32::Security::{
+        DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SetFileSecurityW,
+    };
+
+    // Allow full access to the file owner, SYSTEM, and built-in Administrators.
+    const WINDOWS_CONFIG_SDDL: &str = "D:P(A;;FA;;;OW)(A;;FA;;;SY)(A;;FA;;;BA)";
+
+    let sddl_wide: Vec<u16> = OsStr::new(WINDOWS_CONFIG_SDDL)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let path_wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+
+    let mut security_descriptor: PSECURITY_DESCRIPTOR = null_mut();
+    let converted = unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl_wide.as_ptr(),
+            SDDL_REVISION_1 as u32,
+            &mut security_descriptor,
+            null_mut(),
+        )
+    };
+    if converted == 0 {
+        return Err(anyhow!(
+            "creating windows security descriptor failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let applied = unsafe {
+        SetFileSecurityW(
+            path_wide.as_ptr(),
+            DACL_SECURITY_INFORMATION,
+            security_descriptor,
+        )
+    };
+    let free_result = unsafe { LocalFree(security_descriptor as _) };
+
+    if free_result != std::ptr::null_mut() {
+        return Err(anyhow!(
+            "freeing windows security descriptor failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    if applied == 0 {
+        return Err(anyhow!(
+            "setting windows config file permissions failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn save_default(path: &Path, serialized: &str) -> Result<()> {
+    fs::write(path, serialized).context("writing serialized config failed")
 }
 
 pub const DEFAULT_TIMEOUT: usize = 60;
@@ -221,6 +403,7 @@ where
 
 #[cfg(test)]
 pub mod tests {
+    use std::fs;
     use std::str::FromStr;
 
     use super::*;
@@ -295,6 +478,29 @@ pub mod tests {
             config_loader_error.to_string(),
             CONFIG_DESERIALIZING_MESSAGE_PACK_FAILED
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_writes_config_with_user_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let config = debug_config_v1();
+        let path =
+            std::env::temp_dir().join(format!("psonoci-config-test-{}.toml", Uuid::new_v4()));
+
+        config
+            .save(&path, ConfigSaveFormat::Toml, false)
+            .expect("saving config failed");
+
+        let mode = fs::metadata(&path)
+            .expect("reading metadata failed")
+            .permissions()
+            .mode()
+            & 0o777;
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(mode, 0o600);
     }
 }
 

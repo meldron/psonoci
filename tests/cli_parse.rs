@@ -525,16 +525,106 @@ fn parse_config_show() {
 }
 
 #[test]
-fn parse_config_onboard() {
+fn parse_onboard() {
     let args = [
         "psonoci",
         "--server-url",
         "https://psono.pw/server",
-        "config",
         "onboard",
         "--path",
         "/path/to/config.toml",
         "--overwrite",
+    ];
+
+    let opt = parse_opt(args);
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_onboard_plain() {
+    let args = [
+        "psonoci",
+        "--server-url",
+        "https://psono.pw/server",
+        "onboard",
+        "--stdout",
+        "--plain",
+    ];
+
+    let opt = parse_opt(args);
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_onboard_without_server_url() {
+    let args = ["psonoci", "onboard", "--stdout"];
+
+    let opt = parse_opt(args);
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_onboard_with_config_path() {
+    let args = [
+        "psonoci",
+        "--config-path",
+        "/path/to/config.toml",
+        "onboard",
+        "--stdout",
+    ];
+
+    let opt = parse_opt(args);
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_onboard_with_config_packed() {
+    let args = [
+        "psonoci",
+        "--config-packed",
+        "packed-config-value",
+        "onboard",
+        "--stdout",
+    ];
+
+    let opt = parse_opt(args);
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_onboard_stdout_packed() {
+    let args = [
+        "psonoci",
+        "--server-url",
+        "https://psono.pw/server",
+        "onboard",
+        "--stdout",
+        "--format",
+        "packed",
+    ];
+
+    let opt = parse_opt(args);
+
+    insta::assert_json_snapshot!(&opt);
+}
+
+#[test]
+fn parse_onboard_with_polling_options() {
+    let args = [
+        "psonoci",
+        "--server-url",
+        "https://psono.pw/server",
+        "onboard",
+        "--stdout",
+        "--polling-timeout",
+        "90",
+        "--polling-interval",
+        "5",
     ];
 
     let opt = parse_opt(args);
@@ -921,6 +1011,50 @@ fn parse_fails_conflicting_arguments() {
         "--overwrite",
         "/path/to/config.toml",
         "--overwrite", // Duplicate flag
+    ];
+
+    let error = parse_opt_error(args);
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_onboard_missing_output_target() {
+    let args = [
+        "psonoci",
+        "--server-url",
+        "https://psono.pw/server",
+        "onboard",
+    ];
+
+    let error = parse_opt_error(args);
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_onboard_conflicting_output_targets() {
+    let args = [
+        "psonoci",
+        "--server-url",
+        "https://psono.pw/server",
+        "onboard",
+        "--stdout",
+        "--path",
+        "/path/to/config.toml",
+    ];
+
+    let error = parse_opt_error(args);
+    insta::assert_snapshot!(error.to_string());
+}
+
+#[test]
+fn parse_fails_onboard_overwrite_with_stdout() {
+    let args = [
+        "psonoci",
+        "--server-url",
+        "https://psono.pw/server",
+        "onboard",
+        "--stdout",
+        "--overwrite",
     ];
 
     let error = parse_opt_error(args);

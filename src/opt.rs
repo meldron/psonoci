@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
@@ -148,6 +148,13 @@ pub enum ConfigSource {
     Pack,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum OnboardOutputFormat {
+    Toml,
+    Packed,
+}
+
 impl Display for ConfigSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
@@ -206,7 +213,7 @@ impl RawConfig {
         ))
     }
 
-    pub fn into_onboarding_settings(self) -> Result<(ConfigSource, Url, HttpOptions)> {
+    pub fn into_onboarding_settings(self) -> Result<(ConfigSource, Option<Url>, HttpOptions)> {
         if let Some(config_packed) = self.config_packed {
             let config = ConfigLoader::from_str(
                 &config_packed,
@@ -215,7 +222,7 @@ impl RawConfig {
 
             return Ok((
                 ConfigSource::Pack,
-                config.psono_settings.server_url,
+                Some(config.psono_settings.server_url),
                 config.http_options,
             ));
         }
@@ -227,17 +234,16 @@ impl RawConfig {
 
             return Ok((
                 ConfigSource::File(path_str),
-                config.psono_settings.server_url,
+                Some(config.psono_settings.server_url),
                 config.http_options,
             ));
         }
 
-        let server_url = self
-            .psono_settings
-            .server_url
-            .ok_or_else(|| anyhow::anyhow!("server_url not set"))?;
-
-        Ok((ConfigSource::Args, server_url, self.http_options))
+        Ok((
+            ConfigSource::Args,
+            self.psono_settings.server_url,
+            self.http_options,
+        ))
     }
 }
 
@@ -284,7 +290,6 @@ struct OnboardingRawPsonoSettings {
         env = "PSONO_CI_SERVER_URL",
         value_parser = parse_url,
         help = "Url of the psono backend server",
-        required_unless_present_any = ["config_packed", "config_path"]
     )]
     server_url: Option<Url>,
 }
@@ -324,11 +329,13 @@ fn is_onboarding_invocation(args: &[OsString]) -> bool {
         positionals.push(arg_str.into_owned());
     }
 
-    matches!(positionals.as_slice(), [command, subcommand, ..] if command == "config" && subcommand == "onboard")
+    matches!(positionals.as_slice(), [command, ..] if command == "onboard")
 }
 
 #[derive(Subcommand, Debug, Serialize)]
 pub enum Command {
+    #[clap(about = "Bootstraps a psonoci config via device authentication")]
+    Onboard(OnboardCommand),
     #[clap(about = "Psono secret commands (/api-key-access/secret/)")]
     Secret {
         #[clap(subcommand)]
@@ -372,6 +379,52 @@ pub enum Command {
     },
     #[clap(about = "Prints psonoci's license")]
     License,
+}
+
+#[derive(Args, Debug, Serialize)]
+#[command(group(
+    ArgGroup::new("output_target")
+        .args(["path", "stdout"])
+        .required(true)
+        .multiple(false)
+))]
+pub struct OnboardCommand {
+    #[clap(short, long, help = "Write the generated config to this file")]
+    pub path: Option<PathBuf>,
+    #[clap(long, help = "Print the generated config to standard output")]
+    pub stdout: bool,
+    #[clap(
+        long,
+        help = "Use the plain text prompt instead of the interactive selector"
+    )]
+    pub plain: bool,
+    #[clap(
+        long,
+        value_enum,
+        default_value_t = OnboardOutputFormat::Toml,
+        help = "Output format for --path or --stdout"
+    )]
+    pub format: OnboardOutputFormat,
+    #[clap(
+        long = "polling-timeout",
+        default_value_t = 60,
+        help = "Maximum time to wait for device approval, in seconds"
+    )]
+    pub polling_timeout: u64,
+    #[clap(
+        long = "polling-interval",
+        default_value_t = 3,
+        help = "Seconds between device approval polling requests"
+    )]
+    pub polling_interval: u64,
+    #[clap(
+        short,
+        long,
+        help = "Overwrite the output file if it already exists",
+        requires = "path",
+        conflicts_with = "stdout"
+    )]
+    pub overwrite: bool,
 }
 
 #[derive(Subcommand, Debug, Serialize)]
@@ -431,17 +484,6 @@ pub enum ConfigCommand {
     },
     #[clap(about = "Displays the current config in toml format")]
     Show,
-    #[clap(about = "Bootstraps a psonoci config via device authentication")]
-    Onboard {
-        #[clap(short, long, help = "Output path for the generated config")]
-        path: Option<PathBuf>,
-        #[clap(
-            short,
-            long,
-            help = "Only if overwrite is set, psonoci will replace an existing config"
-        )]
-        overwrite: bool,
-    },
 }
 
 #[derive(Parser, Debug, Serialize)]

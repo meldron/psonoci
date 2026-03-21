@@ -1,17 +1,18 @@
 ---
 source: tests/cli_parse.rs
-assertion_line: 543
+assertion_line: 557
 expression: "&opt"
 ---
 {
   "command": {
-    "Config": {
-      "command": {
-        "Onboard": {
-          "path": "/path/to/config.toml",
-          "overwrite": true
-        }
-      }
+    "Onboard": {
+      "path": null,
+      "stdout": true,
+      "plain": true,
+      "format": "toml",
+      "polling_timeout": 60,
+      "polling_interval": 3,
+      "overwrite": false
     }
   },
   "raw_config": {
