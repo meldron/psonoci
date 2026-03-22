@@ -1,7 +1,6 @@
 use std::fs;
 use std::fs::Permissions;
 use std::io::Cursor;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
@@ -157,6 +156,7 @@ fn create_tmp_file(parent: &Path, permissions: Option<Permissions>) -> Result<Na
 #[cfg(unix)]
 fn save_unix(path: &Path, serialized: &str) -> Result<()> {
     use std::fs::{File, Permissions};
+    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
 
     let owner_only_rw_permissions = Permissions::from_mode(0o600);
@@ -193,22 +193,15 @@ fn save_unix(path: &Path, serialized: &str) -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(unix))]
-fn save_unix(_path: &Path, _serialized: &str) -> Result<()> {
-    unreachable!("save_unix is only available on unix targets")
-}
-
 #[cfg(windows)]
 fn save_windows(path: &Path, serialized: &str) -> Result<()> {
-    use std::fs::File;
     use std::io::Write;
-    use tempfile::Builder;
 
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
 
     // 1. Create a secure temp file with your "psonoci" branding
     // On Windows, tempfile creates the file with restricted access by default.
-    let mut temp_file = create_tmp_file(parent, None);
+    let mut temp_file = create_tmp_file(parent, None)?;
 
     // 2. Apply your secure DACL immediately (before writing data)
     // This ensures only the user can read the content we are about to write.
@@ -255,13 +248,16 @@ fn apply_windows_secure_dacl(path: &Path) -> Result<()> {
         DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SetFileSecurityW,
     };
 
-    // Allow full access to the file owner, SYSTEM, and built-in Administrators.
-    const WINDOWS_CONFIG_SDDL: &str = "D:P(A;;FA;;;OW)(A;;FA;;;SY)(A;;FA;;;BA)";
+    let user_sid = current_process_user_sid_string()?;
+    // SDDL breakdown:
+    // - `D:` starts the DACL definition
+    // - `P` marks the DACL as protected so parent ACLs are not inherited
+    // - `(A;;FA;;;SY)` allows full access to LocalSystem
+    // - `(A;;FA;;;BA)` allows full access to built-in Administrators
+    // - `(A;;FA;;;{user_sid})` allows full access to the current user
+    let sddl = format!("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;{user_sid})");
 
-    let sddl_wide: Vec<u16> = OsStr::new(WINDOWS_CONFIG_SDDL)
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
+    let sddl_wide: Vec<u16> = OsStr::new(&sddl).encode_wide().chain(Some(0)).collect();
     let path_wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
 
     let mut security_descriptor: PSECURITY_DESCRIPTOR = null_mut();
@@ -304,6 +300,97 @@ fn apply_windows_secure_dacl(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(windows)]
+fn current_process_user_sid_string() -> Result<String> {
+    use std::ptr::null_mut;
+
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, LocalFree};
+    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows_sys::Win32::Security::{GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser};
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    let mut token_handle: HANDLE = null_mut();
+    let opened = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token_handle) };
+    if opened == 0 {
+        return Err(anyhow!(
+            "opening current process token failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let result = (|| -> Result<String> {
+        let mut token_info_length = 0u32;
+        unsafe {
+            let _ = GetTokenInformation(
+                token_handle,
+                TokenUser,
+                null_mut(),
+                0,
+                &mut token_info_length,
+            );
+        }
+
+        let mut token_info = vec![0u8; token_info_length as usize];
+        let populated = unsafe {
+            GetTokenInformation(
+                token_handle,
+                TokenUser,
+                token_info.as_mut_ptr().cast(),
+                token_info_length,
+                &mut token_info_length,
+            )
+        };
+        if populated == 0 {
+            return Err(anyhow!(
+                "reading current process token user failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        let token_user = unsafe { &*(token_info.as_ptr().cast::<TOKEN_USER>()) };
+        let mut sid_wide = null_mut();
+        let converted = unsafe { ConvertSidToStringSidW(token_user.User.Sid, &mut sid_wide) };
+        if converted == 0 {
+            return Err(anyhow!(
+                "converting current process user sid failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        let sid_string = (|| -> Result<String> {
+            let mut len = 0usize;
+            unsafe {
+                while *sid_wide.add(len) != 0 {
+                    len += 1;
+                }
+                Ok(String::from_utf16(&std::slice::from_raw_parts(
+                    sid_wide, len,
+                ))?)
+            }
+        })();
+
+        let free_result = unsafe { LocalFree(sid_wide as _) };
+        if free_result != std::ptr::null_mut() {
+            return Err(anyhow!(
+                "freeing windows sid string failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        sid_string
+    })();
+
+    let close_result = unsafe { CloseHandle(token_handle) };
+    if close_result == 0 {
+        return Err(anyhow!(
+            "closing current process token handle failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    result
 }
 
 #[cfg(not(any(unix, windows)))]
