@@ -78,6 +78,37 @@ There are several more options, please use the `help` commands for more info.
 
 Identity secrets are available through the same `secret get` interface as the other typed secrets. For example, `psonoci secret get <uuid> identity-email` returns the stored email address, while `psonoci secret get <uuid> json` includes the nested `identity` object in the JSON output.
 
+## Onboard
+
+Since version `0.6.0` `psonoci` provides an `onboard` command to create a config interactively from a Psono account without manually copying the API key id and secret key.
+
+The onboarding command uses Psono's device code authentication flow to authenticate in the browser and receive the list of API keys available to your account. You then select the API key to use, and `psonoci` writes the resulting config either to a file or to stdout.
+
+`psonoci` does not persist the temporary authentication session used during onboarding.
+
+Unlike the regular commands, onboarding does not require `--api-key-id` or `--api-secret-key-hex`. Only the server URL is needed, either from `--server-url`, an existing config, or the interactive prompt.
+
+### Write a TOML config file
+
+```sh
+psonoci --server-url https://www.psono.pw/server \
+    onboard --path ./psonoci.toml
+```
+
+If the output file already exists, add `--overwrite`.
+
+### Print a packed config to stdout
+
+```sh
+psonoci --server-url https://www.psono.pw/server \
+    onboard --stdout --format packed
+```
+
+This is useful when you want to export the config into a CI secret store instead of writing it to disk.
+
+Check `psonoci onboard --help` for all options.
+
+
 ## SSH
 
 Since version `0.5` `psonoci` supports Psono's SSH sub command, which allows you to add SSH keys stored in your Psono vault to your SSH agent.
