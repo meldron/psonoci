@@ -92,7 +92,7 @@ fn execute_error_status_code(error_kind: &ErrorKind) -> i32 {
 }
 
 #[cfg(not(target_family = "unix"))]
-fn execute_error_status_code(error_kind: &ErrorKind) -> i32 {
+fn execute_error_status_code(_error_kind: &ErrorKind) -> i32 {
     1
 }
 
