@@ -1,5 +1,7 @@
 use std::io::{self, BufRead, IsTerminal, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(any(debug_assertions, test))]
+use std::path::PathBuf;
 use std::process;
 use std::thread;
 use std::time::{Duration, Instant};
