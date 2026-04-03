@@ -63,7 +63,8 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Keep this pinned to the repository toolchain in rust-toolchain.toml.
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: ${{ matrix.target }}
           components: rustfmt
