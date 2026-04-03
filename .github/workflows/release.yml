@@ -88,7 +88,7 @@ jobs:
         uses: taiki-e/install-action@cross
 
       - name: Pull docker image used by cross
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.use_cross && matrix.target_type == 'unix'
         run: docker pull $builder_image:${{ matrix.target }}
 
       # - name: Build docker image used by cross

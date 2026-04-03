@@ -74,7 +74,7 @@ jobs:
         uses: taiki-e/install-action@cross
 
       - name: Pull docker image used by cross
-        if: matrix.os == 'ubuntu-22.04' && matrix.use_cross
+        if: matrix.use_cross && matrix.target_type == 'unix'
         run: docker pull $builder_image:${{ matrix.target }}
 
       # the base image for armv7-unknown-linux-gnueabihf is broken (ca certs invalid), use a prebuilt image for now
