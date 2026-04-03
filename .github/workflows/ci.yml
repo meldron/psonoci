@@ -15,22 +15,22 @@ jobs:
         build: [ linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc ]
         include:
           - build: linux
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             target_type: unix
             use_cross: true
           - build: linux-armv7
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             target: armv7-unknown-linux-gnueabihf
             target_type: unix
             use_cross: true
           - build: linux-armv7-musl
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             target: armv7-unknown-linux-musleabihf
             target_type: unix
             use_cross: true
           - build: linux-aarch64
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             target: aarch64-unknown-linux-musl
             target_type: unix
             use_cross: true
@@ -45,7 +45,7 @@ jobs:
             target_type: unix
             use_cross: false
           - build: win-gnu
-            os: ubuntu-22.04
+            os: ubuntu-24.04
             target: x86_64-pc-windows-gnu
             target_type: windows
             use_cross: true
@@ -79,7 +79,7 @@ jobs:
 
       # the base image for armv7-unknown-linux-gnueabihf is broken (ca certs invalid), use a prebuilt image for now
       # - name: Build docker image used by cross
-      #   if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
+      #   if: matrix.os == 'ubuntu-24.04' && matrix.target_type == 'unix'
       #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
       - name: cargo fmt
