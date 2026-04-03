@@ -50,8 +50,8 @@ variables:
   except:
     - schedules
   only:
-    - branches@psono/psono-ci
-    - tags@psono/psono-ci
+    - branches@esaqa/psono/psono-ci
+    - tags@esaqa/psono/psono-ci
 
 .build-cross-linux:
   extends: .build-cross-base
@@ -119,8 +119,8 @@ build-x86_64-pc-windows-msvc:
   except:
     - schedules
   only:
-    - branches@psono/psono-ci
-    - tags@psono/psono-ci
+    - branches@esaqa/psono/psono-ci
+    - tags@esaqa/psono/psono-ci
 
 .build-macos:
   stage: build
@@ -143,8 +143,8 @@ build-x86_64-pc-windows-msvc:
   except:
     - schedules
   only:
-    - branches@psono/psono-ci
-    - tags@psono/psono-ci
+    - branches@esaqa/psono/psono-ci
+    - tags@esaqa/psono/psono-ci
 
 # Build job for x86_64-apple-darwin
 build-x86_64-apple-darwin:
