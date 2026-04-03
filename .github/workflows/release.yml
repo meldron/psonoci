@@ -6,39 +6,21 @@ on:
       - "v*.*.*-rc*"
       - "release-test"
 
+permissions:
+  contents: write
+
 jobs:
   create-release:
     name: create-release
     runs-on: ubuntu-latest
     steps:
-      - name: Inject slug/short variables
-        uses: rlespinasse/github-slug-action@v3.x
-
-      - name: Create artifacts directory
-        run: mkdir artifacts
-
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.GITHUB_REF_SLUG }}
-          release_name: Release ${{ env.GITHUB_REF_SLUG }}
-          draft: false
-          prerelease: false
-
-      - name: Save release upload URL to artifact
-        run: echo "${{ steps.create_release.outputs.upload_url }}" > artifacts/release-upload-url
-
-      - name: Save version number to artifact
-        run: echo "${{ env.GITHUB_REF_SLUG }}" > artifacts/release-version
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifacts
-          path: artifacts
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+          gh release create "$RELEASE_TAG" --title "Release $RELEASE_TAG"
 
   build-release:
     name: build-release
@@ -46,6 +28,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       builder_image: meldron/psonoci_builder
+      RELEASE_VERSION: ${{ github.ref_name }}
     strategy:
       matrix:
         build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
@@ -54,10 +37,12 @@ jobs:
             os: ubuntu-22.04
             target: x86_64-unknown-linux-musl
             target_type: unix
+            use_cross: true
           - build: linux-armv7
             os: ubuntu-22.04
             target: armv7-unknown-linux-gnueabihf
             target_type: unix
+            use_cross: true
           - build: linux-armv7-musl
             os: ubuntu-22.04
             target: armv7-unknown-linux-musleabihf
@@ -67,10 +52,12 @@ jobs:
             os: ubuntu-22.04
             target: aarch64-unknown-linux-musl
             target_type: unix
+            use_cross: true
           - build: macos
             os: macos-latest
             target: x86_64-apple-darwin
             target_type: unix
+            use_cross: false
           - build: macos-aarch64
             os: macos-latest
             target: aarch64-apple-darwin
@@ -80,20 +67,24 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-gnu
             target_type: windows
+            use_cross: false
           - build: win-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
             target_type: windows
+            use_cross: false
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: install rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        uses: taiki-e/install-action@cross
 
       - name: Pull docker image used by cross
         if: matrix.os == 'ubuntu-22.04'
@@ -103,37 +94,14 @@ jobs:
       #   if: matrix.target != 'x86_64-pc-windows-gnu'
       #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
-      - name: build with cross
-        uses: actions-rs/cargo@v1
-        if: matrix.os == 'ubuntu-22.04'
-        with:
-          use-cross: true
-          command: build
-          args: --release --target ${{ matrix.target }}
-
-      - name: build with cargo
-        uses: actions-rs/cargo@v1
-        if: matrix.os != 'ubuntu-22.04'
-        with:
-          use-cross: false
-          command: build
-          args: --release --target ${{ matrix.target }}
-
-      - name: Get release download URL
-        uses: actions/download-artifact@v4
-        with:
-          name: artifacts
-          path: artifacts
-
-      - name: Set release upload URL and release version
+      - name: build release binary
         shell: bash
         run: |
-          release_upload_url="$(cat artifacts/release-upload-url)"
-          echo "RELEASE_UPLOAD_URL=$release_upload_url" >> $GITHUB_ENV
-          echo "release upload url: $RELEASE_UPLOAD_URL"
-          release_version="$(cat artifacts/release-version)"
-          echo "RELEASE_VERSION=$release_version" >> $GITHUB_ENV
-          echo "release version: $RELEASE_VERSION"
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: Import GPG key
         id: import_gpg
@@ -162,21 +130,11 @@ jobs:
           fi
 
       - name: Upload release archive
-        uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ env.RELEASE_UPLOAD_URL }}
-          asset_path: ${{ env.ASSET }}
-          asset_name: ${{ env.ASSET }}
-          asset_content_type: application/octet-stream
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "${{ env.ASSET }}" --clobber
 
       - name: Upload release archive signature
-        uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ env.RELEASE_UPLOAD_URL }}
-          asset_path: ${{ env.ASSET_SIG }}
-          asset_name: ${{ env.ASSET_SIG }}
-          asset_content_type: application/pgp-signature
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "${{ env.ASSET_SIG }}" --clobber

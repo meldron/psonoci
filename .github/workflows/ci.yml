@@ -61,16 +61,19 @@ jobs:
         shell: bash
         run: echo "SHA8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+          targets: ${{ matrix.target }}
+          components: rustfmt
+
+      - name: Install cross
+        if: matrix.use_cross
+        uses: taiki-e/install-action@cross
 
       - name: Pull docker image used by cross
-        if: matrix.os == 'ubuntu-18.04' && matrix.target_type == 'unix'
+        if: matrix.os == 'ubuntu-22.04' && matrix.use_cross
         run: docker pull $builder_image:${{ matrix.target }}
 
       # the base image for armv7-unknown-linux-gnueabihf is broken (ca certs invalid), use a prebuilt image for now
@@ -79,29 +82,28 @@ jobs:
       #   run: docker build build_files --cache-from $builder_image:${{ matrix.target }} --file build_files/Dockerfile-${{ matrix.target }} --tag $builder_image:${{ matrix.target }}
 
       - name: cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: false
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
 
       # - name: cargo test
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #       use-cross: ${{ matrix.use_cross }}
-      #       command: test
-      #       args: --release --target ${{ matrix.target }}
+      #   run: |
+      #     if [ "${{ matrix.use_cross }}" = "true" ]; then
+      #       cross test --release --target ${{ matrix.target }}
+      #     else
+      #       cargo test --release --target ${{ matrix.target }}
+      #     fi
 
       - name: cargo build
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.use_cross }}
-          command: build
-          args: --release --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: upload unix artifact
         uses: actions/upload-artifact@v4
-        if: matrix.target != 'windows'
+        if: matrix.target_type == 'unix'
         with:
           name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/psonoci
