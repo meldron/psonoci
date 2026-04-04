@@ -1,1 +1,32 @@
-FROM ghcr.io/cross-rs/x86_64-pc-windows-gnu:latest
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RUST_VERSION=1.94.1
+
+# Keep the windows-gnu builder on Ubuntu 24.04 so build scripts run against
+# the same glibc generation as the GitLab base image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    curl \
+    gcc-mingw-w64-x86-64 \
+    g++-mingw-w64-x86-64 \
+    binutils-mingw-w64-x86-64 \
+    mingw-w64 \
+    pkg-config \
+    perl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -m777 /opt/rust /opt/cargo
+
+ENV RUSTUP_HOME=/opt/rust
+ENV CARGO_HOME=/opt/cargo
+ENV PATH=/opt/cargo/bin:$PATH
+ENV CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc
+ENV CC_x86_64_pc_windows_gnu=x86_64-w64-mingw32-gcc
+ENV CXX_x86_64_pc_windows_gnu=x86_64-w64-mingw32-g++
+ENV AR_x86_64_pc_windows_gnu=x86_64-w64-mingw32-ar
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain ${RUST_VERSION} && \
+    rustup target add x86_64-pc-windows-gnu && \
+    chmod -R a+rwX /opt/rust /opt/cargo
