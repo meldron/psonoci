@@ -115,7 +115,7 @@ build-x86_64-pc-windows-msvc:
   variables:
     BUILD_ENV: x86_64-pc-windows-msvc
   tags:
-    - windows
+    - saas-windows-medium-amd64
   except:
     - schedules
   only:
@@ -125,7 +125,7 @@ build-x86_64-pc-windows-msvc:
 .build-macos:
   stage: build
   tags:
-    - macos
+    - saas-macos-medium-m1
   script:
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     - . "$HOME/.cargo/env"
