@@ -79,7 +79,7 @@ jobs:
 
       - name: install rust
         # Keep this pinned to the repository toolchain in rust-toolchain.toml.
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@1.94.1
         with:
           targets: ${{ matrix.target }}
 

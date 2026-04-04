@@ -342,7 +342,7 @@ PSONO_CI_CONFIG_PACKED="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ys
 
 If you have rust installed just run `cargo build --release`.
 
-The current version is tested with Rust `1.94.0`.
+The current version is tested with Rust `1.94.1`.
 
 ### cross
 
