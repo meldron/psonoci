@@ -46,7 +46,7 @@ variables:
     DOCKER_DRIVER: overlay2
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
-    CROSS_REMOTE: 1
+    # CROSS_REMOTE: 1
   except:
     - schedules
   only:
