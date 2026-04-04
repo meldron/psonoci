@@ -46,7 +46,6 @@ variables:
     DOCKER_DRIVER: overlay2
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
-    # CROSS_REMOTE: 1
   except:
     - schedules
   only:
@@ -55,6 +54,8 @@ variables:
 
 .build-cross-linux:
   extends: .build-cross-base
+  variables:
+    CROSS_REMOTE: "1"
   artifacts:
     name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
     paths:
