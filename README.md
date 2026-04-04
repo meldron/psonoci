@@ -279,6 +279,8 @@ use_native_tls = false
 danger_disable_tls_verification = false
 ```
 
+Since `v0.6.0`, `psonoci` writes config files with permissions restricted to the current user only. On Unix this is enforced as mode `0600`; on Windows a user-only ACL is applied. See `src/config.rs` for the implementation details.
+
 The config file then can be loaded with:
 
 ```sh
