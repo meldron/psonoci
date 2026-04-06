@@ -4,6 +4,7 @@
 - Upgrade clap from 3.2 to 4.5
 - Minor help output formatting changes due to clap 4 upgrade
 - Keep legacy snake_case secret value types working alongside the canonical kebab-case clap output
+- Change `run` so spawned subprocesses no longer inherit `PSONO_CI_*` config and authentication environment variables
 - Upgrade Rust toolchain to `1.94.1`
 - Harden internal secret handling with `secrecy` and `zeroize`
 - Dependency update

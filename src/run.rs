@@ -63,6 +63,12 @@ where
 
     if clear_env {
         command.env_clear();
+    } else {
+        for (k, _) in std::env::vars() {
+            if k.starts_with("PSONO_CI_") {
+                command.env_remove(&k);
+            }
+        }
     }
 
     if !envs.is_empty() {
@@ -149,4 +155,78 @@ pub fn run_run_command(config: Config, rc: RunCommand) -> Result<()> {
     let exit_status_code = exit_status_code(&exit_status);
 
     exit(exit_status_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{LazyLock, Mutex};
+
+    use super::*;
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    fn command_env_overrides(command: &Command) -> HashMap<String, Option<String>> {
+        command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|v| v.to_string_lossy().into_owned()),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn build_command_removes_inherited_psono_ci_envs_without_clearing_env() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+
+        unsafe {
+            std::env::set_var(
+                "PSONO_CI_API_KEY_ID",
+                "00000000-0000-0000-0000-000000000000",
+            );
+            std::env::set_var("PSONO_SESSION", "must-not-be-touched");
+        }
+
+        let envs = HashMap::new();
+        let duplicates = HashMap::new();
+        let command = build_command("echo", ["hello"], &envs, &duplicates, false);
+        let overrides = command_env_overrides(&command);
+
+        assert_eq!(overrides.get("PSONO_CI_API_KEY_ID"), Some(&None));
+        assert!(!overrides.contains_key("PSONO_SESSION"));
+
+        unsafe {
+            std::env::remove_var("PSONO_CI_API_KEY_ID");
+            std::env::remove_var("PSONO_SESSION");
+        }
+    }
+
+    #[test]
+    fn build_command_keeps_secret_env_vars_while_scrubbing_psono_ci_envs() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+
+        unsafe {
+            std::env::set_var(
+                "PSONO_CI_API_SECRET_KEY_HEX",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            );
+        }
+
+        let envs = HashMap::from([("DB_PASSWORD".to_owned(), "secret-from-psono".to_owned())]);
+        let duplicates = HashMap::new();
+        let command = build_command("echo", ["hello"], &envs, &duplicates, false);
+        let overrides = command_env_overrides(&command);
+
+        assert_eq!(overrides.get("PSONO_CI_API_SECRET_KEY_HEX"), Some(&None));
+        assert_eq!(
+            overrides.get("DB_PASSWORD"),
+            Some(&Some("secret-from-psono".to_owned()))
+        );
+
+        unsafe {
+            std::env::remove_var("PSONO_CI_API_SECRET_KEY_HEX");
+        }
+    }
 }

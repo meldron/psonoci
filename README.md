@@ -194,6 +194,8 @@ and afterwards run:
 psonoci -c /path/to/config-staging.toml run -- ./my_backend.py --timeout 10
 ```
 
+Since `v0.6.0`, the spawned process no longer inherits `psonoci`'s own `PSONO_CI_*` config and authentication environment variables. Environment variables loaded from Psono secrets are still injected as usual. Add `--clear-env` if you want the child process to receive only the secret-derived variables.
+
 This command will execute `./my_backend.py` and inject all environment variables of all secrets into the process:
 
 ```py
