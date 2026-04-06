@@ -74,7 +74,7 @@ These three options must be supplied (and be in front of the subcommand):
 
 There are several more options, please use the `help` commands for more info.
 
-`psonoci` now uses `clap` for command-line parsing. The canonical option and enum value spelling shown in help output is kebab-case (for example `url-filter`), but for backward compatibility the legacy snake_case forms (for example `url_filter`) are still accepted for secret value types.
+Since version `0.6.0` psonoci` now uses `clap` for command-line parsing. The canonical option and enum value spelling shown in help output is kebab-case (for example `url-filter`), but for backward compatibility the legacy snake_case forms (for example `url_filter`) are still accepted for secret value types.
 
 Identity secrets are available through the same `secret get` interface as the other typed secrets. For example, `psonoci secret get <uuid> identity-email` returns the stored email address, while `psonoci secret get <uuid> json` includes the nested `identity` object in the JSON output.
 
