@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: echo "SHA8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Keep this pinned to the repository toolchain in rust-toolchain.toml.
       - uses: dtolnay/rust-toolchain@1.94.1
@@ -103,14 +103,14 @@ jobs:
           fi
 
       - name: upload unix artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: matrix.target_type == 'unix'
         with:
           name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/psonoci
 
       - name: upload windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: matrix.target_type == 'windows'
         with:
           name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}

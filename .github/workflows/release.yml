@@ -75,7 +75,7 @@ jobs:
             use_cross: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: install rust
         # Keep this pinned to the repository toolchain in rust-toolchain.toml.
