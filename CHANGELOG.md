@@ -1,13 +1,14 @@
-# v0.6.0 (`2026-03-15`)
+# v0.6.0 (`2026-04-06`)
 
-- Add Identity secret type support
-- Upgrade clap from 3.2 to 4.5
-- Minor help output formatting changes due to clap 4 upgrade
-- Keep legacy snake_case secret value types working alongside the canonical kebab-case clap output
-- Change `run` so spawned subprocesses no longer inherit `PSONO_CI_*` config and authentication environment variables
-- Upgrade Rust toolchain to `1.94.1`
-- Harden internal secret handling with `secrecy` and `zeroize`
-- Dependency update
+- Breaking: config files are now written with user-only permissions (`0600` on Linux/macOS, user-only ACL on Windows)
+- Breaking: `run` no longer forwards inherited `PSONO_CI_*` config and authentication environment variables to spawned subprocesses
+- Added: `onboard` sub command to bootstrap psonoci config with device-auth flow
+- Added: Identity secret type support
+- Changed: help output now uses canonical kebab-case option and enum spellings due to the clap 4 upgrade, while legacy snake_case secret value types remain accepted for compatibility
+- Changed: upgraded Rust toolchain to `1.94.1`
+- Changed: hardened internal secret handling with `secrecy` and `zeroize`
+- Changed: dependency updates
+- Changed: GitHub Actions updates (new actions, newer base systems, ...)
 
 # v0.5.0 (`2024-11-25`)
 
