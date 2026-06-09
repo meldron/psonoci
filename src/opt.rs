@@ -195,7 +195,6 @@ impl RawConfig {
                 api_secret_key_hex: self
                     .psono_settings
                     .api_secret_key_hex
-                    .map(SensitiveString::from)
                     .ok_or_else(|| anyhow::anyhow!("api_secret_key_hex not set"))?,
                 server_url: self
                     .psono_settings
@@ -263,7 +262,7 @@ pub struct RawPsonoSettings {
         help = "Api secret key as 64 byte hex string",
         required_unless_present_any = ["config_packed", "config_path"]
     )]
-    pub api_secret_key_hex: Option<String>,
+    pub api_secret_key_hex: Option<SensitiveString>,
     #[clap(
         long,
         env = "PSONO_CI_SERVER_URL",
@@ -284,7 +283,7 @@ struct OnboardingRawPsonoSettings {
         value_parser = parse_secret_key,
         help = "Api secret key as 64 byte hex string"
     )]
-    api_secret_key_hex: Option<String>,
+    api_secret_key_hex: Option<SensitiveString>,
     #[clap(
         long,
         env = "PSONO_CI_SERVER_URL",

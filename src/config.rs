@@ -483,9 +483,7 @@ where
 {
     let buf = String::deserialize(deserializer)?;
 
-    parse_secret_key(&buf)
-        .map(SensitiveString::from)
-        .map_err(serde::de::Error::custom)
+    parse_secret_key(&buf).map_err(serde::de::Error::custom)
 }
 
 #[cfg(test)]

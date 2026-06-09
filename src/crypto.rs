@@ -4,6 +4,8 @@ use crypto_secretbox::{KeyInit, XSalsa20Poly1305};
 use hex::{decode, encode};
 use rand::prelude::*;
 
+use crate::sensitive::SensitiveString;
+
 pub const NONCE_LENGTH: usize = 24;
 pub const SECRET_LENGTH: usize = 32;
 pub const SECRET_HEX_LENGTH: usize = SECRET_LENGTH * 2;
@@ -49,7 +51,7 @@ fn decode_hex_with_length_check(s: &str, length: usize) -> Result<Vec<u8>> {
 
 // Helper function for structopt to check if a key str is correct
 // TODO get Result<XSalsa20Poly1305> working
-pub fn parse_secret_key(src: &str) -> Result<String> {
+pub fn parse_secret_key(src: &str) -> Result<SensitiveString> {
     if src.len() != SECRET_HEX_LENGTH {
         return Err(anyhow!(
             "Invalid key length ({}). Key must be supplied as {} byte hex string.",
@@ -60,7 +62,7 @@ pub fn parse_secret_key(src: &str) -> Result<String> {
 
     XSalsa20Poly1305::from_hex(src)?;
 
-    Ok(src.to_owned())
+    Ok(SensitiveString::from(src.to_owned()))
 }
 
 pub fn open_secret_box(
@@ -115,8 +117,8 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(
-            "acf25040d90e3c73abf1c395e7262bc3b5f9b1e35b96c74dcf72faba4663e98b".to_owned(),
-            result.unwrap()
+            "acf25040d90e3c73abf1c395e7262bc3b5f9b1e35b96c74dcf72faba4663e98b",
+            result.unwrap().expose_secret()
         );
     }
 
