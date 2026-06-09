@@ -3,6 +3,6 @@ build
 docker_cache
 .vscode/
 .idea/
-
+.codex
 psonoci.toml
 psonoci-*.toml
