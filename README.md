@@ -6,6 +6,13 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 
 `psonoci` allows a secure access to your psono passwords (and other values) within your CI process.
 
+## Software bill of materials
+
+Every release publishes a target-specific CycloneDX 1.6 SBOM and detached GPG
+signature next to the release archive. The same generator and policy checks are
+used by GitHub Actions and GitLab CI. See [SBOM.md](SBOM.md) for the generation
+model, verification commands, and declared delivery boundary.
+
 ## Usage
 
 `psonoci --help`

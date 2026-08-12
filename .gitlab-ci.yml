@@ -1,6 +1,8 @@
 stages:
   - build
   - release-prepare
+  - sbom-validate
+  - release-publish
   - release
   - deploy
 
@@ -12,6 +14,7 @@ variables:
 
 .build-cross-base-script:
   script:
+    - set -a; . sbom/tool-versions.env; set +a
     - apt-get update
     - apt-get install -y curl build-essential ca-certificates iptables libdevmapper1.02.1
     # - curl -fL https://getcli.jfrog.io | sh
@@ -33,7 +36,7 @@ variables:
     - cargo install cross
     - cross --version
     # - cross test --release --target "${BUILD_ENV}"
-    - cross build --release --target "${BUILD_ENV}"
+    - cross build --locked --release --target "${BUILD_ENV}"
 
 .build-cross-base:
   stage: build
@@ -128,6 +131,7 @@ build-x86_64-pc-windows-msvc:
   tags:
     - saas-macos-medium-m1
   script:
+    - set -a; . sbom/tool-versions.env; set +a
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     - . "$HOME/.cargo/env"
     - rustup --version
@@ -135,7 +139,8 @@ build-x86_64-pc-windows-msvc:
     - rustup default "${RUST_TOOLCHAIN}"
     - rustup target add "${BUILD_ENV}"
     - cargo --version
-    - cargo build --release --target "${BUILD_ENV}"
+    - cargo install --locked cargo-auditable --version "${CARGO_AUDITABLE_VERSION}"
+    - cargo auditable build --locked --release --target "${BUILD_ENV}"
   artifacts:
     name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
     paths:
@@ -180,6 +185,16 @@ collect-artifacts:
   image: psono-docker.jfrog.io/ubuntu:24.04
   stage: release-prepare
   script:
+    - set -a; . sbom/tool-versions.env; set +a
+    - apt-get update
+    - apt-get install -y curl ca-certificates
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
+    - sh /tmp/rustup-init.sh -s -- -y --profile minimal --default-toolchain "${RUST_TOOLCHAIN}"
+    - . /root/.cargo/env
+    - curl -fL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz" -o /tmp/syft.tar.gz
+    - echo "bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788  /tmp/syft.tar.gz" | sha256sum -c -
+    - tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+    - syft version
     - bash var/upload_artifacts.sh
   dependencies:
     - build-x86_64-unknown-linux-musl
@@ -194,7 +209,70 @@ collect-artifacts:
     paths:
       - collected_artifacts/*.zip
       - collected_artifacts/*.tar.gz
+      - collected_artifacts/*.cdx.json
       - collected_artifacts/*.sig
+  only:
+    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+    - gitlab-release-test-tag
+    - gitlab-release-test-tag2
+
+validate-release-sboms:
+  image:
+    name: cyclonedx/cyclonedx-cli:0.33.1@sha256:252c2e26f468c25fea1e63ecde1bc3198ad6e9dbb57f5ed3236bddcb2281b3a7
+    entrypoint: [""]
+  stage: sbom-validate
+  script:
+    - >-
+      for sbom in collected_artifacts/*.cdx.json; do
+        /cyclonedx validate
+        --input-file "$sbom"
+        --input-version v1_6
+        --fail-on-errors;
+      done
+  dependencies:
+    - collect-artifacts
+  artifacts:
+    name: "psonoci_validated_${CI_COMMIT_REF_NAME}"
+    paths:
+      - collected_artifacts/*.zip
+      - collected_artifacts/*.tar.gz
+      - collected_artifacts/*.cdx.json
+      - collected_artifacts/*.sig
+    expire_in: 1 week
+  only:
+    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+    - gitlab-release-test-tag
+    - gitlab-release-test-tag2
+
+validate-release-policy:
+  image: psono-docker.jfrog.io/ubuntu:24.04
+  stage: sbom-validate
+  script:
+    - apt-get update
+    - apt-get install -y python3 gnupg
+    - >-
+      scripts/verify-release-sboms.sh collected_artifacts .sig "$CI_COMMIT_TAG"
+      x86_64-unknown-linux-musl
+      armv7-unknown-linux-gnueabihf
+      aarch64-unknown-linux-musl
+      x86_64-apple-darwin
+      aarch64-apple-darwin
+      x86_64-pc-windows-gnu
+      x86_64-pc-windows-msvc
+  dependencies:
+    - collect-artifacts
+  only:
+    - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+    - gitlab-release-test-tag
+    - gitlab-release-test-tag2
+
+publish-release-artifacts:
+  image: psono-docker.jfrog.io/ubuntu:24.04
+  stage: release-publish
+  script:
+    - bash var/publish_release_artifacts.sh
+  dependencies:
+    - validate-release-sboms
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
@@ -206,7 +284,7 @@ gitlab-release:
   script:
     - echo "Creating GitLab release with zip and tar.gz files..."
   dependencies:
-    - collect-artifacts
+    - validate-release-sboms
   release:
     name: "psonoci $CI_COMMIT_TAG"
     tag_name: "$CI_COMMIT_TAG"
@@ -217,30 +295,58 @@ gitlab-release:
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.tar.gz"
         - name: "psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.tar.gz.sig"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.tar.gz.sig"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.cdx.json"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.cdx.json"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.cdx.json.sig"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-unknown-linux-musl.cdx.json.sig"
         - name: "psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.tar.gz"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.tar.gz"
         - name: "psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.tar.gz.sig"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.tar.gz.sig"
+        - name: "psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.cdx.json"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.cdx.json"
+        - name: "psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.cdx.json.sig"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-armv7-unknown-linux-gnueabihf.cdx.json.sig"
         - name: "psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.tar.gz"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.tar.gz"
         - name: "psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.tar.gz.sig"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.tar.gz.sig"
+        - name: "psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.cdx.json"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.cdx.json"
+        - name: "psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.cdx.json.sig"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-unknown-linux-musl.cdx.json.sig"
         - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.zip"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.zip"
         - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.zip.sig"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.zip.sig"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.cdx.json"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.cdx.json"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.cdx.json.sig"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-gnu.cdx.json.sig"
         - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip"
         - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip.sig"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip.sig"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.cdx.json"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.cdx.json"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.cdx.json.sig"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.cdx.json.sig"
         - name: "psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz"
         - name: "psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz.sig"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz.sig"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.cdx.json"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.cdx.json"
+        - name: "psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.cdx.json.sig"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-x86_64-apple-darwin.cdx.json.sig"
         - name: "psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz"
         - name: "psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz.sig"
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz.sig"
+        - name: "psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.cdx.json"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.cdx.json"
+        - name: "psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.cdx.json.sig"
+          url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.cdx.json.sig"
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag

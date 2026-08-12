@@ -6,3 +6,5 @@ docker_cache
 .codex
 psonoci.toml
 psonoci-*.toml
+__pycache__/
+*.pyc

@@ -1,0 +1,4 @@
+0|app v1.0.0 (/workspace)
+1|dep-a v2.0.0
+2|leaf v3.0.0
+1|dep-b v4.0.0

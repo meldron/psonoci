@@ -1,0 +1,21 @@
+{
+  "packages": {
+    "openssl-macros": {
+      "creator_url": "https://github.com/sfackler/rust-openssl",
+      "repository": "https://github.com/sfackler/rust-openssl"
+    }
+  },
+  "native_components": [
+    {
+      "trigger_package": "openssl-sys",
+      "source_package": "openssl-src",
+      "name": "OpenSSL",
+      "version_from_cargo_build_metadata": true,
+      "license": "Apache-2.0",
+      "creator_url": "https://www.openssl.org/",
+      "repository": "https://github.com/openssl/openssl",
+      "purl_type": "generic",
+      "description": "OpenSSL native libraries compiled from vendored source and statically linked through openssl-sys"
+    }
+  ]
+}

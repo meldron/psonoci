@@ -1,0 +1,14 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "components": [
+    {"name": "app", "version": "1.0.0", "bom-ref": "app-ref"},
+    {"name": "dep-a", "version": "2.0.0", "bom-ref": "dep-a-ref"},
+    {"name": "leaf", "version": "3.0.0", "bom-ref": "leaf-ref"},
+    {"name": "dep-b", "version": "4.0.0", "bom-ref": "dep-b-ref"}
+  ],
+  "dependencies": [
+    {"ref": "app-ref", "dependsOn": ["dep-a-ref", "dep-b-ref", "build-only-ref"]},
+    {"ref": "dep-a-ref", "dependsOn": ["leaf-ref"]}
+  ]
+}

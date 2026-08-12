@@ -1,7 +1,11 @@
 [package]
 authors = ["Bernd Kaiser <bk@dfjk.eu>"]
+description = "Command-line client for securely accessing Psono secrets in CI pipelines"
 edition = "2024"
+homepage = "https://github.com/meldron/psonoci"
+license = "MIT"
 name = "psonoci"
+repository = "https://github.com/meldron/psonoci"
 version = "0.6.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

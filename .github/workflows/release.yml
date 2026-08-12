@@ -14,14 +14,26 @@ jobs:
     name: create-release
     runs-on: ubuntu-24.04
     steps:
-      - name: Create Release
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
-          gh release create "$RELEASE_TAG" --title "Release $RELEASE_TAG"
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft); then
+            if [ "$draft" != "true" ]; then
+              echo "Refusing to replace assets of an already published release" >&2
+              exit 1
+            fi
+          else
+            cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          Each binary archive in Assets has a matching target-specific CycloneDX 1.6 SBOM (.cdx.json) and detached GPG signatures (.asc).
+
+          See [SBOM verification instructions](https://github.com/${GH_REPO}/blob/${RELEASE_TAG}/SBOM.md).
+          EOF
+            gh release create "$RELEASE_TAG" --draft --verify-tag \
+              --title "Release $RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
 
   build-release:
     name: build-release
@@ -78,6 +90,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Load pinned SBOM tool versions
+        id: sbom_tools
+        shell: bash
+        run: |
+          . sbom/tool-versions.env
+          echo "CARGO_AUDITABLE_VERSION=$CARGO_AUDITABLE_VERSION" >> "$GITHUB_ENV"
+          echo "SYFT_VERSION=$SYFT_VERSION" >> "$GITHUB_ENV"
+          echo "syft_version=$SYFT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - name: install rust
         # Keep this pinned to the repository toolchain in rust-toolchain.toml.
         uses: dtolnay/rust-toolchain@1.94.1
@@ -87,6 +112,16 @@ jobs:
       - name: Install cross
         if: matrix.use_cross
         uses: taiki-e/install-action@cross
+
+      - name: Install cargo-auditable
+        shell: bash
+        run: cargo install --locked cargo-auditable --version "$CARGO_AUDITABLE_VERSION"
+
+      - name: Install Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          syft-version: v${{ steps.sbom_tools.outputs.syft_version }}
 
       - name: Pull docker image used by cross
         if: matrix.use_cross && matrix.target_type == 'unix'
@@ -100,9 +135,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }}
+            cross build --locked --release --target ${{ matrix.target }}
           else
-            cargo build --release --target ${{ matrix.target }}
+            cargo auditable build --locked --release --target ${{ matrix.target }}
           fi
 
       - name: Import GPG key
@@ -131,12 +166,118 @@ jobs:
             echo "ASSET_SIG=$staging.tar.gz.asc" >> $GITHUB_ENV
           fi
 
-      - name: Upload release archive
+      - name: Generate CRA SBOM
+        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" "${{ env.ASSET }}" --clobber
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        run: |
+          sbom="psonoci-${RELEASE_TAG}-${{ matrix.target }}.cdx.json"
+          version_args=()
+          if [ "$RELEASE_TAG" != "release-test" ]; then
+            version_args=(--release-version "$RELEASE_TAG")
+          fi
+          if [ "${{ matrix.target_type }}" = "windows" ]; then
+            binary="target/${{ matrix.target }}/release/psonoci.exe"
+          else
+            binary="target/${{ matrix.target }}/release/psonoci"
+          fi
+          scripts/generate-sbom.sh \
+            "${{ matrix.target }}" "$binary" "$ASSET" "$sbom" \
+            --artifact-url "https://github.com/${RELEASE_REPOSITORY}/releases/download/${RELEASE_TAG}/${ASSET}" \
+            --commit "$RELEASE_COMMIT" \
+            "${version_args[@]}"
+          gpg --armor --detach-sig -u psonoci@dfjk.eu "$sbom"
+          echo "SBOM=$sbom" >> $GITHUB_ENV
+          echo "SBOM_SIG=$sbom.asc" >> $GITHUB_ENV
 
-      - name: Upload release archive signature
+      - name: Stage signed release files
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET_SIG }}
+            ${{ env.SBOM }}
+            ${{ env.SBOM_SIG }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: validate-and-publish-release
+    needs: ["build-release"]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download signed release files
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify signed release evidence and validate every CycloneDX SBOM
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          targets=(
+            x86_64-unknown-linux-musl
+            armv7-unknown-linux-gnueabihf
+            armv7-unknown-linux-musleabihf
+            aarch64-unknown-linux-musl
+            x86_64-apple-darwin
+            aarch64-apple-darwin
+            x86_64-pc-windows-gnu
+            x86_64-pc-windows-msvc
+          )
+          scripts/verify-release-sboms.sh release-assets .asc "$RELEASE_TAG" "${targets[@]}"
+          shopt -s nullglob
+          sboms=(release-assets/*.cdx.json)
+          if [ "${#sboms[@]}" -eq 0 ]; then
+            echo "No SBOMs were staged" >&2
+            exit 1
+          fi
+          for sbom in "${sboms[@]}"; do
+            docker run --rm \
+              -v "$PWD/release-assets:/work" \
+              cyclonedx/cyclonedx-cli:0.33.1@sha256:252c2e26f468c25fea1e63ecde1bc3198ad6e9dbb57f5ed3236bddcb2281b3a7 \
+              validate --input-file "/work/$(basename "$sbom")" --input-version v1_6 --fail-on-errors
+          done
+
+      - name: Upload validated files and publish release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" "${{ env.ASSET_SIG }}" --clobber
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]; then
+            echo "Refusing to replace assets of an already published release" >&2
+            exit 1
+          fi
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release files were staged" >&2
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          # Reject stale or unexpected files left in a draft by an earlier run.
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' \
+            > "$RUNNER_TEMP/remote-release-assets.txt"
+          LC_ALL=C sort -o "$RUNNER_TEMP/remote-release-assets.txt" "$RUNNER_TEMP/remote-release-assets.txt"
+          printf '%s\n' "${assets[@]##*/}" | LC_ALL=C sort > "$RUNNER_TEMP/expected-release-assets.txt"
+          diff -u "$RUNNER_TEMP/expected-release-assets.txt" "$RUNNER_TEMP/remote-release-assets.txt"
+          release_args=(--draft=false)
+          if [[ "$RELEASE_TAG" == "release-test" || "$RELEASE_TAG" == *-rc* ]]; then
+            release_args+=(--prerelease --latest=false)
+          fi
+          gh release edit "$RELEASE_TAG" "${release_args[@]}"

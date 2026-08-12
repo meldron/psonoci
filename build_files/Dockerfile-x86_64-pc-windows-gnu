@@ -30,3 +30,10 @@ ENV AR_x86_64_pc_windows_gnu=x86_64-w64-mingw32-ar
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain ${RUST_VERSION} && \
     rustup target add x86_64-pc-windows-gnu && \
     chmod -R a+rwX /opt/rust /opt/cargo
+
+RUN cargo install --locked cargo-auditable --version 0.7.5
+RUN real_cargo="$(rustup which cargo)" && real_rustc="$(rustup which rustc)" && cargo_proxy="$(command -v cargo)" && \
+    rm -f "$cargo_proxy" && \
+    printf '#!/bin/sh\nexport RUSTC="%s"\nexec "%s" auditable "$@"\n' "$real_rustc" "$real_cargo" >"$cargo_proxy" && \
+    chmod +x "$cargo_proxy" && touch "$CARGO_HOME/.psonoci-auditable-wrapper"
+RUN chmod -R a+rwX "$CARGO_HOME" "$RUSTUP_HOME"
