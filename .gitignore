@@ -8,3 +8,8 @@ psonoci.toml
 psonoci-*.toml
 __pycache__/
 *.pyc
+
+# SBOM / release artifacts
+*.cdx.json
+*.tar.gz
+*.tgz
