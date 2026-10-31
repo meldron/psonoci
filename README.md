@@ -91,6 +91,12 @@ command stops with `WRITE_DATE_MISMATCH`. Read the secret again and reapply the
 change. The client does not retry stale writes. Older server responses without
 `write_date` retain the previous write behavior without a conflict check.
 
+Secret types that this version does not recognize remain available as raw
+JSON. `secret get <uuid> json` returns their original payload, and `api-key
+secrets` includes them with `secret_type: "Unknown"` and a `raw` object. Typed
+updates to these secrets are refused. Supported secret types keep their
+existing JSON format. Invalid known fields and decryption errors still fail.
+
 ## Onboard
 
 Since version `0.6.0` `psonoci` provides an `onboard` command to create a config interactively from a Psono account without manually copying the API key id and secret key.
@@ -208,6 +214,11 @@ psonoci -c /path/to/config-staging.toml run -- ./my_backend.py --timeout 10
 ```
 
 Since `v0.6.0`, the spawned process no longer inherits `psonoci`'s own `PSONO_CI_*` config and authentication environment variables. Environment variables loaded from Psono secrets are still injected as usual. Add `--clear-env` if you want the child process to receive only the secret-derived variables.
+
+`run --filter <uuid>` fetches only the selected secrets. Other secret types,
+including unsupported types, do not contribute environment variables.
+Authentication, network, and decryption errors for requested secrets stop the
+command before it starts the child process.
 
 This command will execute `./my_backend.py` and inject all environment variables of all secrets into the process:
 

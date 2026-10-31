@@ -48,6 +48,7 @@ pub enum SecretType {
     Totp,
     CreditCard,
     ElsterCertificate,
+    Unknown,
 }
 
 impl SecretType {
@@ -64,6 +65,7 @@ impl SecretType {
             SecretType::Totp => "totp",
             SecretType::CreditCard => "credit_card",
             SecretType::ElsterCertificate => "elster_certificate",
+            SecretType::Unknown => "unknown",
         }
     }
 }
@@ -743,7 +745,49 @@ pub struct ElsterCertificate {
     pub retrieval_code: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+struct SecretPayload {
+    json: SensitiveString,
+    opaque: bool,
+}
+
+impl SecretPayload {
+    fn is_hidden(payload: &Option<Self>) -> bool {
+        payload.as_ref().is_none_or(|payload| !payload.opaque)
+    }
+}
+
+impl Serialize for SecretPayload {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        let value: Value =
+            serde_json::from_str(self.json.expose_secret()).map_err(serde::ser::Error::custom)?;
+        value.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretPayload {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let value = Value::deserialize(deserializer)?;
+        if !value.is_object() {
+            return Err(serde::de::Error::custom(
+                "raw secret payload must be an object",
+            ));
+        }
+        Ok(Self {
+            json: SensitiveString::from(
+                serde_json::to_string(&value).map_err(serde::de::Error::custom)?,
+            ),
+            opaque: true,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Secret {
     pub url_filter: Option<String>,
     pub notes: Option<String>,
@@ -766,10 +810,56 @@ pub struct Secret {
     pub elster_certificate: Option<ElsterCertificate>,
 
     // Keep the original JSON so writes can preserve fields this client does not know.
-    #[serde(skip)]
-    raw_payload: Option<SensitiveString>,
+    #[serde(
+        rename = "raw",
+        default,
+        skip_serializing_if = "SecretPayload::is_hidden"
+    )]
+    raw_payload: Option<SecretPayload>,
     #[serde(skip)]
     write_date: Option<DateTime<Utc>>,
+}
+
+// Deserialize the public JSON format after discarding `raw` on supported types.
+// The remote derive keeps the field conversions identical to Secret's fields.
+#[derive(Deserialize)]
+#[serde(remote = "Secret")]
+struct SecretJson {
+    url_filter: Option<String>,
+    notes: Option<String>,
+    password: Option<String>,
+    username: Option<String>,
+    url: Option<String>,
+    title: Option<String>,
+    secret_type: SecretType,
+    gpg_key_private: Option<String>,
+    gpg_key_public: Option<String>,
+    gpg_key_name: Option<String>,
+    gpg_key_email: Option<String>,
+    identity: Option<Identity>,
+    env_vars: Option<Vec<EnvironmentVariable>>,
+    ssh_key: Option<SSHKey>,
+    totp: Option<Totp>,
+    credit_card: Option<CreditCard>,
+    elster_certificate: Option<ElsterCertificate>,
+    #[serde(rename = "raw", default)]
+    raw_payload: Option<SecretPayload>,
+    #[serde(skip)]
+    write_date: Option<DateTime<Utc>>,
+}
+
+impl<'de> Deserialize<'de> for Secret {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let mut value = Value::deserialize(deserializer)?;
+        if value.get("secret_type").and_then(Value::as_str) != Some("Unknown")
+            && let Some(object) = value.as_object_mut()
+        {
+            object.remove("raw");
+        }
+        SecretJson::deserialize(value).map_err(serde::de::Error::custom)
+    }
 }
 
 impl Secret {
@@ -798,11 +888,18 @@ impl Secret {
     }
 
     pub(crate) fn serialize_payload(&self) -> Result<String> {
+        if self.secret_type == SecretType::Unknown {
+            return self
+                .raw_payload
+                .as_ref()
+                .map(|payload| payload.json.expose_secret().to_owned())
+                .context("unsupported secret has no raw payload");
+        }
         let current = serde_json::to_value(self.as_generic_secret())?;
         let Some(raw) = &self.raw_payload else {
             return Ok(serde_json::to_string(&current)?);
         };
-        let mut original: Value = serde_json::from_str(raw.expose_secret())?;
+        let mut original: Value = serde_json::from_str(raw.json.expose_secret())?;
         let generic: GenericSecret = serde_json::from_value(original.clone())?;
         let baseline = <Self as DataTransform<GenericSecret, Self>>::transform(generic)?;
         let baseline = serde_json::to_value(baseline.as_generic_secret())?;
@@ -922,12 +1019,19 @@ impl Secret {
                 gs.elster_certificate_retrieval_code = elster_certificate.retrieval_code.clone();
                 gs.elster_certificate_notes = self.notes.clone();
             }
+            SecretType::Unknown => {}
         }
 
         gs
     }
 
     pub fn as_json(&self) -> Option<String> {
+        if self.secret_type == SecretType::Unknown {
+            return self
+                .raw_payload
+                .as_ref()
+                .map(|payload| payload.json.expose_secret().to_owned());
+        }
         let value_raw = json!({
             "title": &self.title,
             "username": &self.username,
@@ -1380,7 +1484,10 @@ impl DataTransform<Value, Secret> for Secret {
         let generic: GenericSecret = serde_json::from_value(value)
             .context("parsing decrypted secret payload fields failed")?;
         let mut secret = <Self as DataTransform<GenericSecret, Self>>::transform(generic)?;
-        secret.raw_payload = Some(raw_payload);
+        secret.raw_payload = Some(SecretPayload {
+            json: raw_payload,
+            opaque: secret.secret_type == SecretType::Unknown,
+        });
         Ok(secret)
     }
 }
@@ -1587,7 +1694,7 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             return Ok(secret);
         }
 
-        Err(anyhow!("unsupported secret type"))
+        Ok(Secret::new(SecretType::Unknown))
     }
 }
 
@@ -1629,6 +1736,9 @@ pub fn set_secret(
     secret: &Secret,
     secret_key_hex: &SensitiveString,
 ) -> Result<()> {
+    if secret.secret_type == SecretType::Unknown {
+        bail!("updating an unsupported secret type is not supported");
+    }
     let nonce_hex = create_nonce_hex();
     let plaintext = Zeroizing::new(
         secret
@@ -1769,11 +1879,19 @@ pub fn api_key_info(config: &Config) -> Result<ApiKeyInfo> {
 }
 
 pub fn api_key_get_secrets(config: &Config) -> Result<HashMap<Uuid, Secret>> {
+    api_key_get_secrets_filtered(config, None)
+}
+
+pub fn api_key_get_secrets_filtered(
+    config: &Config,
+    filter: Option<&[Uuid]>,
+) -> Result<HashMap<Uuid, Secret>> {
     let api_key_info = api_key_info(config).context("inspect api key call failed")?;
 
     api_key_info
         .api_key_secrets
         .into_par_iter()
+        .filter(|id| filter.is_none_or(|ids| ids.contains(id)))
         .map(|id| {
             Ok((
                 id,
@@ -2338,5 +2456,72 @@ mod tests {
                 {"key": "A", "value": "third", "extra": {"id": 3}}
             ])
         );
+    }
+
+    #[test]
+    fn unsupported_secret_retains_structured_raw_json_and_refuses_typed_edits() {
+        let original = json!({
+            "passkey_title": "Test", "passkey_private_key": {"kty": "EC", "d": "PRIVATE-FIXTURE"},
+            "future": {"enabled": true, "nested": [1, null]}
+        });
+        let mut secret = Secret::transform(original.clone()).unwrap();
+        assert_eq!(secret.secret_type, SecretType::Unknown);
+        assert_eq!(
+            serde_json::from_str::<Value>(&secret.as_json().unwrap()).unwrap(),
+            original
+        );
+        assert!(!format!("{secret:?}").contains("PRIVATE-FIXTURE"));
+        let exported = serde_json::to_value(&secret).unwrap();
+        assert_eq!(exported["secret_type"], "Unknown");
+        assert_eq!(exported["raw"], original);
+        let imported: Secret = serde_json::from_value(exported).unwrap();
+        assert_eq!(imported.as_json(), secret.as_json());
+        assert!(
+            secret
+                .set_value(&SecretValueType::title, "Changed".into())
+                .is_err()
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn supported_secret_exports_keep_raw_payload_hidden() {
+        let secret =
+            Secret::transform(json!({"note_title":"Test", "future":{"secret":"hidden"}})).unwrap();
+        assert!(serde_json::to_value(&secret).unwrap().get("raw").is_none());
+        assert!(!secret.as_json().unwrap().contains("future"));
+    }
+
+    #[test]
+    fn supported_secret_deserialization_ignores_extra_raw_field() {
+        for raw in [
+            json!({"future":"value"}),
+            json!([1, true]),
+            json!("ignored"),
+        ] {
+            let secret: Secret = serde_json::from_value(json!({
+                "secret_type":"Note", "title":"Test", "raw":raw
+            }))
+            .unwrap();
+            assert!(serde_json::to_value(&secret).unwrap().get("raw").is_none());
+            let payload: Value =
+                serde_json::from_str(&secret.serialize_payload().unwrap()).unwrap();
+            assert_eq!(payload["note_title"], "Test");
+            assert!(payload.get("future").is_none());
+        }
+    }
+
+    #[test]
+    fn invalid_known_fields_do_not_become_opaque_secrets() {
+        for payload in [
+            json!({"website_password_password": 123}),
+            json!({"totp_period":"bad"}),
+            json!({"environment_variables_variables":[{"key":"X", "value":false}]}),
+        ] {
+            assert!(Secret::transform(payload).is_err());
+        }
     }
 }

@@ -26,12 +26,21 @@ pub struct Server {
 
 impl Server {
     pub fn start(responses: Vec<(u16, Value)>) -> Self {
+        let count = responses.len();
+        let mut responses = responses.into_iter();
+        Self::with_handler(count, move |_| responses.next().unwrap())
+    }
+
+    pub fn with_handler<F>(count: usize, mut handler: F) -> Self
+    where
+        F: FnMut(&Request) -> (u16, Value) + Send + 'static,
+    {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
         let (sender, requests) = mpsc::channel();
         let handle = thread::spawn(move || {
-            for (status, body) in responses {
+            for _ in 0..count {
                 let deadline = Instant::now() + Duration::from_secs(10);
                 let mut stream = loop {
                     match listener.accept() {
@@ -49,7 +58,9 @@ impl Server {
                 stream
                     .set_read_timeout(Some(Duration::from_secs(5)))
                     .unwrap();
-                sender.send(read_request(&mut stream)).unwrap();
+                let request = read_request(&mut stream);
+                let (status, body) = handler(&request);
+                sender.send(request).unwrap();
                 let body = body.to_string();
                 write!(stream, "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
             }

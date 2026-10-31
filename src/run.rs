@@ -6,31 +6,20 @@ use std::process::{Command, ExitStatus, exit};
 use anyhow::{Context, Result};
 use uuid::Uuid;
 
-use crate::api::{Secret, api_key_get_secrets};
+use crate::api::{Secret, SecretType, api_key_get_secrets_filtered};
 use crate::config::Config;
 use crate::opt::RunCommand;
 
 type EnvironmentVars = HashMap<String, String>;
 type Duplicates = HashMap<String, usize>;
 
-fn create_env_vars_map(
-    secrets: HashMap<Uuid, Secret>,
-    filter: Option<Vec<Uuid>>,
-) -> (HashMap<String, String>, Duplicates) {
+fn create_env_vars_map(secrets: HashMap<Uuid, Secret>) -> (HashMap<String, String>, Duplicates) {
     let mut env_vars_map: HashMap<String, String> = HashMap::new();
     let mut duplicates: Duplicates = HashMap::new();
 
-    let filtered: HashMap<Uuid, Secret> = match filter {
-        Some(ids) => secrets
-            .into_iter()
-            .filter(|(id, _)| ids.contains(id))
-            .collect(),
-        None => secrets,
-    };
-
-    filtered
+    secrets
         .into_values()
-        // .filter(|s| s.secret_type == SecretType::EnvVars)
+        .filter(|s| s.secret_type == SecretType::EnvVars)
         .for_each(|s| {
             if let Some(evs) = s.env_vars {
                 evs.into_iter().for_each(|ev| {
@@ -132,8 +121,9 @@ pub fn run_run_command(config: Config, rc: RunCommand) -> Result<()> {
     let program = &command_values[0];
     let args = &command_values[1..];
 
-    let secrets = api_key_get_secrets(&config).context("api key secrets failed")?;
-    let (envs, duplicates) = create_env_vars_map(secrets, rc.filter);
+    let secrets = api_key_get_secrets_filtered(&config, rc.filter.as_deref())
+        .context("api key secrets failed")?;
+    let (envs, duplicates) = create_env_vars_map(secrets);
 
     let mut command = build_command(program, args, &envs, &duplicates, rc.clear_env);
 
@@ -164,6 +154,27 @@ mod tests {
     use super::*;
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    #[test]
+    fn only_environment_variable_secrets_contribute_to_child_environment() {
+        use crate::api::EnvironmentVariable;
+        let mut env = Secret::new(SecretType::EnvVars);
+        env.env_vars = Some(vec![EnvironmentVariable {
+            key: "EXPECTED".into(),
+            value: "test".into(),
+        }]);
+        let mut unknown = Secret::new(SecretType::Unknown);
+        unknown.env_vars = Some(vec![EnvironmentVariable {
+            key: "UNEXPECTED".into(),
+            value: "test".into(),
+        }]);
+        let (values, duplicates) = create_env_vars_map(HashMap::from([
+            (Uuid::new_v4(), env),
+            (Uuid::new_v4(), unknown),
+        ]));
+        assert_eq!(values, HashMap::from([("EXPECTED".into(), "test".into())]));
+        assert!(duplicates.is_empty());
+    }
 
     fn command_env_overrides(command: &Command) -> HashMap<String, Option<String>> {
         command
