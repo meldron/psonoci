@@ -16,7 +16,7 @@ use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::redirect::Policy;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -745,6 +745,10 @@ pub struct Secret {
     pub totp: Option<Totp>,
     pub credit_card: Option<CreditCard>,
     pub elster_certificate: Option<ElsterCertificate>,
+
+    // Keep the original JSON so writes can preserve fields this client does not know.
+    #[serde(skip)]
+    raw_payload: Option<SensitiveString>,
 }
 
 impl Secret {
@@ -767,7 +771,36 @@ impl Secret {
             totp: None,
             credit_card: None,
             elster_certificate: None,
+            raw_payload: None,
         }
+    }
+
+    pub(crate) fn serialize_payload(&self) -> Result<String> {
+        let current = serde_json::to_value(self.as_generic_secret())?;
+        let Some(raw) = &self.raw_payload else {
+            return Ok(serde_json::to_string(&current)?);
+        };
+        let mut original: Value = serde_json::from_str(raw.expose_secret())?;
+        let generic: GenericSecret = serde_json::from_value(original.clone())?;
+        let baseline = <Self as DataTransform<GenericSecret, Self>>::transform(generic)?;
+        let baseline = serde_json::to_value(baseline.as_generic_secret())?;
+        let object = original
+            .as_object_mut()
+            .context("decrypted secret payload is not a JSON object")?;
+        for (key, value) in current
+            .as_object()
+            .context("invalid typed secret payload")?
+        {
+            if baseline.get(key) != Some(value) {
+                let value = if key == "environment_variables_variables" {
+                    preserve_env_var_fields(object.get(key).unwrap_or(&Value::Null), value)
+                } else {
+                    value.clone()
+                };
+                object.insert(key.clone(), value);
+            }
+        }
+        Ok(serde_json::to_string(&original)?)
     }
 
     pub fn as_generic_secret(&self) -> GenericSecret {
@@ -1285,6 +1318,51 @@ impl Secret {
     }
 }
 
+fn preserve_env_var_fields(original: &Value, current: &Value) -> Value {
+    let (Some(original), Some(current)) = (original.as_array(), current.as_array()) else {
+        return current.clone();
+    };
+    let mut used = vec![false; original.len()];
+    Value::Array(
+        current
+            .iter()
+            .map(|entry| {
+                let matched = original
+                    .iter()
+                    .enumerate()
+                    .position(|(index, old)| !used[index] && old.get("key") == entry.get("key"));
+                let Some(index) = matched else {
+                    return entry.clone();
+                };
+                used[index] = true;
+                let mut merged = original[index].clone();
+                if let (Some(merged), Some(fields)) = (merged.as_object_mut(), entry.as_object()) {
+                    merged.extend(
+                        fields
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone())),
+                    );
+                }
+                merged
+            })
+            .collect(),
+    )
+}
+
+impl DataTransform<Value, Secret> for Secret {
+    fn transform(value: Value) -> Result<Self> {
+        if !value.is_object() {
+            bail!("decrypted secret payload is not a JSON object");
+        }
+        let raw_payload = SensitiveString::from(serde_json::to_string(&value)?);
+        let generic: GenericSecret = serde_json::from_value(value)
+            .context("parsing decrypted secret payload fields failed")?;
+        let mut secret = <Self as DataTransform<GenericSecret, Self>>::transform(generic)?;
+        secret.raw_payload = Some(raw_payload);
+        Ok(secret)
+    }
+}
+
 impl DataTransform<GenericSecret, Secret> for Secret {
     fn transform(s: GenericSecret) -> Result<Self> {
         if s.application_password_notes.is_some()
@@ -1516,7 +1594,7 @@ pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, Sensitiv
     .context("get secret api call failed")?;
 
     let (secret, secret_key_hex) = psono_response
-        .open::<GenericSecret, Secret>(&config.psono_settings.api_secret_key_hex)
+        .open::<Value, Secret>(&config.psono_settings.api_secret_key_hex)
         .context("get secret decryption failed")?;
 
     Ok((secret, secret_key_hex))
@@ -1529,9 +1607,10 @@ pub fn set_secret(
     secret_key_hex: &SensitiveString,
 ) -> Result<()> {
     let nonce_hex = create_nonce_hex();
-    let generic_secret = secret.as_generic_secret();
     let plaintext = Zeroizing::new(
-        serde_json::to_string(&generic_secret).context("serializing secret failed")?,
+        secret
+            .serialize_payload()
+            .context("serializing secret failed")?,
     );
 
     let secret_encrypted_hex = seal_secret_box_hex(
@@ -2078,6 +2157,162 @@ mod tests {
         assert_eq!(
             generic_secret.identity_notes,
             Some("employee badge holder".to_string())
+        );
+    }
+    #[test]
+    fn set_value_preserves_complete_raw_payload_except_requested_field() {
+        let original = json!({
+            "website_password_title": "Production",
+            "website_password_password": "before",
+            "website_password_totp_code": "TESTONLY",
+            "password_modification_datetime": "2026-10-01T00:00:00Z",
+            "custom_fields": [
+                {"name": "account", "type": "text", "value": "billing"}
+            ],
+            "tags": ["production", "finance"],
+            "attachments": [{
+                "file_id": "edbf2d2b-48e7-42b2-ad09-f447af5e01a5",
+                "file_chunks": [{"hash": "abc123", "position": 0}],
+                "file_secret_key": "attachment-secret-key",
+                "filename": "invoice.pdf"
+            }],
+            "future_feature": {
+                "enabled": true,
+                "nested": [1, {"still_here": null}]
+            }
+        });
+
+        let mut secret = Secret::transform(original.clone()).expect("transform failed");
+        secret
+            .set_value(&SecretValueType::password, "after".to_owned())
+            .expect("setting password failed");
+
+        let mut expected = original;
+        expected["website_password_password"] = json!("after");
+        let updated: Value = serde_json::from_str(
+            &secret
+                .serialize_payload()
+                .expect("payload serialization should succeed"),
+        )
+        .expect("serialized payload should be valid JSON");
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn env_var_update_preserves_complete_raw_payload_except_environment_variables() {
+        let original = json!({
+            "environment_variables_title": "Production",
+            "environment_variables_variables": [
+                {"key": "UNCHANGED", "value": "before"}
+            ],
+            "custom_fields": [{"name": "owner", "value": "platform"}],
+            "tags": ["ci"],
+            "attachments": [{"file_id": "507e9dbe-e125-409a-ac3f-ee94b77a3b2a"}],
+            "future_feature": {"mode": "opaque"}
+        });
+
+        let mut secret = Secret::transform(original.clone()).expect("transform failed");
+        secret.env_vars = Some(vec![
+            EnvironmentVariable {
+                key: "UNCHANGED".to_owned(),
+                value: "before".to_owned(),
+            },
+            EnvironmentVariable {
+                key: "ADDED".to_owned(),
+                value: "after".to_owned(),
+            },
+        ]);
+
+        let mut expected = original;
+        expected["environment_variables_variables"] = json!([
+            {"key": "UNCHANGED", "value": "before"},
+            {"key": "ADDED", "value": "after"}
+        ]);
+        let updated: Value = serde_json::from_str(
+            &secret
+                .serialize_payload()
+                .expect("payload serialization should succeed"),
+        )
+        .expect("serialized payload should be valid JSON");
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn raw_payload_transform_rejects_non_object_json() {
+        let result = Secret::transform(json!(["not", "an", "object"]));
+
+        assert_eq!(
+            result
+                .expect_err("array payload should be rejected")
+                .to_string(),
+            "decrypted secret payload is not a JSON object"
+        );
+    }
+
+    #[test]
+    fn unchanged_payload_keeps_absent_and_null_fields() {
+        let original = json!({
+            "identity_title": "Test", "identity_email": null,
+            "custom_fields": [], "future": {"value": null}
+        });
+        let mut secret = Secret::transform(original.clone()).unwrap();
+        secret
+            .set_value(&SecretValueType::title, "Test".into())
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn payload_serialization_preserves_direct_public_field_updates() {
+        let original = json!({"note_title": "Before", "future": [true, 1, null]});
+        let mut secret = Secret::transform(original.clone()).unwrap();
+        secret.title = Some("After".into());
+        let mut expected = original;
+        expected["note_title"] = json!("After");
+        assert_eq!(
+            serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn env_var_metadata_follows_keys_and_duplicate_occurrences() {
+        let original = json!({
+            "environment_variables_title": "Test",
+            "environment_variables_variables": [
+                {"key": "A", "value": "first", "extra": {"id": 1}},
+                {"key": "B", "value": "second", "extra": {"id": 2}},
+                {"key": "A", "value": "third", "extra": {"id": 3}}
+            ]
+        });
+        let mut secret = Secret::transform(original).unwrap();
+        secret.env_vars = Some(vec![
+            EnvironmentVariable {
+                key: "B".into(),
+                value: "updated".into(),
+            },
+            EnvironmentVariable {
+                key: "A".into(),
+                value: "first".into(),
+            },
+            EnvironmentVariable {
+                key: "A".into(),
+                value: "third".into(),
+            },
+        ]);
+        let actual: Value = serde_json::from_str(&secret.serialize_payload().unwrap()).unwrap();
+        assert_eq!(
+            actual["environment_variables_variables"],
+            json!([
+                {"key": "B", "value": "updated", "extra": {"id": 2}},
+                {"key": "A", "value": "first", "extra": {"id": 1}},
+                {"key": "A", "value": "third", "extra": {"id": 3}}
+            ])
         );
     }
 }

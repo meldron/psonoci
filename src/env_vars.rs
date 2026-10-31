@@ -162,6 +162,47 @@ fn update_or_create(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::DataTransform;
+    use serde_json::{Value, json};
+
+    #[test]
+    fn both_update_commands_preserve_unrelated_payload_fields() {
+        let original = json!({
+            "environment_variables_title": "Test",
+            "environment_variables_variables": [
+                {"key": "EXISTING", "value": "before", "future": {"nested": [true, null]}},
+                {"key": "KEEP", "value": "unchanged", "metadata": {"enabled": true}}
+            ],
+            "custom_fields": [{"name": "owner", "value": "test"}],
+            "tags": ["ci"], "attachments": [{"file_id": "fixture"}],
+            "future": {"nested": [true, null]}
+        });
+        for add in [false, true] {
+            let secret = Secret::transform(original.clone()).unwrap();
+            let (updated, value) = if add {
+                get_or_create(secret, "ADDED".into(), PasswordCreationSettings::default())
+            } else {
+                update_or_create(
+                    secret,
+                    "EXISTING".into(),
+                    Some("after".into()),
+                    PasswordCreationSettings::default(),
+                )
+            };
+            let mut expected = original.clone();
+            if add {
+                expected["environment_variables_variables"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!({"key":"ADDED", "value":value}));
+            } else {
+                expected["environment_variables_variables"][0]["value"] = json!(value);
+            }
+            let actual: Value =
+                serde_json::from_str(&updated.unwrap().serialize_payload().unwrap()).unwrap();
+            assert_eq!(actual, expected);
+        }
+    }
 
     #[test]
     #[allow(non_snake_case)]
