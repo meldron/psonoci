@@ -85,6 +85,17 @@ linked `libc.a`. It does not substitute the Cargo `libc` crate version or the
 builder's installed libc version. A missing or ambiguous version stops generation.
 GNU libc uses its captured release banner. GCC runtime identities require the
 linked file to match the compiler's resolved runtime file by hash.
+MinGW-w64 uses the runtime banner in the linked `libmingw32.a`, preserving any
+snapshot qualifier. Its composite runtime and winpthreads license notices from
+upstream v13.0.0 are retained in `sbom/licenses/mingw-w64-runtime-13.txt` and
+embedded as a named license with full text. New runtime major versions require
+reviewing their corresponding notices.
+
+Native import archives shipped by Cargo packages are checked against their
+registry file checksum or the cached `.crate` archive member. Their registry
+package checksum must match `Cargo.lock`, and their owner must occur in the
+runtime dependency graph. This avoids misclassifying package-owned native assets
+as unidentified platform libraries.
 
 External macOS system libraries carry their SDK link-interface versions from
 Mach-O load commands, backed by linked SDK stubs. On native Windows, normal and
@@ -92,6 +103,11 @@ delay imports are resolved to build-host DLL files and file versions, including
 API-set aliases. DLL entry points are not run. Version context is explicit:
 neither SDK ABI versions nor build-host DLL versions establish minimum supported
 deployment OS versions.
+All SDK stubs consumed by the linker, including reexports, are identified. The
+TBD v4 default interface version is 1.0 when `current-version` is omitted.
+For compiler post-link Mach-O metadata processing, both original and final
+binary hashes are recorded, and runtime sections, loader settings and dyld
+payloads must remain identical. Code or dependency changes are rejected.
 
 These checks do not constitute a full BSI conformity assessment. Source-level
 attribution within toolchain distributions and the interpretation of external

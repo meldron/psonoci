@@ -5,6 +5,7 @@ import json
 import struct
 import tempfile
 import unittest
+import importlib.util
 from unittest.mock import patch
 from pathlib import Path
 
@@ -52,6 +53,21 @@ def macho():
     struct.pack_into('<IIIIII', data, 32, 0xc, size, 24, 0, (1351 << 16) | 1, (1 << 16))
     data[56:56 + len(name)] = name
     return bytes(data)
+
+
+def macho_with_sections():
+    data = bytearray(512)
+    data[:4] = b'\xcf\xfa\xed\xfe'
+    struct.pack_into('<I', data, 16, 2)
+    struct.pack_into('<II', data, 32, 0x19, 152)
+    data[40:46] = b'__TEXT'
+    struct.pack_into('<QQQQIIII', data, 56, 4096, 4096, 0, 512, 7, 5, 1, 0)
+    data[104:110] = b'__text'
+    data[120:126] = b'__TEXT'
+    struct.pack_into('<QQI', data, 136, 4096, 4, 300)
+    struct.pack_into('<II', data, 184, 0x2, 24)
+    data[300:304] = b'CODE'
+    return data
 
 
 def pe():
@@ -116,6 +132,18 @@ class BinaryRuntimeTests(unittest.TestCase):
         header = struct.pack('<HHHHIIHH', 0, 0xffff, 0, 0x8664, 0, len(payload), 0, 0)
         self.assertEqual(runtime.import_library_names(ar('import.obj', header + payload)), {'kernel32.dll'})
         self.assertEqual(runtime.import_library_names(ar('native.obj', b'KERNEL32.dll\0')), set())
+
+    def test_macho_post_link_comparison_preserves_code_and_loader(self):
+        original = macho_with_sections()
+        changed = bytearray(original)
+        changed[192:200] = b'DEBUG123'
+        self.assertEqual(runtime.macho_runtime_fingerprint(original), runtime.macho_runtime_fingerprint(changed))
+        changed[300] ^= 1
+        self.assertNotEqual(runtime.macho_runtime_fingerprint(original), runtime.macho_runtime_fingerprint(changed))
+
+    def test_windows_repeated_separators_normalize_to_cargo_paths(self):
+        self.assertEqual(runtime.normalized_path(r'D:\\a\\repo\\target\\release\\deps\\liba.rlib'),
+                         'D:/a/repo/target/release/deps/liba.rlib')
 
 
 class EvidencePolicyTests(unittest.TestCase):
@@ -185,11 +213,72 @@ class CaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.capture(root, macho(), 'x86_64-apple-darwin', '/SDKs/MacOSX.sdk/usr/lib/libSystem.tbd',
-                         b"install-name: '/usr/lib/libSystem.B.dylib'\n")
+                         b"tbd-version: 4\ninstall-name: '/usr/lib/libSystem.B.dylib'\ncurrent-version: 1351.0.1\n")
             result = runtime.collect(root / 'binary', 'x86_64-apple-darwin', root, root / 'providers.json')
             component = next(c for c in result['components'] if c['delivery'] == 'external')
             self.assertEqual(component['version'], '1351.0.1')
             self.assertIn('link-interface', component['versionContext'])
+
+    def test_native_cargo_asset_requires_matching_registry_file_hash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'registry/src/index/example-1.0'
+            root.mkdir(parents=True)
+            native = root / 'native.a'
+            native.write_bytes(b'packaged native asset')
+            (root / 'Cargo.toml').write_text('[package]\nname="example"\nversion="1.0"\n')
+            expected = hashlib.sha256(native.read_bytes()).hexdigest()
+            (root / '.cargo-checksum.json').write_text(json.dumps({'package': 'f' * 64, 'files': {'native.a': expected}}))
+            result = runtime.cargo_native_input(native, native)
+            self.assertEqual(result['package'], 'example')
+            native.write_bytes(b'modified after unpacking')
+            with self.assertRaisesRegex(runtime.EvidenceError, 'registry checksum'):
+                runtime.cargo_native_input(native, native)
+
+    def test_mingw_banner_retains_snapshot_identity_and_upstream_notices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = bytearray(pe())
+            struct.pack_into('<II', image, 152 + 112 + 8, 0, 0)
+            struct.pack_into('<II', image, 152 + 112 + 13 * 8, 0, 0)
+            banner = b'MinGW-W64 Runtime 13.0.0 (alpha - rev. 0) 0000-00-00\0'
+            self.capture(root, image, 'x86_64-pc-windows-gnu', '/mingw/lib/libmingw32.a', banner)
+            result = runtime.collect(root / 'binary', 'x86_64-pc-windows-gnu', root, root / 'providers.json')
+            component = next(c for c in result['components'] if c['name'] == 'MinGW-w64 runtime')
+            self.assertEqual(component['version'], banner.removeprefix(b'MinGW-W64 Runtime ').rstrip(b'\0').decode())
+            self.assertIn('Copyright', component['licenseText'])
+            self.assertIn('text', sbom.runtime_licenses(component)[0]['license'])
+
+    def test_macos_metadata_change_keeps_link_binding_but_code_change_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = macho_with_sections()
+            self.capture(root, original, 'x86_64-apple-darwin', '/SDK/libExample.tbd',
+                         b"tbd-version: 4\ninstall-name: '/usr/lib/libExample.dylib'\n")
+            final = root / 'final'
+            changed = bytearray(original)
+            changed[192:200] = b'DEBUG123'
+            final.write_bytes(changed)
+            result = runtime.collect(final, 'x86_64-apple-darwin', root, root / 'providers.json')
+            self.assertEqual(result['postLink']['finalBinarySha512'], runtime.digest(final))
+            self.assertEqual(result['postLink']['linkedBinarySha512'], runtime.digest(root / 'binary'))
+            changed[300] ^= 1
+            final.write_bytes(changed)
+            with self.assertRaisesRegex(runtime.EvidenceError, 'runtime content changed'):
+                runtime.collect(final, 'x86_64-apple-darwin', root, root / 'providers.json')
+
+    def test_msvc_uses_batch_launcher_and_normalizes_environment_keys(self):
+        spec = importlib.util.spec_from_file_location('build_runtime', Path(runtime.__file__).with_name('build-with-runtime-evidence.py'))
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(helper, 'ROOT', root), patch.object(helper.subprocess, 'check_output', return_value='C:/Program Files/Visual Studio\n'), patch.object(helper, 'run') as activate, patch.object(helper.shutil, 'which', return_value='C:/VC/link.exe'):
+                activate.return_value.stdout = 'Path=C:/VC/bin\nLIB=C:/VC/lib\n'
+                environment = {'PATH': 'old'}
+                self.assertEqual(helper.msvc_environment(environment), 'C:/VC/link.exe')
+                self.assertEqual(environment['PATH'], 'C:/VC/bin')
+                self.assertNotIn('Path', environment)
+                self.assertIn('call "C:/Program Files/Visual Studio/', (root / '.sbom-tools/msvc-environment.cmd').read_text())
 
     def test_windows_import_library_and_loader_resolution(self):
         with tempfile.TemporaryDirectory() as directory:

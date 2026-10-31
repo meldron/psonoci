@@ -155,6 +155,9 @@ jobs:
             target/${{ matrix.target }}/release/runtime-capture/unresolved-inputs.json
             target/${{ matrix.target }}/release/runtime-capture/link.stdout
             target/${{ matrix.target }}/release/runtime-capture/link.stderr
+            target/${{ matrix.target }}/release/runtime-capture/binary
+            target/${{ matrix.target }}/release/psonoci
+            target/${{ matrix.target }}/release/psonoci.exe
             target/${{ matrix.target }}/release/runtime-capture/inputs/*.a
             target/${{ matrix.target }}/release/runtime-capture/inputs/*.lib
             target/${{ matrix.target }}/release/runtime-capture/inputs/*.tbd

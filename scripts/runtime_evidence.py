@@ -9,12 +9,15 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import functools
 import json
 import os
+import posixpath
 import re
 import struct
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 from urllib.parse import quote
 
@@ -31,6 +34,54 @@ def digest(path: Path) -> str:
     return value.hexdigest()
 
 
+def normalized_path(value: str) -> str:
+    return posixpath.normpath(value.replace('\\', '/'))
+
+
+@functools.lru_cache(maxsize=16)
+def registry_archive_checksums(archive: Path) -> tuple[str, dict]:
+    package_hash = hashlib.sha256(archive.read_bytes()).hexdigest()
+    files = {}
+    with tarfile.open(archive, 'r:gz') as handle:
+        for member in handle.getmembers():
+            if member.isfile():
+                with handle.extractfile(member) as stream:
+                    files[member.name] = hashlib.sha256(stream.read()).hexdigest()
+    return package_hash, files
+
+
+def cargo_native_input(original: Path, copied: Path) -> dict | None:
+    """Recognize packaged native assets only after checking Cargo's file checksum."""
+    if '/registry/src/' not in normalized_path(str(original)) or not original.is_file():
+        return None
+    import tomllib
+    for parent in original.parents:
+        manifest = parent / 'Cargo.toml'
+        checksums = parent / '.cargo-checksum.json'
+        if not manifest.is_file():
+            continue
+        relative = original.relative_to(parent).as_posix()
+        if checksums.is_file():
+            record = json.loads(checksums.read_text())
+            expected = record.get('files', {}).get(relative)
+            package_hash = record['package']
+        else:
+            # New Cargo versions retain the .crate archive instead of writing
+            # .cargo-checksum.json in every unpacked source directory.
+            archive = parent.parents[2] / 'cache' / parent.parent.name / (parent.name + '.crate')
+            if not archive.is_file():
+                continue
+            package_hash, files = registry_archive_checksums(archive)
+            expected = files.get(parent.name + '/' + relative)
+        if not expected or hashlib.sha256(copied.read_bytes()).hexdigest() != expected or digest(original) != digest(copied):
+            raise EvidenceError('native Cargo asset does not match its registry checksum')
+        package = tomllib.loads(manifest.read_text())['package']
+        return {'sha512': digest(copied), 'package': package['name'], 'version': package['version'],
+                'registryFileSha256': expected, 'registryPackageSha256': package_hash,
+                'path': normalized_path(str(original)), 'method': 'Cargo registry file checksum; package identity must also exist in the runtime graph'}
+    return None
+
+
 def cstring(data: bytes, offset: int) -> str:
     if offset < 0 or offset >= len(data):
         raise EvidenceError('binary string offset is outside the file')
@@ -38,6 +89,51 @@ def cstring(data: bytes, offset: int) -> str:
     if end < 0:
         raise EvidenceError('unterminated binary string')
     return data[offset:end].decode('utf-8')
+
+
+def macho_runtime_fingerprint(data: bytes) -> str:
+    """Bind runtime sections, loader settings and dyld payloads across stripping.
+
+    Rust may strip Mach-O debug/link metadata after the linker exits. Ignore
+    symbol/debug/signature bookkeeping; preserve code, data and loader behavior.
+    """
+    if data[:4] != b'\xcf\xfa\xed\xfe':
+        raise EvidenceError('post-link comparison requires a 64-bit Mach-O image')
+    identity = {'header': data[4:16].hex() + data[24:32].hex(), 'segments': [], 'sections': [], 'loader': []}
+    count = struct.unpack_from('<I', data, 16)[0]
+    offset = 32
+    for _ in range(count):
+        command, size = struct.unpack_from('<II', data, offset)
+        if size < 8 or offset + size > len(data):
+            raise EvidenceError('invalid Mach-O post-link load command')
+        if command == 0x19:
+            segment = data[offset + 8:offset + 24].split(b'\0', 1)[0].decode()
+            if segment not in ('__LINKEDIT', '__DWARF'):
+                identity['segments'].append([segment, data[offset + 24:offset + 64].hex()])
+                sections = struct.unpack_from('<I', data, offset + 64)[0]
+                for i in range(sections):
+                    start = offset + 72 + i * 80
+                    name = data[start:start + 16].split(b'\0', 1)[0].decode()
+                    address, length, location = struct.unpack_from('<QQI', data, start + 32)
+                    flags = struct.unpack_from('<I', data, start + 64)[0]
+                    if flags & 0x02000000:
+                        continue
+                    payload = b'' if flags & 255 in (1, 0x12) else data[location:location + length]
+                    identity['sections'].append([segment, name, address, length, flags, hashlib.sha512(payload).hexdigest()])
+        elif command in (0x2, 0xb, 0x1b, 0x1d, 0x26, 0x29):
+            pass  # Symbol tables, UUID, signature, function starts and debug data.
+        elif command in (0x22, 0x80000022):
+            pairs = struct.unpack_from('<' + 'I' * 10, data, offset + 8)
+            identity['loader'].append([command, [hashlib.sha512(data[p:p + n]).hexdigest() for p, n in zip(pairs[::2], pairs[1::2])]])
+        elif command in (0x80000033, 0x80000034):
+            location, length = struct.unpack_from('<II', data, offset + 8)
+            identity['loader'].append([command, hashlib.sha512(data[location:location + length]).hexdigest()])
+        else:
+            identity['loader'].append([command, data[offset + 8:offset + size].hex()])
+        offset += size
+    if not identity['sections']:
+        raise EvidenceError('Mach-O comparison has no runtime sections')
+    return hashlib.sha512(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
 def imports(data: bytes) -> list[dict]:
@@ -215,6 +311,10 @@ def validate_evidence(document: dict, binary_hash: str, target: str, required_im
         raise EvidenceError('runtime evidence requires SHA-512 identities for link inputs')
     inventory = {i['sha512'] for i in inputs}
     covered = set(document.get('cargoInputHashes', []))
+    for item in document.get('cargoNativeInputs', []):
+        if not item.get('package') or not item.get('version') or not all(re.fullmatch(r'[0-9a-f]{64}', item.get(field, '')) for field in ('registryFileSha256', 'registryPackageSha256')):
+            raise EvidenceError('native Cargo input lacks registry identity evidence')
+        covered.add(item['sha512'])
     mapped_imports = []
     components = document.get('components', [])
     keys = []
@@ -252,8 +352,19 @@ def validate_evidence(document: dict, binary_hash: str, target: str, required_im
 def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> dict:
     capture = json.loads((directory / 'capture.json').read_text())
     binary_hash = digest(binary)
-    if capture.get('format') != 1 or capture.get('target') != target or digest(directory / 'binary') != binary_hash:
+    if capture.get('format') != 1 or capture.get('target') != target:
         raise EvidenceError('link capture belongs to a different executable or target')
+    linked_hash = digest(directory / 'binary')
+    post_link = None
+    if linked_hash != binary_hash:
+        if 'apple' not in target:
+            raise EvidenceError('link capture belongs to a different executable or target')
+        original_fingerprint = macho_runtime_fingerprint((directory / 'binary').read_bytes())
+        if original_fingerprint != macho_runtime_fingerprint(binary.read_bytes()):
+            raise EvidenceError('Mach-O runtime content changed after the captured link')
+        post_link = {'linkedBinarySha512': linked_hash, 'finalBinarySha512': binary_hash,
+                     'runtimeSectionsSha512': original_fingerprint,
+                     'method': 'Mach-O runtime sections, loader commands and dyld payloads match across post-link metadata processing'}
     release = re.search(r'^release: (\S+)$', capture['rustc'], re.M)
     commit = re.search(r'^commit-hash: ([0-9a-f]{40})$', capture['rustc'], re.M)
     if not release or not commit:
@@ -265,6 +376,7 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
     components = {}
     inputs = []
     cargo_hashes = []
+    cargo_native = []
     unknown = []
     gcc = capture.get('compiler') or {}
     gcc_hashes = {digest(directory / file) for file in gcc.get('files', [])}
@@ -276,6 +388,12 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
     imported = imports(binary.read_bytes())
     musl_archives = [file for entry, file in copied if Path(entry['path']).name == 'libc.a']
     linked_musl = musl_version(musl_archives[0].read_bytes()) if 'musl' in target and len(musl_archives) == 1 else None
+    mingw = []
+    for entry, file in copied:
+        if Path(normalized_path(entry['path'])).name == 'libmingw32.a':
+            banners = re.findall(rb'MinGW-W64 Runtime ([ -~]+)\x00', file.read_bytes())
+            if len(set(banners)) == 1:
+                mingw.append((str(Path(normalized_path(entry['path'])).parent), banners[0].decode()))
 
     def register(component, proof, delivery='bundled', imported_names=()):
         component['delivery'] = delivery
@@ -286,7 +404,7 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
         existing['imports'].extend(name for name in imported_names if name not in existing['imports'])
 
     for entry, file in copied:
-        path = entry['path'].replace('\\', '/')
+        path = normalized_path(entry['path'])
         name = Path(path).name
         sha = digest(file)
         inputs.append({'path': path, 'sha512': sha})
@@ -320,6 +438,17 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
             register(component, proof)
         elif name.endswith('.rlib') and '/release/deps/' in path:
             cargo_hashes.append(sha)
+        elif name.endswith('.a') and (native_input := cargo_native_input(Path(entry['path']), file)):
+            cargo_native.append(native_input)
+        elif len(mingw) == 1 and str(Path(path).parent) == mingw[0][0] and name in ('crt2.o', 'dllcrt2.o', 'libmingw32.a', 'libmingwex.a', 'libpthread.a', 'libwinpthread.a', 'libdbghelp.a'):
+            if not mingw[0][1].startswith('13.'):
+                raise EvidenceError('this MinGW runtime version needs its upstream license notice reviewed')
+            component = identity('MinGW-w64 runtime', mingw[0][1], 'https://www.mingw-w64.org/', 'LicenseRef-MinGW-w64-runtime')
+            component['source'] = 'https://github.com/mingw-w64/mingw-w64'
+            component['licenseText'] = (Path(__file__).resolve().parents[1] / 'sbom/licenses/mingw-w64-runtime-13.txt').read_text()
+            component['versionContext'] = 'MinGW-w64 distribution runtime banner, including snapshot qualifier; exact linked library inputs are hashed'
+            proof['method'] = 'linked libmingw32.a runtime banner; native input supplied by the same target runtime directory'
+            register(component, proof)
         elif name.endswith('.lib') and (package_version := re.search(r'/VC/Tools/MSVC/(\d+\.\d+\.\d+)/', path, re.I)) and not import_library_names(file.read_bytes()):
             component = identity('Microsoft VC static runtime', package_version[1], 'https://visualstudio.microsoft.com/', 'LicenseRef-Microsoft-Visual-Studio')
             component['source'] = 'https://visualstudio.microsoft.com/license-terms/'
@@ -369,7 +498,7 @@ try { $s=New-Object System.Text.StringBuilder 32768; if ([NativeRuntime]::GetMod
             component['versionContext'] = 'observed on build host; not a minimum deployment version'
             register(component, {'path': observed['path'], 'sha512': sha, 'method': 'Windows loader resolution and DLL file-version resource on build host'}, 'external', [name])
             for unresolved in list(unknown):
-                original = next(file for entry, file in copied if entry['path'].replace('\\', '/') == unresolved['path'])
+                original = next(file for entry, file in copied if normalized_path(entry['path']) == unresolved['path'])
                 if name in import_library_names(original.read_bytes()):
                     register(component, dict(unresolved, method='COFF import descriptor in the linked import library'), 'external', [name])
         # One import library can supply several DLL imports. Record every
@@ -377,27 +506,32 @@ try { $s=New-Object System.Text.StringBuilder 32768; if ([NativeRuntime]::GetMod
         covered_hashes = {proof['sha512'] for component in components.values() for proof in component['evidence']}
         unknown = [item for item in unknown if item['sha512'] not in covered_hashes]
 
-    # Mach-O embeds the exact SDK link-interface version for its external load
-    # commands. Preserve its meaning; it is not an upstream package release.
+    # Preserve SDK interface identities for all stubs consumed by the linker,
+    # including reexports that do not become direct executable load commands.
     if 'apple' in target:
-        for imported_item in imported:
-            name = imported_item['name']
-            if name in mapped:
+        for candidate in list(unknown):
+            if Path(candidate['path']).suffix != '.tbd':
                 continue
+            file = next(file for entry, file in copied if normalized_path(entry['path']) == candidate['path'])
+            text = file.read_text()
+            name_match = re.search(r'^install-name:\s*[\'"]?([^\'"\n]+)', text, re.M)
+            version_match = re.search(r'^current-version:\s*([\d.]+)\s*$', text, re.M)
+            if not name_match or (not version_match and not re.search(r'^tbd-version:\s*4\s*$', text, re.M)):
+                raise EvidenceError(f'{candidate["path"]}: SDK stub needs an explicit interface identity')
+            name = name_match[1].strip()
             if not name.startswith(('/usr/lib/', '/System/Library/Frameworks/')):
                 raise EvidenceError(f'{name}: non-system macOS runtime requires explicit provider metadata')
-            candidates = [item for item in unknown if Path(item['path']).stem == Path(name).stem or
-                          ('.framework/' in name and Path(item['path']).stem == name.rsplit('/', 1)[-1]) or
-                          (Path(item['path']).suffix == '.tbd' and any(
-                              entry['path'].replace('\\', '/') == item['path'] and name in file.read_text(errors='replace')
-                              for entry, file in copied))]
-            if not candidates or imported_item['linkInterfaceVersion'] == '0.0.0':
-                raise EvidenceError(f'{name}: SDK link interface needs explicit provider metadata')
-            component = identity(name, imported_item['linkInterfaceVersion'], 'https://developer.apple.com/')
-            component['versionContext'] = 'Mach-O SDK link-interface version; not an OS or upstream source version'
-            for candidate in candidates:
-                register(component, dict(candidate, method='linked SDK stub and Mach-O dylib current_version'), 'external', [name])
-                unknown.remove(candidate)
+            # TBD v4 defines an omitted current-version as 1.0, not unknown.
+            # llvm/lib/TextAPI/TextStub.cpp documents and implements this default.
+            version = '.'.join(((version_match[1] if version_match else '1.0').split('.') + ['0', '0'])[:3])
+            direct = next((item for item in imported if item['name'] == name), None)
+            if direct:
+                version = direct['linkInterfaceVersion']
+            component = identity(name, version, 'https://developer.apple.com/')
+            component['versionContext'] = 'SDK link-interface current-version (Mach-O command for direct imports); not an OS or upstream source version'
+            matches = [item['name'] for item in imported if item['name'] == name]
+            register(component, dict(candidate, method='linked SDK stub install-name and current-version'), 'external', matches)
+            unknown.remove(candidate)
 
     if unknown:
         (directory / 'unresolved-inputs.json').write_text(json.dumps(unknown, indent=2) + '\n')
@@ -405,8 +539,10 @@ try { $s=New-Object System.Text.StringBuilder 32768; if ([NativeRuntime]::GetMod
     document = {'format': 1, 'target': target, 'binarySha512': binary_hash,
                 'capturedAt': dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'rustc': capture['rustc'], 'builderImage': capture['builderImage'],
-                'imports': imported, 'inputs': inputs, 'cargoInputHashes': cargo_hashes,
+                'imports': imported, 'inputs': inputs, 'cargoInputHashes': cargo_hashes, 'cargoNativeInputs': cargo_native,
                 'components': sorted(components.values(), key=lambda item: item['purl'])}
+    if post_link:
+        document['postLink'] = post_link
     validate_evidence(document, binary_hash, target, imported)
     return document
 

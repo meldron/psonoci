@@ -31,10 +31,16 @@ def msvc_environment(environment):
     if not installation:
         raise RuntimeError('MSVC installation not found')
     batch = Path(installation) / 'Common7/Tools/VsDevCmd.bat'
-    result = run(['cmd.exe', '/d', '/s', '/c', f'""{batch}" -no_logo -arch=amd64 -host_arch=amd64 >nul && set"'],
+    # A command string nested in a subprocess argument is quoted by Python a
+    # second time. A small batch file keeps cmd.exe quoting local to cmd.exe.
+    launcher = ROOT / '.sbom-tools' / 'msvc-environment.cmd'
+    launcher.parent.mkdir(parents=True, exist_ok=True)
+    launcher.write_text(f'@echo off\ncall "{batch}" -no_logo -arch=amd64 -host_arch=amd64 >nul\nif errorlevel 1 exit /b %errorlevel%\nset\n', newline='\r\n')
+    result = run([environment.get('COMSPEC', 'cmd.exe'), '/d', '/c', str(launcher)],
                  text=True, capture_output=True)
-    environment.update(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line and not line.startswith('='))
-    linker = shutil.which('link.exe', path=environment.get('Path', environment.get('PATH')))
+    environment.update((key.upper(), value) for line in result.stdout.splitlines()
+                       if '=' in line and not line.startswith('=') for key, value in [line.split('=', 1)])
+    linker = shutil.which('link.exe', path=environment.get('PATH'))
     if not linker:
         raise RuntimeError('MSVC linker unavailable after VsDevCmd')
     return linker
@@ -119,8 +125,11 @@ def main():
     # procedural macros continue to use the original host linker.
     # Always relink: Cargo freshness does not know that capture files were removed.
     run(['cargo', 'clean', '--package', 'psonoci', '--target', args.target, '--release', '--target-dir', str(ROOT / 'target')], env=environment)
+    # Cross mounts the workspace under its container path, which can differ
+    # from the runner's absolute checkout path. Cargo runs the root crate here.
+    linker_path = wrapper.relative_to(ROOT).as_posix() if args.cross else str(wrapper)
     run([*builder, 'rustc', '--locked', '--release', '--bin', 'psonoci', '--target', args.target, '--target-dir', str(ROOT / 'target'),
-         '--', '-C', f'linker={wrapper}'], env=environment)
+         '--', '-C', f'linker={linker_path}'], env=environment)
     binary = release / ('psonoci.exe' if 'windows' in args.target else 'psonoci')
     run([os.fspath(Path(os.sys.executable)), str(ROOT / 'scripts/runtime_evidence.py'),
          '--target', args.target, '--binary', str(binary), '--capture', str(capture), '--output', str(evidence)])

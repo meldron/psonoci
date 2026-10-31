@@ -351,6 +351,12 @@ def native_components(
     return components, edges
 
 
+def runtime_licenses(item: dict[str, Any]) -> list[dict[str, Any]]:
+    if item.get('licenseText'):
+        return [{"license": {"name": item['license'], "text": {"contentType": "text/plain", "content": item['licenseText']}}}]
+    return [{"expression": item['license']}]
+
+
 def _generate(args: argparse.Namespace) -> dict[str, Any]:
     paths = [args.manifest_path, args.binary, args.artifact, args.syft_input, args.overrides]
     if missing := [str(path) for path in paths if not path.is_file()]:
@@ -377,6 +383,15 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     metadata = cargo_metadata(args.manifest_path, args.target)
     expected_graph = runtime_graph(args.manifest_path, args.target)
     runtime = set(expected_graph)
+    if evidence.get('cargoNativeInputs'):
+        import tomllib
+        lock = tomllib.loads((args.manifest_path.parent / 'Cargo.lock').read_text())
+        checksums = {(item['name'], item['version']): item.get('checksum') for item in lock['package']}
+    for item in evidence.get('cargoNativeInputs', []):
+        if (item['package'], item['version']) not in runtime:
+            raise SbomError('native Cargo input is not covered by the runtime dependency graph')
+        if checksums.get((item['package'], item['version'])) != item['registryPackageSha256']:
+            raise SbomError('native Cargo input does not match the locked registry package checksum')
     cargo_names = {
         target["name"].replace("-", "_")
         for package in metadata["packages"] if (package["name"], package["version"]) in runtime
@@ -442,7 +457,7 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
         if item.get("versionContext"):
             component["properties"].append({"name": "psonoci:runtime:version-context", "value": item["versionContext"]})
         if item.get("license"):
-            component["licenses"] = [{"expression": item["license"]}]
+            component["licenses"] = runtime_licenses(item)
         if item["delivery"] == "bundled":
             component["properties"] += bsi_properties(executable=False, archive=False, structured=False, license_id=item["license"])
         runtime_components.append(component)
@@ -607,7 +622,12 @@ def validate_document(bom: dict[str, Any]) -> None:
         if not component.get("name") or not component.get("version"):
             errors.append(f"{label}: exact name and version are required")
         external_runtime = property_values(component, "psonoci:runtime:delivery") == ["external"]
-        if not external_runtime and (not component.get("licenses") or not all(item.get("expression") for item in component.get("licenses", []))):
+        text_runtime_license = property_values(component, "psonoci:runtime:delivery") == ["bundled"] and all(
+            item.get('license', {}).get('name', '').startswith('LicenseRef-') and
+            item.get('license', {}).get('text', {}).get('contentType') == 'text/plain' and
+            item.get('license', {}).get('text', {}).get('content') for item in component.get('licenses', [])
+        )
+        if not external_runtime and (not component.get("licenses") or not (text_runtime_license or all(item.get("expression") for item in component.get("licenses", [])))):
             errors.append(f"{label}: SPDX license expression is required")
         creator = any(item.get("email") for item in component.get("authors", [])) or any(
             item.get("type") in {"vcs", "website"} and item.get("url")
@@ -671,7 +691,7 @@ def validate_document(bom: dict[str, Any]) -> None:
                         raise runtime_info.EvidenceError("runtime component proof differs from its evidence")
                     if property_values(recorded, "psonoci:runtime:imports") != [json.dumps(item["imports"], sort_keys=True)]:
                         raise runtime_info.EvidenceError("runtime component imports differ from its evidence")
-                    if item.get("license") and recorded.get("licenses") != [{"expression": item["license"]}]:
+                    if item.get("license") and recorded.get("licenses") != runtime_licenses(item):
                         raise runtime_info.EvidenceError("runtime licensing differs from its evidence")
                     if item["purl"] not in graph.get(executable["bom-ref"], []):
                         raise runtime_info.EvidenceError("runtime component is disconnected from the executable")
