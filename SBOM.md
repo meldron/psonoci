@@ -28,14 +28,20 @@ The release pipeline builds and checks each SBOM as follows:
    and dependency relationship that Cargo reports. Syft may omit dependency
    records for packages with no dependencies and include additional
    relationships found in the binary.
-4. The script checks the archive contents and executable format, calculates
-   their hashes, records the target and commit, and adds vendored OpenSSL. It
-   also checks the repository's required SBOM fields.
-5. The pipeline signs the archive and SBOM. The official CycloneDX CLI checks
+4. A final-link recorder captures the exact Rust and native library inputs in
+   the build environment. A runtime collector hashes those inputs and reads
+   the executable's ELF, Mach-O, or PE imports. It identifies bundled runtimes
+   and direct external runtime dependencies; unresolved inputs stop the build.
+5. The adapter checks the archive and executable hashes, target and commit,
+   adds vendored OpenSSL and the runtime inventory, and applies the repository's
+   required-field and coverage checks. Runtime evidence is embedded in the
+   SBOM and covered by its detached signature.
+6. The pipeline signs the archive and SBOM. The official CycloneDX CLI checks
    the SBOM against the schema before publication.
-6. The publish job verifies both signatures and checks the required SBOM
+7. The publish job verifies both signatures and checks the required SBOM
    fields again. It compares the archive and executable hashes with the SBOM.
-   Every expected target must have exactly one archive, one SBOM, and both
+   It also reads imports from the archived executable and compares them with
+   the runtime evidence. Every target must have one archive, one SBOM, and both
    signatures. Missing targets and unexpected files stop publication.
 
 New GitHub releases stay in draft during the build and checks. The workflow
@@ -62,15 +68,34 @@ Each SBOM describes one target's release archive and includes:
 - the BSI CycloneDX properties for executable, archive, structured-file,
   filename, and effective-license classification.
 
-The SBOM excludes build tools, development dependencies, and procedural
-macros. Build provenance should record those dependencies. It also excludes
-runtime libraries supplied by the operating system outside the archive. The
-CycloneDX composition is marked `incomplete` because the SBOM does not describe
-the destination system.
+The SBOM excludes build tools, development dependencies, and procedural macros
+from the delivered inventory. Direct external runtimes are identified, but
+their own dependency subgraphs are not recursively inventoried. The composition
+remains `incomplete`; this discloses the boundary and does not waive coverage
+checks for the delivered software or its direct imports.
 
-For musl targets, the SBOM states that musl libc is statically linked and that
-its exact version is unknown. The current tooling cannot determine that
-version from the external Cross build image.
+The Rust standard library is identified by its Rust distribution release and
+source commit, with hashes of the linked sysroot libraries. Bundled target
+startup runtimes are recorded separately. Distribution versions identify these
+redistributed packages; they do not assert independent resolution of every
+third-party upstream source release inside the Rust distribution.
+
+For musl, the collector reads allocated version data in `version.lo` inside the
+linked `libc.a`. It does not substitute the Cargo `libc` crate version or the
+builder's installed libc version. A missing or ambiguous version stops generation.
+GNU libc uses its captured release banner. GCC runtime identities require the
+linked file to match the compiler's resolved runtime file by hash.
+
+External macOS system libraries carry their SDK link-interface versions from
+Mach-O load commands, backed by linked SDK stubs. On native Windows, normal and
+delay imports are resolved to build-host DLL files and file versions, including
+API-set aliases. DLL entry points are not run. Version context is explicit:
+neither SDK ABI versions nor build-host DLL versions establish minimum supported
+deployment OS versions.
+
+These checks do not constitute a full BSI conformity assessment. Source-level
+attribution within toolchain distributions and the interpretation of external
+platform version identifiers require review against the intended SBOM profile.
 
 ## Dependencies
 
@@ -106,14 +131,15 @@ syft version
 Build the executable with embedded dependency data. For a native Linux build:
 
 ```sh
-cargo auditable build --locked --release
+python3 scripts/build-with-runtime-evidence.py --target x86_64-unknown-linux-gnu
 ```
 
 For a Cross target:
 
 ```sh
-cross build --locked --release \
-  --target x86_64-unknown-linux-musl
+python3 scripts/build-with-runtime-evidence.py \
+  --target x86_64-unknown-linux-musl --cross \
+  --image meldron/psonoci_builder:x86_64-unknown-linux-musl
 ```
 
 Cross does not forward arbitrary Cargo plugin subcommands into its container.
@@ -125,6 +151,22 @@ container's environment variables are available. `Cross.toml` therefore repeats
 the version pin from `sbom/tool-versions.env`. A unit test checks that the pins
 match. A cache marker includes the tool version so a pin change triggers
 reinstallation. The custom builder Dockerfiles also install the wrapper.
+
+The helper uses `cargo rustc` through cargo-auditable for the final application
+link. It compiles a static host recorder for Cross, requiring no Python inside
+the builder image. The Cross base image is resolved to an immutable digest/ID
+for that build; Cross pre-build hooks still run on that base.
+
+Raw input copies and traces are retained in
+`target/<target>/release/runtime-capture/`. The collector writes
+`psonoci.runtime.json` beside the executable. Generation requires that same
+binary and evidence; `--runtime-evidence` can specify another evidence path.
+GitLab transports this file with build artifacts. The public release asset set
+stays at four files per target, because the evidence is embedded in the SBOM.
+The temporary host recorder lives in the ignored `.sbom-tools/` directory so
+remote Cross builds copy it with project sources. Remote builds must copy the
+capture directory back as well; the helper enables full target-directory copy
+for Cross versions that otherwise return only Cargo-declared artifacts.
 
 Create the release archive from that exact binary:
 
@@ -174,6 +216,44 @@ misses a runtime package or dependency relationship reported by Cargo.
 `sbom/overrides.json` supplies metadata that upstream packages lack. Review
 these overrides when `Cargo.lock` changes.
 
+## Unresolved runtime providers
+
+Automatic identification is deliberately limited. An unrecognized native input
+stops the build and produces `runtime-capture/unresolved-inputs.json`, listing
+the original paths and SHA-512 hashes. Cross-built Windows binaries cannot use
+native Windows DLL version discovery on a Linux build host. Their missing
+runtime identities must be supplied using reviewed provider metadata, or the
+build must run on a native Windows runner.
+
+After verifying an input against its actual provider's source/build manifest,
+add its exact hash to `sbom/runtime-providers.json`:
+
+```json
+{
+  "format": 1,
+  "bySha512": {
+    "<128 lowercase hexadecimal characters>": {
+      "name": "Actual provider component",
+      "version": "1.2.3",
+      "creator": "https://provider.example/",
+      "license": "MIT",
+      "source": "https://provider.example/releases/1.2.3",
+      "method": "Verified provider build manifest and matching library checksum",
+      "delivery": "bundled",
+      "imports": []
+    }
+  }
+}
+```
+
+Use `external` delivery with the exact executable import names when the provider
+supplies an external runtime. First external components need identity metadata;
+they are not falsely classified as non-executable delivered files. External
+component licences may be omitted, while bundled runtimes require them.
+Overrides do not match mutable paths, wildcard versions, or target names: an
+input change requires a newly reviewed hash. Do not copy a version from an
+unrelated host package or silently accept `unknown`.
+
 ## Validate and verify
 
 Check the required SBOM fields:
@@ -194,7 +274,7 @@ python3 scripts/sbom.py verify-release \
 Run the tests:
 
 ```sh
-python3 -m unittest discover -s tests -p 'test_sbom.py' -v
+python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
 ```
 
 Run the official schema check used by CI:

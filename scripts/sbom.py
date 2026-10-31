@@ -24,9 +24,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import runtime_evidence as runtime_info  # noqa: E402
+
 
 TOOL_NAME = "psonoci-sbom-adapter"
-TOOL_VERSION = "2.1.0"
+TOOL_VERSION = "3.0.0"
 CDX_SCHEMA = "https://cyclonedx.org/schema/bom-1.6.schema.json"
 BSI_TAXONOMY_VERSION = "0.1.2"
 BSI_TR_VERSION = "2.1.0"
@@ -358,6 +361,9 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
         raise SbomError("cargo-auditable version is required")
     verify_binary_target(args.binary, args.target)
     verify_archive(args.artifact, args.binary)
+    evidence_path = args.runtime_evidence or args.binary.with_name("psonoci.runtime.json")
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    runtime_info.validate_evidence(evidence, sha512(args.binary), args.target, runtime_info.imports(args.binary.read_bytes()))
 
     raw = json.loads(args.syft_input.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -371,6 +377,17 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     metadata = cargo_metadata(args.manifest_path, args.target)
     expected_graph = runtime_graph(args.manifest_path, args.target)
     runtime = set(expected_graph)
+    cargo_names = {
+        target["name"].replace("-", "_")
+        for package in metadata["packages"] if (package["name"], package["version"]) in runtime
+        for target in package.get("targets", []) if set(target.get("kind", [])) & {"lib", "rlib"}
+    }
+    for item in evidence["inputs"]:
+        if item["sha512"] in evidence["cargoInputHashes"]:
+            filename = Path(item["path"]).name
+            match = re.fullmatch(r"lib(.+)-[0-9a-f]+\.rlib", filename)
+            if not match or match[1] not in cargo_names:
+                raise SbomError(f"linked Rust archive is not covered by the Cargo runtime graph: {filename}")
     packages: dict[PackageKey, dict[str, Any]] = {}
     for package in metadata["packages"]:
         key = (package["name"], package["version"])
@@ -410,6 +427,26 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     ]
     extra_components, native_edges = native_components(metadata, runtime, overrides)
     components.extend(extra_components)
+    runtime_components = []
+    for item in evidence["components"]:
+        component = {
+            "type": "library", "bom-ref": item["purl"], "name": item["name"],
+            "version": item["version"], "scope": "required", "purl": item["purl"],
+            "externalReferences": references(item.get("source"), item["creator"]),
+            "properties": [
+                {"name": "psonoci:runtime:delivery", "value": item["delivery"]},
+                {"name": "psonoci:runtime:evidence", "value": json.dumps(item["evidence"], sort_keys=True)},
+                {"name": "psonoci:runtime:imports", "value": json.dumps(item["imports"], sort_keys=True)},
+            ],
+        }
+        if item.get("versionContext"):
+            component["properties"].append({"name": "psonoci:runtime:version-context", "value": item["versionContext"]})
+        if item.get("license"):
+            component["licenses"] = [{"expression": item["license"]}]
+        if item["delivery"] == "bundled":
+            component["properties"] += bsi_properties(executable=False, archive=False, structured=False, license_id=item["license"])
+        runtime_components.append(component)
+    components.extend(runtime_components)
 
     root_license = normalize_license(root.get("license"))
     root_authors = [author(item) for item in root.get("authors", []) if item.strip()]
@@ -461,6 +498,9 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     for trigger, native_ref in native_edges:
         dependencies[component_ref_by_key[trigger]].add(native_ref)
         dependencies[native_ref] = set()
+    for component in runtime_components:
+        dependencies[binary_ref].add(component["bom-ref"])
+        dependencies[component["bom-ref"]] = set()
 
     now = (
         dt.datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), dt.timezone.utc)
@@ -475,22 +515,16 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
         {"name": "psonoci:sbom:dependency-graph", "value": "cargo-runtime-edges-verified-against-syft"},
         {
             "name": "psonoci:sbom:boundary",
-            "value": "release archive; dynamically supplied operating-system runtime is outside delivery scope",
+            "value": "release archive and identified direct external runtimes; external runtime dependency subgraphs are not resolved",
         },
+        {"name": "psonoci:sbom:runtime-evidence", "value": json.dumps(evidence, sort_keys=True, separators=(",", ":"))},
     ]
-    if "musl" in args.target:
-        metadata_properties.append({
-            "name": "psonoci:sbom:static-runtime",
-            "value": (
-                "musl libc is statically linked into the executable; its exact "
-                "build-image version is not independently resolved"
-            ),
-        })
     bom = {
         "$schema": CDX_SCHEMA, "bomFormat": "CycloneDX", "specVersion": "1.6",
         "serialNumber": evidence_serial(
             args.commit.lower(), args.target, root["version"],
             binary_hash, archive_hash, timestamp,
+            hashlib.sha512(json.dumps(evidence, sort_keys=True).encode()).hexdigest(),
         ), "version": 1,
         "metadata": {
             "timestamp": timestamp,
@@ -572,7 +606,8 @@ def validate_document(bom: dict[str, Any]) -> None:
         refs.add(ref)
         if not component.get("name") or not component.get("version"):
             errors.append(f"{label}: exact name and version are required")
-        if not component.get("licenses") or not all(item.get("expression") for item in component.get("licenses", [])):
+        external_runtime = property_values(component, "psonoci:runtime:delivery") == ["external"]
+        if not external_runtime and (not component.get("licenses") or not all(item.get("expression") for item in component.get("licenses", []))):
             errors.append(f"{label}: SPDX license expression is required")
         creator = any(item.get("email") for item in component.get("authors", [])) or any(
             item.get("type") in {"vcs", "website"} and item.get("url")
@@ -580,6 +615,10 @@ def validate_document(bom: dict[str, Any]) -> None:
         )
         if not creator:
             errors.append(f"{label}: creator identity is required")
+        if external_runtime:
+            if not component.get("purl"):
+                errors.append(f"{label}: external runtime identity requires a PURL")
+            continue
         allowed_properties = {
             "bsi:component:executable": {"executable", "non-executable"},
             "bsi:component:archive": {"archive", "no archive"},
@@ -604,12 +643,40 @@ def validate_document(bom: dict[str, Any]) -> None:
             targets = property_values(component, "psonoci:release:target")
             if len(targets) != 1:
                 errors.append(f"{label}: exactly one release target is required")
-            elif "musl" in targets[0] and not metadata_property_values(
-                metadata, "psonoci:sbom:static-runtime"
-            ):
-                errors.append(f"{label}: static musl runtime disclosure is required")
     if executable_count != 1:
         errors.append("exactly one delivered executable is required")
+    else:
+        executable = next(c for c in components if property_values(c, "bsi:component:executable") == ["executable"])
+        evidence_values = metadata_property_values(metadata, "psonoci:sbom:runtime-evidence")
+        if len(evidence_values) != 1:
+            errors.append("exactly one runtime evidence record is required")
+        else:
+            try:
+                evidence = json.loads(evidence_values[0])
+                runtime_info.validate_evidence(evidence, component_sha512(executable, "executable"),
+                                          property_values(executable, "psonoci:release:target")[0], evidence["imports"])
+                runtime_by_ref = {c["bom-ref"]: c for c in components if property_values(c, "psonoci:runtime:delivery")}
+                if set(runtime_by_ref) != {c["purl"] for c in evidence["components"]}:
+                    raise runtime_info.EvidenceError("runtime components do not match the evidence inventory")
+                graph = {d["ref"]: d.get("dependsOn", []) for d in bom.get("dependencies", [])}
+                for item in evidence["components"]:
+                    recorded = runtime_by_ref[item["purl"]]
+                    if (recorded.get("name"), recorded.get("version"), recorded.get("purl")) != (item["name"], item["version"], item["purl"]):
+                        raise runtime_info.EvidenceError("runtime component identity differs from its evidence")
+                    if property_values(recorded, "psonoci:runtime:delivery") != [item["delivery"]]:
+                        raise runtime_info.EvidenceError("runtime delivery classification differs from its evidence")
+                    if not any(ref.get("type") == "website" and ref.get("url") == item["creator"] for ref in recorded.get("externalReferences", [])):
+                        raise runtime_info.EvidenceError("runtime creator differs from its evidence")
+                    if property_values(recorded, "psonoci:runtime:evidence") != [json.dumps(item["evidence"], sort_keys=True)]:
+                        raise runtime_info.EvidenceError("runtime component proof differs from its evidence")
+                    if property_values(recorded, "psonoci:runtime:imports") != [json.dumps(item["imports"], sort_keys=True)]:
+                        raise runtime_info.EvidenceError("runtime component imports differ from its evidence")
+                    if item.get("license") and recorded.get("licenses") != [{"expression": item["license"]}]:
+                        raise runtime_info.EvidenceError("runtime licensing differs from its evidence")
+                    if item["purl"] not in graph.get(executable["bom-ref"], []):
+                        raise runtime_info.EvidenceError("runtime component is disconnected from the executable")
+            except (runtime_info.EvidenceError, ValueError, KeyError, IndexError, TypeError) as error:
+                errors.append(f"runtime evidence validation failed: {error}")
     if not primary or property_values(primary, "bsi:component:archive") != ["archive"]:
         errors.append("the release archive must be the metadata component")
     elif "SHA-512" not in {item.get("alg") for item in primary.get("hashes", [])}:
@@ -660,6 +727,15 @@ def verify_release(bom: dict[str, Any], artifact: Path) -> None:
         raise SbomError(
             f"{artifact} must contain exactly the SBOM executable {filenames[0]}"
         )
+    if artifact.suffix == ".zip":
+        with zipfile.ZipFile(artifact) as archive:
+            binary = archive.read(next(name for name in archive.namelist() if Path(name).name == filenames[0]))
+    else:
+        with tarfile.open(artifact, "r:gz") as archive:
+            member = next(member for member in archive.getmembers() if member.isfile() and Path(member.name).name == filenames[0])
+            binary = archive.extractfile(member).read()
+    evidence = json.loads(metadata_property_values(bom["metadata"], "psonoci:sbom:runtime-evidence")[0])
+    runtime_info.validate_evidence(evidence, expected_hash, property_values(executable, "psonoci:release:target")[0], runtime_info.imports(binary))
 
 
 def validate_release_set(
@@ -705,6 +781,7 @@ def parse_args() -> argparse.Namespace:
     generate_parser.add_argument("--artifact-url")
     generate_parser.add_argument("--commit", required=True)
     generate_parser.add_argument("--cargo-auditable-version", required=True)
+    generate_parser.add_argument("--runtime-evidence", type=Path, help="hash-bound link/runtime inventory; defaults beside the executable")
     generate_parser.add_argument("--release-version")
     generate_parser.add_argument("--manifest-path", type=Path, default=Path("Cargo.toml"))
     generate_parser.add_argument("--overrides", type=Path, default=Path("sbom/overrides.json"))
@@ -745,7 +822,7 @@ def main() -> int:
             )
             print(f"validated {args.directory}: complete release files for {len(args.targets)} targets")
     except (
-        OSError, OverflowError, ValueError, SbomError, tarfile.TarError,
+        OSError, OverflowError, ValueError, SbomError, runtime_info.EvidenceError, tarfile.TarError,
         zipfile.BadZipFile,
     ) as error:
         print(f"error: {error}", file=sys.stderr)

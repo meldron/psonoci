@@ -16,7 +16,7 @@ variables:
   script:
     - set -a; . sbom/tool-versions.env; set +a
     - apt-get update
-    - apt-get install -y curl build-essential ca-certificates iptables libdevmapper1.02.1
+    - apt-get install -y curl build-essential ca-certificates iptables libdevmapper1.02.1 python3
     # - curl -fL https://getcli.jfrog.io | sh
     # - ./jfrog config add rt-server-1 --artifactory-url=https://psono.jfrog.io/psono --user=gitlab --password=$artifactory_credentials --overwrite
     - curl -fSL "https://download.docker.com/linux/ubuntu/dists/jammy/pool/stable/amd64/containerd.io_1.6.28-1_amd64.deb" -o containerd.deb && echo "3fcc3e44e6d507c346ae05bbaef8f4bb04dfa8da9f04af658537f7e373c91340 containerd.deb" | sha256sum -c -
@@ -36,7 +36,13 @@ variables:
     - cargo install cross
     - cross --version
     # - cross test --release --target "${BUILD_ENV}"
-    - cross build --locked --release --target "${BUILD_ENV}"
+    - |
+      if [ "$BUILD_ENV" = x86_64-pc-windows-gnu ]; then
+        python3 scripts/build-with-runtime-evidence.py --target "$BUILD_ENV" --cross
+      else
+        python3 scripts/build-with-runtime-evidence.py --target "$BUILD_ENV" --cross \
+          --image "meldron/psonoci_builder:$BUILD_ENV"
+      fi
 
 .build-cross-base:
   stage: build
@@ -63,6 +69,7 @@ variables:
     name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
     paths:
       - ./target/${BUILD_ENV}/release/psonoci
+      - ./target/${BUILD_ENV}/release/psonoci.runtime.json
     expire_in: 1 week
   script:
     - !reference [.build-cross-base-script, script]
@@ -76,6 +83,7 @@ variables:
     name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
     paths:
       - ./target/${BUILD_ENV}/release/psonoci.exe
+      - ./target/${BUILD_ENV}/release/psonoci.runtime.json
     expire_in: 1 week
   script:
     - !reference [.build-cross-base-script, script]
@@ -115,6 +123,7 @@ build-x86_64-pc-windows-msvc:
     name: "psonoci_x86_64-pc-windows-msvc_$CI_COMMIT_REF_NAME"
     paths:
       - ./target/x86_64-pc-windows-msvc/release/psonoci.exe
+      - ./target/x86_64-pc-windows-msvc/release/psonoci.runtime.json
     expire_in: 1 week
   variables:
     BUILD_ENV: x86_64-pc-windows-msvc
@@ -140,11 +149,12 @@ build-x86_64-pc-windows-msvc:
     - rustup target add "${BUILD_ENV}"
     - cargo --version
     - cargo install --locked cargo-auditable --version "${CARGO_AUDITABLE_VERSION}"
-    - cargo auditable build --locked --release --target "${BUILD_ENV}"
+    - python3 scripts/build-with-runtime-evidence.py --target "${BUILD_ENV}"
   artifacts:
     name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
     paths:
       - ./target/${BUILD_ENV}/release/psonoci
+      - ./target/${BUILD_ENV}/release/psonoci.runtime.json
     expire_in: 1 week
   except:
     - schedules

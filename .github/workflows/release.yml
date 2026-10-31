@@ -44,6 +44,7 @@ jobs:
       builder_image: meldron/psonoci_builder
       RELEASE_VERSION: ${{ github.ref_name }}
     strategy:
+      fail-fast: false
       matrix:
         build: [linux, linux-armv7, linux-aarch64, macos, win-gnu, win-msvc]
         include:
@@ -136,10 +137,30 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build --locked --release --target ${{ matrix.target }}
+            python3 scripts/build-with-runtime-evidence.py \
+              --target "${{ matrix.target }}" --cross \
+              --image "$builder_image:${{ matrix.target }}"
           else
-            cargo auditable build --locked --release --target ${{ matrix.target }}
+            python3 scripts/build-with-runtime-evidence.py --target "${{ matrix.target }}"
           fi
+
+      - name: Upload runtime evidence diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-evidence-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/psonoci.runtime.json
+            target/${{ matrix.target }}/release/runtime-capture/capture.json
+            target/${{ matrix.target }}/release/runtime-capture/unresolved-inputs.json
+            target/${{ matrix.target }}/release/runtime-capture/link.stdout
+            target/${{ matrix.target }}/release/runtime-capture/link.stderr
+            target/${{ matrix.target }}/release/runtime-capture/inputs/*.a
+            target/${{ matrix.target }}/release/runtime-capture/inputs/*.lib
+            target/${{ matrix.target }}/release/runtime-capture/inputs/*.tbd
+            target/${{ matrix.target }}/release/runtime-capture/inputs/*.o
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Import GPG key
         id: import_gpg

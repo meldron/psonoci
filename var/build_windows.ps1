@@ -23,4 +23,5 @@ $env:PATH = "$env:CARGO_HOME\bin;$env:PATH"
 
 # Embed the resolved dependency tree into the release executable.
 & "$env:CARGO_HOME\bin\cargo.exe" install --locked cargo-auditable --version "$env:CARGO_AUDITABLE_VERSION"
-& "$env:CARGO_HOME\bin\cargo.exe" auditable build --locked --release --target=x86_64-pc-windows-msvc
+python scripts/build-with-runtime-evidence.py --target x86_64-pc-windows-msvc
+if ($LASTEXITCODE -ne 0) { throw "Build or runtime evidence collection failed" }

@@ -13,3 +13,5 @@ __pycache__/
 *.cdx.json
 *.tar.gz
 *.tgz
+.worktrees/
+.sbom-tools/

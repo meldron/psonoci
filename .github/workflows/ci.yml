@@ -111,7 +111,7 @@ jobs:
 
       - name: SBOM adapter unit tests
         if: matrix.build == 'linux'
-        run: python3 -m unittest discover -s tests -p 'test_sbom.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
 
       # - name: cargo test
       #   run: |
@@ -125,9 +125,14 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build --locked --release --target ${{ matrix.target }}
+            image_args=()
+            if [ "${{ matrix.target_type }}" = "unix" ]; then
+              image_args=(--image "$builder_image:${{ matrix.target }}")
+            fi
+            python3 scripts/build-with-runtime-evidence.py \
+              --target "${{ matrix.target }}" --cross "${image_args[@]}"
           else
-            cargo auditable build --locked --release --target ${{ matrix.target }}
+            python3 scripts/build-with-runtime-evidence.py --target "${{ matrix.target }}"
           fi
 
       - name: Test CRA SBOM generation and CycloneDX schema

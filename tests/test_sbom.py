@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import tarfile
 import tempfile
@@ -62,7 +63,7 @@ def minimal_document(archive_hash: str, binary_hash: str, archive_name: str = "a
             {"name": "psonoci:release:target", "value": "x86_64-unknown-linux-gnu"},
         ],
     }
-    return {
+    document = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.6",
         "serialNumber": "urn:uuid:4d36e96e-e325-11ce-bfc1-08002be10318",
@@ -88,6 +89,32 @@ def minimal_document(archive_hash: str, binary_hash: str, archive_name: str = "a
         ],
         "compositions": [{"aggregate": "incomplete", "assemblies": [archive_ref]}],
     }
+    runtime_ref = "pkg:generic/rust-standard-library@1.94.1"
+    proof = {"path": "/rust/libstd.rlib", "sha512": "2" * 128, "method": "test link fixture"}
+    runtime_component = {
+        "type": "library", "bom-ref": runtime_ref, "name": "Rust standard library", "version": "1.94.1",
+        "purl": runtime_ref, "licenses": [{"expression": "MIT"}],
+        "externalReferences": [{"type": "website", "url": "https://www.rust-lang.org/"}],
+        "properties": properties(executable=False, archive=False)
+        + [{"name": "psonoci:runtime:delivery", "value": "bundled"},
+           {"name": "psonoci:runtime:evidence", "value": json.dumps([proof], sort_keys=True)},
+           {"name": "psonoci:runtime:imports", "value": "[]"}],
+    }
+    evidence = {
+        "format": 1, "target": "x86_64-unknown-linux-gnu", "binarySha512": binary_hash,
+        "rustc": "release: 1.94.1\ncommit-hash: " + "a" * 40 + "\n",
+        "imports": [], "inputs": [{"path": proof["path"], "sha512": proof["sha512"]}],
+        "cargoInputHashes": [], "components": [{
+            "name": runtime_component["name"], "version": runtime_component["version"], "purl": runtime_ref,
+            "creator": "https://www.rust-lang.org/", "license": "MIT", "delivery": "bundled",
+            "evidence": [proof], "imports": [],
+        }],
+    }
+    document["metadata"]["properties"].append({"name": "psonoci:sbom:runtime-evidence", "value": json.dumps(evidence)})
+    document["components"].append(runtime_component)
+    document["dependencies"][1]["dependsOn"].append(runtime_ref)
+    document["dependencies"].append({"ref": runtime_ref, "dependsOn": []})
+    return document
 
 
 class DependencyGraphTests(unittest.TestCase):
@@ -199,7 +226,9 @@ class BinaryAndArchiveTests(unittest.TestCase):
 
 class PolicyAndReleaseTests(unittest.TestCase):
     def test_policy_and_release_binding_pass(self):
-        payload = b"release executable"
+        payload = bytearray(64)
+        payload[:6] = b"\x7fELF\x02\x01"
+        payload = bytes(payload)
         binary_hash = hashlib.sha512(payload).hexdigest()
         with tempfile.TemporaryDirectory() as directory:
             artifact = Path(directory) / "app.tar.gz"
