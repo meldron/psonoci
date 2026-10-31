@@ -102,7 +102,10 @@ Mach-O load commands, backed by linked SDK stubs. On native Windows, normal and
 delay imports are resolved to build-host DLL files and file versions, including
 API-set aliases. DLL entry points are not run. Version context is explicit:
 neither SDK ABI versions nor build-host DLL versions establish minimum supported
-deployment OS versions.
+deployment OS versions. Searched Windows SDK import libraries that do not
+produce executable imports retain their SDK package identity and hashes, without
+claiming a runtime DLL version. GNU shared-library aliases are matched to actual
+executable imports using their ELF SONAME.
 All SDK stubs consumed by the linker, including reexports, are identified. The
 TBD v4 default interface version is 1.0 when `current-version` is omitted.
 For compiler post-link Mach-O metadata processing, both original and final

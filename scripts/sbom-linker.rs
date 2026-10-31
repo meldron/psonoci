@@ -78,6 +78,33 @@ fn library(path: &Path) -> bool {
                     || name.starts_with("rsend"))))
 }
 
+fn traced_paths(line: &str) -> Vec<PathBuf> {
+    let line = line
+        .trim()
+        .trim_start_matches("ld: ")
+        .trim_start_matches("trace: ")
+        .trim_start_matches("Searching ")
+        .trim_end_matches(':');
+    // Try the whole path first: Windows paths can contain parentheses.
+    let whole = PathBuf::from(line.trim_matches('"'));
+    if library(&whole) {
+        return vec![whole];
+    }
+    let mut paths = Vec::new();
+    for (index, _) in line.match_indices('(') {
+        let (before, rest) = (&line[..index], &line[index + 1..]);
+        for candidate in [before, rest.rsplit_once(')').map(|p| p.0).unwrap_or(rest)] {
+            let path = PathBuf::from(candidate.trim().trim_matches('"'));
+            if library(&path) {
+                paths.push(path);
+            }
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 fn capture() -> Result<i32, Box<dyn std::error::Error>> {
     let target = env!("PSONOCI_SBOM_TARGET");
     let linker = env!("PSONOCI_SBOM_LINKER");
@@ -146,22 +173,7 @@ fn capture() -> Result<i32, Box<dyn std::error::Error>> {
     }
     for bytes in [&result.stdout, &result.stderr] {
         for line in String::from_utf8_lossy(bytes).lines() {
-            let line = line
-                .trim()
-                .trim_start_matches("ld: ")
-                .trim_start_matches("trace: ")
-                .trim_start_matches("Searching ")
-                .trim_end_matches(':');
-            let candidate = line
-                .split('(')
-                .next()
-                .unwrap_or(line)
-                .trim()
-                .trim_matches('"');
-            let path = PathBuf::from(candidate);
-            if library(&path) {
-                paths.push(path);
-            }
+            paths.extend(traced_paths(line));
         }
     }
     paths.sort();
@@ -210,6 +222,9 @@ fn capture() -> Result<i32, Box<dyn std::error::Error>> {
                 "libgcc_s.so",
                 "libgcc.a",
                 "libgcc_eh.a",
+                "libatomic.a",
+                "libatomic.so",
+                "libatomic.so.1",
                 "crtbegin.o",
                 "crtend.o",
                 "crtbeginS.o",
@@ -261,5 +276,28 @@ fn main() {
             eprintln!("runtime link evidence: {error}");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_gnu_trace_variants_and_parentheses_in_paths() {
+        let root = env::temp_dir().join(format!("sbom-trace-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        for name in ["libm.so", "libexample.a", "Program Files (x86).lib"] {
+            let path = root.join(name);
+            fs::write(&path, b"resolved input").unwrap();
+            for line in [
+                path.display().to_string(),
+                format!("-lm ({})", path.display()),
+                format!("{}(member.o)", path.display()),
+            ] {
+                assert_eq!(traced_paths(&line), vec![path.clone()]);
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 }

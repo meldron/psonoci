@@ -136,6 +136,32 @@ def macho_runtime_fingerprint(data: bytes) -> str:
     return hashlib.sha512(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
+def elf_soname(data: bytes) -> str | None:
+    """Read DT_SONAME from a resolved shared library, including .so symlinks."""
+    if data[:4] != b'\x7fELF':
+        return None
+    if data[5] != 1 or data[4] not in (1, 2):
+        raise EvidenceError('unsupported ELF byte order or class')
+    wide = data[4] == 2
+    offset = struct.unpack_from('<Q' if wide else '<I', data, 40 if wide else 32)[0]
+    size, count = struct.unpack_from('<HH', data, 58 if wide else 46)
+    sections = []
+    for i in range(count):
+        start = offset + i * size
+        kind = struct.unpack_from('<I', data, start + 4)[0]
+        location, length = struct.unpack_from('<QQ' if wide else '<II', data, start + (24 if wide else 16))
+        link = struct.unpack_from('<I', data, start + (40 if wide else 24))[0]
+        sections.append((kind, location, length, link))
+    for kind, location, length, link in sections:
+        if kind == 6:
+            strings = sections[link][1]
+            for entry in range(location, location + length, 16 if wide else 8):
+                tag, value = struct.unpack_from('<QQ' if wide else '<II', data, entry)
+                if tag == 14:
+                    return cstring(data, strings + value)
+    return None
+
+
 def imports(data: bytes) -> list[dict]:
     """Read ELF DT_NEEDED, Mach-O load commands, and PE normal/delay imports."""
     result = []
@@ -250,7 +276,7 @@ def import_library_names(data: bytes) -> set[str]:
         member = data[offset + 60:offset + 60 + size]
         if member[:4] == b'\0\0\xff\xff' and len(member) >= 20:
             strings = member[20:].split(b'\0')
-            if len(strings) >= 2 and re.fullmatch(rb'[A-Za-z0-9_.-]+\.dll', strings[1], re.I):
+            if len(strings) >= 2 and re.fullmatch(rb'[A-Za-z0-9_.-]+\.(?:dll|drv)', strings[1], re.I):
                 names.add(strings[1].decode().lower())
         elif len(member) >= 20 and member[:2] in (b'\x64\x86', b'\x4c\x01'):
             count = struct.unpack_from('<H', member, 2)[0]
@@ -262,7 +288,7 @@ def import_library_names(data: bytes) -> set[str]:
                 if member[start:start + 8] == b'.idata$7':
                     length, location = struct.unpack_from('<II', member, start + 16)
                     value = member[location:location + length].rstrip(b'\0')
-                    if re.fullmatch(rb'[A-Za-z0-9_.-]+\.dll', value, re.I):
+                    if re.fullmatch(rb'[A-Za-z0-9_.-]+\.(?:dll|drv)', value, re.I):
                         names.add(value.decode().lower())
         offset += 60 + size + size % 2
     return names
@@ -458,17 +484,20 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
         elif re.fullmatch(r'lib(?:c|m|mvec|pthread|rt|dl|util|resolv)\.so(?:\.[\d.]+)?|ld-linux[^/]*\.so(?:\.[\d.]+)?|lib(?:c_nonshared|pthread_nonshared|pthread|dl|rt|m|util)\.a|(?:S?crt\d*|crti|crtn)\.o', name) and len(glibc_versions) == 1:
             component = identity('glibc', next(iter(glibc_versions)), 'https://www.gnu.org/software/libc/', 'LGPL-2.1-or-later')
             proof['method'] = 'resolved linker input and linked libc.so.6 release banner'
-            matches = [i['name'] for i in imported if Path(i['name']).name == name]
+            soname = elf_soname(file.read_bytes())
+            matches = [i['name'] for i in imported if Path(i['name']).name in (name, soname)]
             bundled = name.endswith(('.o', '.a'))
             component['purl'] += '?linkage=' + ('static' if bundled else 'dynamic')
             register(component, proof, 'bundled' if bundled else 'external', matches)
         elif sha in gcc_hashes and re.fullmatch(r'\d+(?:\.\d+){1,2}', gcc.get('version', '')):
             component = identity('GCC runtime', gcc['version'], 'https://gcc.gnu.org/', 'GPL-3.0-or-later WITH GCC-exception-3.1')
             proof['method'] = 'input hash matches GCC -print-file-name runtime; GCC -dumpfullversion'
-            matches = [i['name'] for i in imported if Path(i['name']).name == name or
-                       (name.startswith('libgcc_s.so') and i['name'].startswith('libgcc_s.so'))]
-            component['purl'] += '?linkage=' + ('dynamic' if matches else 'static')
-            register(component, proof, 'external' if matches else 'bundled', matches)
+            soname = elf_soname(file.read_bytes())
+            matches = [i['name'] for i in imported if Path(i['name']).name in (name, soname)]
+            bundled = name.endswith(('.o', '.a'))
+            component['versionContext'] = 'GCC distribution version; exact runtime inputs verified against compiler-owned files'
+            component['purl'] += '?linkage=' + ('static' if bundled else 'dynamic')
+            register(component, proof, 'bundled' if bundled else 'external', matches)
         else:
             unknown.append({'path': path, 'sha512': sha})
 
@@ -480,7 +509,7 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
             name = imported_item['name']
             if name in mapped:
                 continue
-            if not re.fullmatch(r'[a-z0-9_.-]+\.dll', name):
+            if not re.fullmatch(r'[a-z0-9_.-]+\.(?:dll|drv)', name):
                 raise EvidenceError('Windows runtime import is not a simple DLL name')
             environment = dict(os.environ, PSONOCI_DLL_NAME=name)
             script = r'''$n=$env:PSONOCI_DLL_NAME; $h=[IntPtr]::Zero
@@ -505,6 +534,19 @@ try { $s=New-Object System.Text.StringBuilder 32768; if ([NativeRuntime]::GetMod
         # selected relationship before removing the library from unresolved inputs.
         covered_hashes = {proof['sha512'] for component in components.values() for proof in component['evidence']}
         unknown = [item for item in unknown if item['sha512'] not in covered_hashes]
+
+        # SDK libraries can be searched without providing an executable import.
+        # Preserve their package provenance as interfaces, without inventing a
+        # runtime DLL version or adding an import absent from the executable.
+        for candidate in list(unknown):
+            package = re.search(r'/Windows Kits/10/lib/(\d+\.\d+\.\d+\.\d+)/', candidate['path'], re.I)
+            file = next(file for entry, file in copied if normalized_path(entry['path']) == candidate['path'])
+            if not package or not import_library_names(file.read_bytes()):
+                continue
+            component = identity('Microsoft Windows SDK import interfaces', package[1], 'https://developer.microsoft.com/windows/')
+            component['versionContext'] = 'installed SDK package version for searched import libraries; not a DLL version or deployment requirement'
+            register(component, dict(candidate, method='COFF import library resolved inside a versioned Windows SDK package'), 'external')
+            unknown.remove(candidate)
 
     # Preserve SDK interface identities for all stubs consumed by the linker,
     # including reexports that do not become direct executable load commands.

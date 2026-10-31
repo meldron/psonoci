@@ -89,6 +89,14 @@ def pe():
 
 
 class BinaryRuntimeTests(unittest.TestCase):
+    def test_shared_library_soname_is_distinct_from_linker_filename(self):
+        data = bytearray(elf(['libm.so.6']))
+        struct.pack_into('<Q', data, 256, 14)
+        self.assertEqual(runtime.elf_soname(bytes(data)), 'libm.so.6')
+        self.assertEqual(runtime.imports(bytes(data)), [])
+        self.assertIsNone(runtime.elf_soname(elf()))
+        self.assertIsNone(runtime.elf_soname(b'linker script'))
+
     def test_elf_needed_names_and_static_binary(self):
         self.assertEqual(runtime.imports(elf()), [])
         self.assertEqual(runtime.imports(elf(['libc.so.6', 'libgcc_s.so.1'])),
@@ -197,6 +205,37 @@ class EvidencePolicyTests(unittest.TestCase):
 
 
 class CaptureTests(unittest.TestCase):
+    def test_glibc_linker_alias_maps_to_actual_soname(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            library = bytearray(elf(['libm.so.6']))
+            struct.pack_into('<Q', library, 256, 14)
+            self.capture(root, elf(['libm.so.6']), 'armv7-unknown-linux-gnueabihf', '/lib/libm.so', library)
+            (root / 'libc').write_bytes(b'stable release version 2.23')
+            capture = json.loads((root / 'capture.json').read_text())
+            capture['inputs'].append({'path': '/lib/libc.so.6', 'copy': 'libc'})
+            (root / 'capture.json').write_text(json.dumps(capture))
+            result = runtime.collect(root / 'binary', 'armv7-unknown-linux-gnueabihf', root, root / 'providers.json')
+            glibc = next(c for c in result['components'] if c['name'] == 'glibc')
+            self.assertEqual(glibc['version'], '2.23')
+            self.assertEqual(glibc['imports'], ['libm.so.6'])
+            self.assertEqual(glibc['delivery'], 'external')
+
+    def test_unused_sdk_import_interface_keeps_package_identity_without_dll_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = b'Function\0WINSPOOL.DRV\0'
+            short = struct.pack('<HHHHIIHH', 0, 0xffff, 0, 0x8664, 0, len(payload), 0, 0)
+            self.capture(root, elf(), 'x86_64-pc-windows-msvc',
+                         'C:/Program Files (x86)/Windows Kits/10/lib/10.0.26100.0/um/x64/winspool.lib',
+                         ar('import.obj', short + payload))
+            with patch.object(runtime.sys, 'platform', 'win32'):
+                result = runtime.collect(root / 'binary', 'x86_64-pc-windows-msvc', root, root / 'providers.json')
+            sdk = next(c for c in result['components'] if c['name'] == 'Microsoft Windows SDK import interfaces')
+            self.assertEqual(sdk['version'], '10.0.26100.0')
+            self.assertEqual(sdk['imports'], [])
+            self.assertIn('not a DLL version', sdk['versionContext'])
+
     def capture(self, root, binary_data, target, native_name, native_data):
         (root / 'binary').write_bytes(binary_data)
         (root / 'std.rlib').write_bytes(b'exact standard library')
