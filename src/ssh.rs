@@ -4,10 +4,9 @@ use crate::opt::{SshAddCommand, SshCommand};
 use crate::secret_provider::{PsonoSecretProvider, SecretProvider};
 use crate::sensitive::SensitiveString;
 use anyhow::{Context, Result, bail};
-use russh_keys::PrivateKey;
-use russh_keys::agent::Constraint;
-use russh_keys::agent::client::{AgentClient, AgentStream};
-use russh_keys::*;
+use russh::keys::agent::Constraint;
+use russh::keys::agent::client::{AgentClient, AgentStream};
+use russh::keys::{PrivateKey, decode_secret_key};
 use std::env;
 use std::path::{Path, PathBuf};
 use tokio::runtime::Runtime;
@@ -188,6 +187,203 @@ mod tests {
     use crate::config::tests::debug_config_v1;
     use crate::secret_provider::MockSecretProvider;
     use lazy_static::lazy_static;
+    use russh::keys::PublicKeyBase64;
+
+    #[test]
+    fn get_constraints__all_combinations() {
+        assert_eq!(get_constraints(None, false), vec![]);
+        assert_eq!(
+            get_constraints(Some(60), false),
+            vec![Constraint::KeyLifetime { seconds: 60 }]
+        );
+        assert_eq!(get_constraints(None, true), vec![Constraint::Confirm]);
+        assert_eq!(
+            get_constraints(Some(60), true),
+            vec![Constraint::KeyLifetime { seconds: 60 }, Constraint::Confirm]
+        );
+    }
+
+    #[test]
+    fn ssh_add__forwards_socket_decrypted_key_and_constraints() {
+        let uuid = Uuid::new_v4();
+        let config = debug_config_v1();
+        let agent_path = PathBuf::from("test-agent.sock");
+        let expected_path = agent_path.clone();
+        let mut secret_provider = MockSecretProvider::new();
+        secret_provider
+            .expect_get_secret()
+            .once()
+            .with(eq(uuid), eq(config.clone()))
+            .returning(|_, _| {
+                Ok((
+                    mock_ssh_key_secret(Some(SSH_PRIVATE_KEY_ENCRYPTED.to_string()), None),
+                    SensitiveString::from(""),
+                ))
+            });
+
+        let mut agent = MockSshAgentProvider::new();
+        agent
+            .expect_add_identity()
+            .once()
+            .withf(move |path, key, constraints| {
+                path == expected_path
+                    && key.public_key_base64()
+                        == "AAAAC3NzaC1lZDI1NTE5AAAAIL1uUc21yfi4EnbJSdqbDo7lTg01DR3PijsrxqazSlkf"
+                    && constraints == [Constraint::KeyLifetime { seconds: 60 }, Constraint::Confirm]
+            })
+            .returning(|_, _, _| Ok(()));
+
+        ssh_add(
+            SshAddCommand {
+                secret_id: uuid,
+                ssh_auth_sock_path: Some(agent_path),
+                key_passphrase: Some("test".to_owned()),
+                key_lifetime: Some(60),
+                key_confirmation: true,
+            },
+            config,
+            Box::new(agent),
+            Box::new(secret_provider),
+        )
+        .unwrap();
+    }
+
+    // Opt-in because these tests require the OpenSSH executables. Each run
+    // creates its own agent and disposable keys; the user's agent is untouched.
+    #[cfg(unix)]
+    mod openssh {
+        use super::*;
+        use std::process::{Child, Command, Stdio};
+        use std::thread::sleep;
+        use std::time::{Duration, Instant};
+
+        struct Agent(Child);
+
+        impl Drop for Agent {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        #[test]
+        #[ignore = "requires ssh-agent, ssh-add and ssh-keygen; uses a disposable local agent"]
+        fn openssh_agent_roundtrip() {
+            let dir = tempfile::tempdir().unwrap();
+            let socket = dir.path().join("agent.sock");
+            let mut agent = Agent(
+                Command::new("ssh-agent")
+                    .arg("-D")
+                    .arg("-a")
+                    .arg(&socket)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("start ssh-agent"),
+            );
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !socket.exists() {
+                assert!(agent.0.try_wait().unwrap().is_none(), "ssh-agent exited");
+                assert!(Instant::now() < deadline, "ssh-agent startup timed out");
+                sleep(Duration::from_millis(20));
+            }
+
+            for (index, (algorithm, passphrase)) in [
+                ("ed25519", ""),
+                ("ed25519", "test-passphrase"),
+                ("rsa", ""),
+                ("ecdsa", ""),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let path = dir.path().join(format!("key-{index}"));
+                let generated = Command::new("ssh-keygen")
+                    .args(["-q", "-t", algorithm, "-N", passphrase, "-f"])
+                    .arg(&path)
+                    .output()
+                    .expect("run ssh-keygen");
+                assert!(generated.status.success(), "ssh-keygen: {generated:?}");
+
+                let key_text = std::fs::read_to_string(&path).unwrap();
+                let public_path = path.with_extension("pub");
+                let public_text = std::fs::read_to_string(&public_path).unwrap();
+                let public_blob = public_text.split_whitespace().nth(1).unwrap();
+                let uuid = Uuid::new_v4();
+                let config = debug_config_v1();
+                let mut provider = MockSecretProvider::new();
+                provider
+                    .expect_get_secret()
+                    .once()
+                    .with(eq(uuid), eq(config.clone()))
+                    .return_once(move |_, _| {
+                        Ok((
+                            mock_ssh_key_secret(Some(key_text), None),
+                            SensitiveString::from(""),
+                        ))
+                    });
+                ssh_add(
+                    SshAddCommand {
+                        secret_id: uuid,
+                        ssh_auth_sock_path: Some(socket.clone()),
+                        key_passphrase: (!passphrase.is_empty()).then(|| passphrase.to_owned()),
+                        key_lifetime: Some(60),
+                        key_confirmation: false,
+                    },
+                    config,
+                    Box::new(SshAgentClient),
+                    Box::new(provider),
+                )
+                .unwrap();
+
+                let identities = Command::new("ssh-add")
+                    .arg("-L")
+                    .env("SSH_AUTH_SOCK", &socket)
+                    .output()
+                    .expect("list agent identities");
+                assert!(identities.status.success(), "ssh-add: {identities:?}");
+                assert!(
+                    String::from_utf8(identities.stdout)
+                        .unwrap()
+                        .contains(public_blob)
+                );
+
+                // OpenSSH asks the agent to sign, then verifies the signature.
+                let signed = Command::new("ssh-add")
+                    .arg("-T")
+                    .arg(&public_path)
+                    .env("SSH_AUTH_SOCK", &socket)
+                    .output()
+                    .expect("test agent signing");
+                assert!(signed.status.success(), "ssh-add -T: {signed:?}");
+            }
+
+            // Replace one identity with a short-lived copy and check expiry.
+            let key_text = std::fs::read_to_string(dir.path().join("key-3")).unwrap();
+            let key = decode_secret_key(&key_text, None).unwrap();
+            let public_blob = key.public_key_base64();
+            SshAgentClient
+                .add_identity(&socket, &key, &get_constraints(Some(1), false))
+                .unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let identities = Command::new("ssh-add")
+                    .arg("-L")
+                    .env("SSH_AUTH_SOCK", &socket)
+                    .output()
+                    .unwrap();
+                assert!(identities.status.success(), "ssh-add: {identities:?}");
+                if !String::from_utf8(identities.stdout)
+                    .unwrap()
+                    .contains(&public_blob)
+                {
+                    break;
+                }
+                assert!(Instant::now() < deadline, "key lifetime was not enforced");
+                sleep(Duration::from_millis(100));
+            }
+        }
+    }
 
     lazy_static! {
         static ref SSH_PRIVATE_KEY: &'static str = r#"-----BEGIN OPENSSH PRIVATE KEY-----
