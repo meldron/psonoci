@@ -21,7 +21,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft); then
-            if [ "$draft" != "true" ]; then
+            # The rolling test release may replace previously published assets.
+            if [ "$RELEASE_TAG" != "release-test" ] && [ "$draft" != "true" ]; then
               echo "Refusing to replace assets of an already published release" >&2
               exit 1
             fi
@@ -259,7 +260,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]; then
+          if [ "$RELEASE_TAG" != "release-test" ] && \
+            [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]; then
             echo "Refusing to replace assets of an already published release" >&2
             exit 1
           fi
@@ -270,7 +272,7 @@ jobs:
             exit 1
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-          # Reject stale or unexpected files left in a draft by an earlier run.
+          # Reject stale or unexpected files left by an earlier run.
           gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' \
             > "$RUNNER_TEMP/remote-release-assets.txt"
           LC_ALL=C sort -o "$RUNNER_TEMP/remote-release-assets.txt" "$RUNNER_TEMP/remote-release-assets.txt"

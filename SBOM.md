@@ -38,12 +38,13 @@ The release pipeline builds and checks each SBOM as follows:
    Every expected target must have exactly one archive, one SBOM, and both
    signatures. Missing targets and unexpected files stop publication.
 
-GitHub releases stay in draft during the build and checks. The workflow
+New GitHub releases stay in draft during the build and checks. The workflow
 uploads the files to the release's Assets section and checks that the uploaded
 filenames match the validated set. It then publishes the release. Failed runs
-leave the draft for inspection. The workflow refuses to modify published
-releases. It publishes `release-test` and release-candidate tags as prereleases
-without marking them as the latest stable release.
+of a new release leave its draft for inspection. The workflow refuses to modify published
+releases except for the rolling `release-test` release, whose assets may be
+replaced by later runs. It publishes `release-test` and release-candidate tags
+as prereleases without marking them as the latest stable release.
 
 ## What is included
 
