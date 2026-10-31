@@ -260,6 +260,8 @@ pub struct EncryptedResponse {
     pub data_nonce: String,
     pub secret_key: String,
     pub secret_key_nonce: String,
+    #[serde(default)]
+    pub write_date: Option<DateTime<Utc>>,
 }
 
 impl EncryptedResponse {
@@ -377,8 +379,23 @@ pub fn make_request(
     let status = response.status();
 
     if !status.is_success() {
+        if status == reqwest::StatusCode::BAD_REQUEST
+            && response.json::<Value>().ok().is_some_and(|body| {
+                body.get("non_field_errors")
+                    .and_then(Value::as_array)
+                    .is_some_and(|errors| {
+                        errors
+                            .iter()
+                            .any(|error| error.as_str() == Some("WRITE_DATE_MISMATCH"))
+                    })
+            })
+        {
+            bail!(
+                "secret changed since it was read; reload it and reapply your change (WRITE_DATE_MISMATCH)"
+            );
+        }
         let reason = status.canonical_reason().unwrap_or("unknown").to_owned();
-        return Err(anyhow!("{}: {}", response.status(), reason));
+        return Err(anyhow!("{}: {}", status, reason));
     }
 
     let body_raw = response.bytes().context("read response body failed")?;
@@ -452,6 +469,8 @@ pub struct SetSecretRequestBody {
     pub secret_id: String,
     pub data: String,
     pub data_nonce: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_write_date: Option<DateTime<Utc>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -749,6 +768,8 @@ pub struct Secret {
     // Keep the original JSON so writes can preserve fields this client does not know.
     #[serde(skip)]
     raw_payload: Option<SensitiveString>,
+    #[serde(skip)]
+    write_date: Option<DateTime<Utc>>,
 }
 
 impl Secret {
@@ -772,6 +793,7 @@ impl Secret {
             credit_card: None,
             elster_certificate: None,
             raw_payload: None,
+            write_date: None,
         }
     }
 
@@ -1593,9 +1615,10 @@ pub fn get_secret(secret_id: &Uuid, config: &Config) -> Result<(Secret, Sensitiv
     )
     .context("get secret api call failed")?;
 
-    let (secret, secret_key_hex) = psono_response
+    let (mut secret, secret_key_hex) = psono_response
         .open::<Value, Secret>(&config.psono_settings.api_secret_key_hex)
         .context("get secret decryption failed")?;
+    secret.write_date = psono_response.write_date;
 
     Ok((secret, secret_key_hex))
 }
@@ -1630,6 +1653,7 @@ pub fn set_secret(
         secret_id: secret_id.hyphenated().to_string().to_lowercase(),
         data: secret_encrypted_hex,
         data_nonce: nonce_hex,
+        old_write_date: secret.write_date,
     };
 
     let request = Route {

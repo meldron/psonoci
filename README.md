@@ -85,6 +85,12 @@ Since version `0.6.0` psonoci` now uses `clap` for command-line parsing. The can
 
 Identity secrets are available through the same `secret get` interface as the other typed secrets. For example, `psonoci secret get <uuid> identity-email` returns the stored email address, while `psonoci secret get <uuid> json` includes the nested `identity` object in the JSON output.
 
+When the server returns a secret's `write_date`, updates send that timestamp
+back as `old_write_date`. If someone changed the secret in the meantime, the
+command stops with `WRITE_DATE_MISMATCH`. Read the secret again and reapply the
+change. The client does not retry stale writes. Older server responses without
+`write_date` retain the previous write behavior without a conflict check.
+
 ## Onboard
 
 Since version `0.6.0` `psonoci` provides an `onboard` command to create a config interactively from a Psono account without manually copying the API key id and secret key.
