@@ -89,6 +89,7 @@ def main():
     if args.cross and 'windows' in args.target:
         parser.error('Windows runtime evidence requires a native Windows build runner')
     auditable_version = installed_auditable_version(environment)
+    openssl_source = runtime_info.vendored_openssl_source(verify_checkout=True) if 'linux' in args.target else None
     for key, value in environment.items():
         prefix = args.target.replace('-', '_').upper()
         if key in ('OPENSSL_NO_VENDOR', prefix + '_OPENSSL_NO_VENDOR') and value != '0':
@@ -148,7 +149,8 @@ def main():
     tools.mkdir(parents=True, exist_ok=True)
     wrapper = tools / ('sbom-linker.exe' if os.name == 'nt' else 'sbom-linker')
     compile_env = environment | {'PSONOCI_SBOM_TARGET': args.target, 'PSONOCI_SBOM_LINKER': linker,
-                                 'PSONOCI_SBOM_IMAGE': image, 'PSONOCI_CARGO_AUDITABLE_VERSION': auditable_version}
+                                 'PSONOCI_SBOM_IMAGE': image, 'PSONOCI_CARGO_AUDITABLE_VERSION': auditable_version,
+                                 'PSONOCI_OPENSSL_SOURCE': json.dumps(openssl_source, sort_keys=True)}
     command = ['rustc', '--edition=2024', str(ROOT / 'scripts/sbom-linker.rs'), '-o', str(wrapper)]
     if args.cross:
         if platform.system() != 'Linux' or platform.machine() not in ('x86_64', 'AMD64'):

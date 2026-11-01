@@ -30,7 +30,7 @@ import runtime_evidence as runtime_info  # noqa: E402
 
 
 TOOL_NAME = "psonoci-sbom-adapter"
-TOOL_VERSION = "3.2.0"
+TOOL_VERSION = "3.3.0"
 CDX_SCHEMA = "https://cyclonedx.org/schema/bom-1.6.schema.json"
 BSI_TAXONOMY_VERSION = "0.1.2"
 BSI_TR_VERSION = "2.1.0"
@@ -489,6 +489,13 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     extra_components, native_edges = native_components(metadata, runtime, overrides)
     if any(c['name'] == 'OpenSSL' for c in extra_components) and evidence.get('buildPolicy', {}).get('opensslVendoredEnvironmentAllowed') is not True:
         raise SbomError('OpenSSL vendored attribution requires the captured build environment policy')
+    for component in extra_components:
+        if component['name'] == 'OpenSSL':
+            source = evidence.get('opensslSource')
+            if source != runtime_info.vendored_openssl_source() or component['version'] != source['version']:
+                raise SbomError('OpenSSL must match the reviewed source release and captured build provenance')
+            component['externalReferences'].append({'type': 'vcs', 'url': source['repository'] + '/tree/' + source['commit']})
+            component['properties'].append({'name': 'psonoci:runtime:source', 'value': json.dumps(source, sort_keys=True)})
     components.extend(extra_components)
     runtime_components = []
     for item in evidence["components"]:
@@ -737,6 +744,12 @@ def validate_document(bom: dict[str, Any]) -> None:
                 evidence = json.loads(evidence_values[0])
                 runtime_info.validate_evidence(evidence, component_sha512(executable, "executable"),
                                           property_values(executable, "psonoci:release:target")[0], evidence["imports"])
+                if source := evidence.get('opensslSource'):
+                    native = [c for c in components if c.get('name') == 'OpenSSL']
+                    if (len(native) != 1 or native[0]['version'] != source['version']
+                            or native[0].get('cpe') != runtime_info.native_cpe('OpenSSL', source['version'])
+                            or property_values(native[0], 'psonoci:runtime:source') != [json.dumps(source, sort_keys=True)]):
+                        raise runtime_info.EvidenceError('native OpenSSL identity differs from captured source provenance')
                 if evidence.get('rustStdRegistry'):
                     tool = evidence['rustStdRegistry']['tool']
                     if not any(t.get('name') == tool['name'] and t.get('version') == tool['version']

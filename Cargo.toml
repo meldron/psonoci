@@ -63,3 +63,11 @@ windows-sys = { version = "0.61.2", features = [
 [dev-dependencies]
 mockall = "0.13.0"
 insta = { version = "1.39", features = ["json"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+openssl = { version = "0.10.80", features = ["vendored"] }
+
+# Keep the supported OpenSSL 3.x bindings while consuming patched 3.5 LTS.
+# Upstream openssl-src 300.x is otherwise stuck at OpenSSL 3.6.3.
+[patch.crates-io]
+openssl-src = { path = "vendor/openssl-src" }

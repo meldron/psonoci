@@ -303,7 +303,7 @@ fn capture() -> Result<i32, Box<dyn std::error::Error>> {
     fs::write(
         directory.join("capture.json"),
         format!(
-            "{{\"format\":1,\"target\":{},\"linker\":{},\"builderImage\":{},\"rustc\":{},\"arguments\":[{}],\"inputs\":[{}],\"compiler\":{},\"output\":{},\"buildPolicy\":{{\"opensslVendoredEnvironmentAllowed\":true}},\"cargoAuditableVersion\":{}}}\n",
+            "{{\"format\":1,\"target\":{},\"linker\":{},\"builderImage\":{},\"rustc\":{},\"arguments\":[{}],\"inputs\":[{}],\"compiler\":{},\"output\":{},\"buildPolicy\":{{\"opensslVendoredEnvironmentAllowed\":true}},\"cargoAuditableVersion\":{},\"opensslSource\":{}}}\n",
             quote(target),
             quote(linker),
             quote(option_env!("PSONOCI_SBOM_IMAGE").unwrap_or("native")),
@@ -312,7 +312,8 @@ fn capture() -> Result<i32, Box<dyn std::error::Error>> {
             entries.join(","),
             compiler,
             quote(&output.to_string_lossy()),
-            quote(option_env!("PSONOCI_CARGO_AUDITABLE_VERSION").unwrap_or("unverified"))
+            quote(option_env!("PSONOCI_CARGO_AUDITABLE_VERSION").unwrap_or("unverified")),
+            option_env!("PSONOCI_OPENSSL_SOURCE").unwrap_or("null")
         ),
     )?;
     Ok(0)

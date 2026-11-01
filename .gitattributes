@@ -1,1 +1,3 @@
 /sbom/toolchain-sources/** text eol=lf
+/vendor/openssl-src/src/** text eol=lf
+/vendor/openssl-src/LICENSE-* text eol=lf

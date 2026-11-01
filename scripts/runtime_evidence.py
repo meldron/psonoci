@@ -70,6 +70,32 @@ def toolchain_sources(release: str, commit: str) -> tuple[dict, Path]:
     return record, root
 
 
+def vendored_openssl_source(*, verify_checkout=False):
+    root = Path(__file__).resolve().parents[1] / 'vendor/openssl-src'
+    record = json.loads((root / 'upstream.json').read_text())
+    source = record['openssl']
+    package = tomllib.loads((root / 'Cargo.toml').read_text())['package']
+    if record.get('format') != 1 or package['version'].split('+')[-1] != source['version']:
+        raise EvidenceError('vendored OpenSSL source and Cargo package version differ')
+    for name, expected in record['adapter']['files'].items():
+        if hashlib.sha256((root / name).read_bytes()).hexdigest() != expected:
+            raise EvidenceError('vendored OpenSSL build adapter differs from reviewed upstream source')
+    if verify_checkout:
+        checkout = root / 'openssl'
+        if not (checkout / 'VERSION.dat').is_file():
+            raise EvidenceError('initialize OpenSSL source: git submodule update --init --depth 1 vendor/openssl-src/openssl')
+        observed = dict(line.split('=', 1) for line in (checkout / 'VERSION.dat').read_text().splitlines()
+                        if '=' in line and not line.startswith('#'))
+        version = '.'.join(observed[key] for key in ('MAJOR', 'MINOR', 'PATCH'))
+        commit = subprocess.check_output(['git', '-C', str(checkout), 'rev-parse', 'HEAD'], text=True).strip()
+        dirty = subprocess.check_output(['git', '-C', str(checkout), 'status', '--porcelain',
+                                         '--untracked-files=all', '--ignore-submodules=all'], text=True)
+        if version != source['version'] or commit != source['commit'] or dirty:
+            raise EvidenceError('OpenSSL source checkout must match the clean, pinned official release')
+    return dict(source, adapterCommit=record['adapter']['commit'],
+                adapterFilesSha256=record['adapter']['files'])
+
+
 def toolchain_runtime(kind: str, release: str, commit: str) -> dict:
     record, root = toolchain_sources(release, commit)
     if kind == 'compiler-builtins':
@@ -770,6 +796,8 @@ try { $s=New-Object System.Text.StringBuilder 32768; if ([NativeRuntime]::GetMod
         document['buildPolicy'] = capture['buildPolicy']
     if 'cargoAuditableVersion' in capture:
         document['cargoAuditableVersion'] = capture['cargoAuditableVersion']
+    if capture.get('opensslSource') is not None:
+        document['opensslSource'] = capture['opensslSource']
     if post_link:
         document['postLink'] = post_link
     validate_evidence(document, binary_hash, target, imported)

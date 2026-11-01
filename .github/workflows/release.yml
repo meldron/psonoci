@@ -17,6 +17,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: true
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
@@ -27,6 +29,8 @@ jobs:
           echo "$RUNNER_TEMP/psonoci-grype" >> "$GITHUB_PATH"
       - run: python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
       - run: python3 scripts/test-sbom-linker.py
+      - name: Verify native OpenSSL version and HTTPS handshake
+        run: cargo test --locked --test native_tls
       - run: python3 scripts/test-sbom-scanner.py
 
   create-release:
@@ -115,6 +119,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: true
 
       - name: Load pinned SBOM tool versions
         id: sbom_tools

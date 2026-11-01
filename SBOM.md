@@ -216,6 +216,15 @@ An advisory match is a triage candidate, not proof of vulnerability reachability
 
 ## Dependencies
 
+Linux builds use a local Cargo override of `openssl-src` to consume the pinned
+official OpenSSL 3.5.9 LTS source with the existing OpenSSL 3.x Rust bindings.
+Initialize its direct source submodule with
+`git submodule update --init --depth 1 vendor/openssl-src/openssl` before building.
+The build helper checks the clean release commit, source version, and unchanged
+upstream build adapter. The native SBOM identity includes the captured source
+provenance and exact upstream Git commit. See
+`vendor/openssl-src/README.psonoci.md` for maintenance instructions.
+
 `sbom/tool-versions.env` pins the SBOM tool versions. Generation requires:
 
 - the repository's pinned Rust toolchain and Cargo;

@@ -195,3 +195,43 @@ class AdvisoryIdentityTests(unittest.TestCase):
         self.assertIsNone(runtime.native_cpe('GCC runtime', '9.2.0'))
         with self.assertRaises(runtime.EvidenceError):
             runtime.native_cpe('musl', '1.2.5:*')
+
+
+class OpenSSLSourceTests(unittest.TestCase):
+    def test_reviewed_adapter_and_native_version_match_the_local_override(self):
+        source = runtime.vendored_openssl_source()
+        self.assertEqual(source['version'], '3.5.9')
+        self.assertEqual(source['commit'], '45e844fa2a14ec92d146bd8f5778ac130b6625fb')
+
+    def test_changed_adapter_or_package_identity_is_rejected(self):
+        for part in ('adapter', 'version'):
+            with self.subTest(part=part), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                destination = root / 'vendor/openssl-src'
+                shutil.copytree(ROOT / 'vendor/openssl-src', destination,
+                                ignore=shutil.ignore_patterns('openssl'))
+                if part == 'adapter':
+                    with (destination / 'src/lib.rs').open('a') as handle:
+                        handle.write('// changed build adapter\n')
+                else:
+                    manifest = destination / 'Cargo.toml'
+                    manifest.write_text(manifest.read_text().replace('+3.5.9', '+3.6.3'))
+                with patch.object(runtime, '__file__', str(root / 'scripts/runtime_evidence.py')):
+                    with self.assertRaises(runtime.EvidenceError):
+                        runtime.vendored_openssl_source()
+
+    def test_missing_submodule_and_wrong_source_commit_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            destination = root / 'vendor/openssl-src'
+            shutil.copytree(ROOT / 'vendor/openssl-src', destination,
+                            ignore=shutil.ignore_patterns('openssl'))
+            with patch.object(runtime, '__file__', str(root / 'scripts/runtime_evidence.py')):
+                with self.assertRaisesRegex(runtime.EvidenceError, 'initialize OpenSSL source'):
+                    runtime.vendored_openssl_source(verify_checkout=True)
+                checkout = destination / 'openssl'
+                checkout.mkdir()
+                (checkout / 'VERSION.dat').write_text('MAJOR=3\nMINOR=5\nPATCH=9\n')
+                with patch.object(runtime.subprocess, 'check_output', side_effect=['a' * 40, '']):
+                    with self.assertRaisesRegex(runtime.EvidenceError, 'clean, pinned official release'):
+                        runtime.vendored_openssl_source(verify_checkout=True)
