@@ -293,6 +293,11 @@ Raw input copies and traces are retained in
 `target/<target>/release/runtime-capture/`. The collector writes
 `psonoci.runtime.json` beside the executable. Generation requires that same
 binary and evidence; `--runtime-evidence` can specify another evidence path.
+Cargo's `--timings` report records individual build units, including the
+`openssl-sys` build-script execution that compiles vendored OpenSSL. GitHub retains
+these HTML reports in its diagnostic artifacts. The Linux x86_64 release job also
+runs the final static executable against a disposable local HTTPS API, checking
+native TLS 1.2/1.3, Rustls, and rejection of untrusted certificates/wrong hostnames.
 GitLab transports this file with build artifacts. The public release asset set
 stays at four files per target, because the evidence is embedded in the SBOM.
 The temporary host recorder lives in the ignored `.sbom-tools/` directory so

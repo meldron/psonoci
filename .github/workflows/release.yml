@@ -30,7 +30,15 @@ jobs:
       - run: python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
       - run: python3 scripts/test-sbom-linker.py
       - name: Verify native OpenSSL version and HTTPS handshake
-        run: cargo test --locked --test native_tls
+        run: cargo test --locked --test native_tls --timings
+      - name: Upload native TLS build timings
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: native-tls-build-timings
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 7
       - run: python3 scripts/test-sbom-scanner.py
 
   create-release:
@@ -178,6 +186,10 @@ jobs:
             python3 scripts/build-with-runtime-evidence.py --target "${{ matrix.target }}"
           fi
 
+      - name: Verify final static binary HTTPS and certificate validation
+        if: matrix.build == 'linux'
+        run: python3 scripts/test-release-binary-tls.py target/${{ matrix.target }}/release/psonoci --output target/${{ matrix.target }}/release/runtime-capture/binary-tls-validation.json
+
       - name: Check GitLab Windows bootstrap syntax
         if: matrix.target_type == 'windows'
         shell: pwsh
@@ -194,6 +206,8 @@ jobs:
         with:
           name: runtime-evidence-${{ matrix.target }}
           path: |
+            target/cargo-timings/*.html
+            target/${{ matrix.target }}/release/runtime-capture/binary-tls-validation.json
             target/${{ matrix.target }}/release/psonoci.runtime.json
             target/${{ matrix.target }}/release/runtime-capture/capture.json
             target/${{ matrix.target }}/release/runtime-capture/unresolved-inputs.json

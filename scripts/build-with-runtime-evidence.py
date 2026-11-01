@@ -173,7 +173,7 @@ def main():
     # Cross mounts the workspace under its container path, which can differ
     # from the runner's absolute checkout path. Cargo runs the root crate here.
     linker_path = wrapper.relative_to(ROOT).as_posix() if args.cross else str(wrapper)
-    run([*builder, 'rustc', '--locked', '--release', '--bin', 'psonoci', '--target', args.target, '--target-dir', str(ROOT / 'target'),
+    run([*builder, 'rustc', '--locked', '--release', '--timings', '--bin', 'psonoci', '--target', args.target, '--target-dir', str(ROOT / 'target'),
          '--', '-C', f'linker={linker_path}'], env=environment)
     binary = release / ('psonoci.exe' if 'windows' in args.target else 'psonoci')
     run([os.fspath(Path(os.sys.executable)), str(ROOT / 'scripts/runtime_evidence.py'),

@@ -188,6 +188,10 @@ jobs:
             cyclonedx/cyclonedx-cli:0.33.1@sha256:252c2e26f468c25fea1e63ecde1bc3198ad6e9dbb57f5ed3236bddcb2281b3a7 \
             validate --input-file /work/psonoci-ci.cdx.json --input-version v1_6 --fail-on-errors
 
+      - name: Verify final static binary HTTPS and certificate validation
+        if: matrix.build == 'linux'
+        run: python3 scripts/test-release-binary-tls.py target/${{ matrix.target }}/release/psonoci
+
       - name: upload unix artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: matrix.target_type == 'unix'
