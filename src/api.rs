@@ -895,11 +895,13 @@ impl Secret {
                 .map(|payload| payload.json.expose_secret().to_owned())
                 .context("unsupported secret has no raw payload");
         }
-        let current = serde_json::to_value(self.as_generic_secret())?;
+        let mut current = serde_json::to_value(self.as_generic_secret())?;
         let Some(raw) = &self.raw_payload else {
+            self.update_password_timestamp(current.as_object_mut().unwrap(), None);
             return Ok(serde_json::to_string(&current)?);
         };
         let mut original: Value = serde_json::from_str(raw.json.expose_secret())?;
+        let previous = original.clone();
         let generic: GenericSecret = serde_json::from_value(original.clone())?;
         let baseline = <Self as DataTransform<GenericSecret, Self>>::transform(generic)?;
         let baseline = serde_json::to_value(baseline.as_generic_secret())?;
@@ -919,7 +921,54 @@ impl Secret {
                 object.insert(key.clone(), value);
             }
         }
+        self.update_password_timestamp(object, previous.as_object());
         Ok(serde_json::to_string(&original)?)
+    }
+
+    fn update_password_timestamp(
+        &self,
+        content: &mut serde_json::Map<String, Value>,
+        previous: Option<&serde_json::Map<String, Value>>,
+    ) {
+        let field = match self.secret_type {
+            SecretType::Website => "website_password_password",
+            SecretType::Application => "application_password_password",
+            SecretType::ElsterCertificate => "elster_certificate_password",
+            _ => return,
+        };
+        let password = |object: &serde_json::Map<String, Value>| {
+            object
+                .get(field)
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned()
+        };
+        if content.get(field).is_none_or(Value::is_null)
+            && !previous.is_some_and(|object| object.contains_key(field))
+        {
+            return;
+        }
+        let timestamp = if previous.is_none_or(|object| password(content) != password(object)) {
+            Some(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        } else {
+            previous
+                .and_then(|object| object.get("password_modification_datetime"))
+                .and_then(Value::as_str)
+                .filter(|value| DateTime::parse_from_rfc3339(value).is_ok())
+                .map(str::to_owned)
+                .or_else(|| {
+                    self.write_date
+                        .map(|date| date.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true))
+                })
+        };
+        if let Some(timestamp) = timestamp {
+            content.insert(
+                "password_modification_datetime".into(),
+                Value::String(timestamp),
+            );
+        } else {
+            content.remove("password_modification_datetime");
+        }
     }
 
     pub fn as_generic_secret(&self) -> GenericSecret {
@@ -2302,7 +2351,7 @@ mod tests {
         );
     }
     #[test]
-    fn set_value_preserves_complete_raw_payload_except_requested_field() {
+    fn password_update_preserves_payload_and_refreshes_password_timestamp() {
         let original = json!({
             "website_password_title": "Production",
             "website_password_password": "before",
@@ -2338,7 +2387,107 @@ mod tests {
         )
         .expect("serialized payload should be valid JSON");
 
+        let timestamp = updated["password_modification_datetime"].as_str().unwrap();
+        let date = DateTime::parse_from_rfc3339(timestamp).unwrap();
+        assert!((Utc::now() - date.with_timezone(&Utc)).num_seconds().abs() < 5);
+        expected["password_modification_datetime"] = json!(timestamp);
         assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn password_timestamps_follow_psono_edit_semantics() {
+        let old = "2025-01-01T09:00:00.123456Z";
+        let write_date = "2026-10-12T00:00:00Z";
+        for field in [
+            "website_password_password",
+            "application_password_password",
+            "elster_certificate_password",
+        ] {
+            for (timestamp, revision, expected) in [
+                (Some(json!(old)), Some(write_date), Some(old)),
+                (None, Some(write_date), Some(write_date)),
+                (Some(json!("invalid")), Some(write_date), Some(write_date)),
+                (Some(json!(42)), Some(write_date), Some(write_date)),
+                (None, None, None),
+                (Some(json!("invalid")), None, None),
+            ] {
+                let mut original = json!({field: "before", "future": {"keep": true}});
+                if let Some(timestamp) = timestamp {
+                    original["password_modification_datetime"] = timestamp;
+                }
+                let mut secret = Secret::transform(original.clone()).unwrap();
+                secret.write_date = revision.map(|date| date.parse().unwrap());
+                secret
+                    .set_value(&SecretValueType::notes, "new notes".into())
+                    .unwrap();
+                let unchanged: Value =
+                    serde_json::from_str(&secret.serialize_payload().unwrap()).unwrap();
+                let actual = unchanged
+                    .get("password_modification_datetime")
+                    .and_then(Value::as_str);
+                assert_eq!(
+                    actual.map(|date| DateTime::parse_from_rfc3339(date).unwrap()),
+                    expected.map(|date| DateTime::parse_from_rfc3339(date).unwrap())
+                );
+                assert_eq!(unchanged[field], "before");
+                assert_eq!(unchanged["future"], original["future"]);
+
+                let value_type = if field == "elster_certificate_password" {
+                    SecretValueType::elster_certificate_password
+                } else {
+                    SecretValueType::password
+                };
+                for password in ["after", ""] {
+                    secret.set_value(&value_type, password.into()).unwrap();
+                    let changed: Value =
+                        serde_json::from_str(&secret.serialize_payload().unwrap()).unwrap();
+                    let date = DateTime::parse_from_rfc3339(
+                        changed["password_modification_datetime"].as_str().unwrap(),
+                    )
+                    .unwrap();
+                    assert!((Utc::now() - date.with_timezone(&Utc)).num_seconds().abs() < 5);
+                    assert_eq!(changed[field], password);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fallback_password_timestamp_uses_utc_z_and_keeps_server_precision() {
+        let mut secret = Secret::transform(json!({"website_password_password": "before"})).unwrap();
+        secret.write_date = Some("2026-10-12T00:00:00.123456+00:00".parse().unwrap());
+        secret
+            .set_value(&SecretValueType::notes, "new notes".into())
+            .unwrap();
+        let payload: Value = serde_json::from_str(&secret.serialize_payload().unwrap()).unwrap();
+        assert_eq!(
+            payload["password_modification_datetime"],
+            "2026-10-12T00:00:00.123456Z"
+        );
+    }
+
+    #[test]
+    fn password_timestamp_does_not_affect_unrelated_secrets_or_empty_passwords() {
+        for original in [
+            json!({"note_title": "Test"}),
+            json!({"website_password_password": ""}),
+            json!({"website_password_password": null, "website_password_title": "Test"}),
+        ] {
+            let secret = Secret::transform(original.clone()).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+                original
+            );
+        }
+        let mut secret = Secret::transform(json!({"application_password_title": "Test"})).unwrap();
+        secret.password = Some("new".into());
+        let changed: Value = serde_json::from_str(&secret.serialize_payload().unwrap()).unwrap();
+        assert!(
+            DateTime::parse_from_rfc3339(
+                changed["password_modification_datetime"].as_str().unwrap()
+            )
+            .is_ok()
+        );
     }
 
     #[test]

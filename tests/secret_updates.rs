@@ -66,6 +66,18 @@ fn encrypted_read_edit_write_preserves_payload_and_sends_timestamp() {
         let actual: Value = serde_json::from_slice(&plaintext).unwrap();
         let mut expected = original_payload();
         expected["website_password_password"] = json!("after");
+        let date = chrono::DateTime::parse_from_rfc3339(
+            actual["password_modification_datetime"].as_str().unwrap(),
+        )
+        .unwrap();
+        assert!(
+            (chrono::Utc::now() - date.with_timezone(&chrono::Utc))
+                .num_seconds()
+                .abs()
+                < 5
+        );
+        expected["password_modification_datetime"] =
+            actual["password_modification_datetime"].clone();
         assert_eq!(actual, expected);
     }
 }

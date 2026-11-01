@@ -91,6 +91,11 @@ command stops with `WRITE_DATE_MISMATCH`. Read the secret again and reapply the
 change. The client does not retry stale writes. Older server responses without
 `write_date` retain the previous write behavior without a conflict check.
 
+Changing a website, application or Elster certificate password also updates
+Psono's `password_modification_datetime`. Other edits preserve the password's
+timestamp. If an older entry has no valid password timestamp, the previous server
+`write_date` is used when available, so a notes edit does not reset its age.
+
 Secret types that this version does not recognize remain available as raw
 JSON. `secret get <uuid> json` returns their original payload, and `api-key
 secrets` includes them with `secret_type: "Unknown"` and a `raw` object. Typed
@@ -393,6 +398,18 @@ cross build --target aarch64-unknown-linux-musl --release
 ```
 
 `Cross.toml` defines which docker images are used to compile the binary. The images itself are build with the `Dockerfile`s located in `./build_files`.
+
+### Psono compatibility tests
+
+The end-to-end checks use a local `psono-server` checkout with its Python
+dependencies installed, Docker and a cached `postgres:17` image. They run the
+built CLI against Psono's HTTP API with a disposable database and test accounts.
+
+```sh
+cargo build --locked
+/path/to/psono-server/.venv/bin/python -B scripts/test-psono-compatibility.py \
+    --server-source /path/to/psono-server --binary target/debug/psonoci
+```
 
 ## Supported Architectures
 
