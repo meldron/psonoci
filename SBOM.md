@@ -473,8 +473,9 @@ Before running a validation tag, edit the existing `GOOGLE_APPLICATION_CREDENTIA
 variable in GitLab **Settings > CI/CD > Variables**. Change its environment scope
 from `*` to `release-production`, preserving its value and protected status.
 The two production upload jobs declare that environment; validation jobs do not.
-A preflight job blocks validation if it receives the upload credential or lacks
-the existing signing configuration. Authentication and upload scripts also refuse
+A preflight job blocks validation if it receives the upload credential, lacks
+the existing signing configuration, or cannot sign and verify a disposable message
+with the repository's release key. Authentication and upload scripts also refuse
 test tags before doing any external work.
 
 Coordinate the setting change with the updated pipeline configuration: old

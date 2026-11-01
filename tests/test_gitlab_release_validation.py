@@ -94,6 +94,35 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertNotEqual(self.run_script(
             'var/check_release_validation.sh', **environment).returncode, 0)
 
+    @unittest.skipUnless(shutil.which('gpg') and shutil.which('gpgconf'), 'requires GnuPG')
+    def test_signing_preflight_verifies_the_key_and_rejects_wrong_passphrases(self):
+        keyring = self.root / 'fixture-keyring'
+        keyring.mkdir(mode=0o700)
+        environment = self.environment | {'GNUPGHOME': str(keyring)}
+        command = ['gpg', '--batch', '--pinentry-mode', 'loopback', '--passphrase', 'fixture-passphrase']
+        subprocess.run([*command, '--quick-generate-key', 'Validation fixture <fixture@example.invalid>',
+                        'ed25519', 'sign', '0'], env=environment, check=True, capture_output=True)
+        self.addCleanup(subprocess.run, ['gpgconf', '--homedir', str(keyring), '--kill', 'gpg-agent'],
+                        capture_output=True)
+        private_key = self.root / 'fixture-private-key'
+        private_key.write_bytes(subprocess.check_output([*command, '--armor', '--export-secret-keys'],
+                                                       env=environment, stderr=subprocess.DEVNULL))
+        public = self.root / 'gpg/psonoci@dfjk.eu'
+        public.parent.mkdir()
+        public.write_bytes(subprocess.check_output(['gpg', '--batch', '--armor', '--export'],
+                                                  env=environment, stderr=subprocess.DEVNULL))
+        scripts = self.root / 'var'
+        scripts.mkdir()
+        for name in ('release-mode.sh', 'check_release_validation.sh', 'check_release_signing.sh'):
+            shutil.copyfile(ROOT / 'var' / name, scripts / name)
+        signing = self.signing_environment() | {'GPG_PRIVATE_KEY': str(private_key)}
+        for passphrase, success in (('fixture-passphrase', True), ('wrong-fixture-passphrase', False)):
+            result = self.run_script(scripts / 'check_release_signing.sh',
+                                     **(signing | {'GPG_PRIVATE_KEY_PASSPHRASE': passphrase}))
+            self.assertEqual(result.returncode == 0, success, result.stderr)
+            if success:
+                self.assertIn('Signing preflight passed', result.stdout)
+
     def test_validation_sboms_do_not_claim_download_server_urls(self):
         # Run the real packaging loop with inert substitutes for signing and
         # archiving; inspect the arguments passed to the real SBOM entry point.

@@ -23,6 +23,9 @@ check-release-validation-isolation:
   stage: validation-preflight
   script:
     - bash var/check_release_validation.sh
+    - apt-get update
+    - apt-get install -y gnupg
+    - bash var/check_release_signing.sh
   rules:
     - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'
 
@@ -441,7 +444,7 @@ validate-release-runtime:
   stage: sbom-validate
   script:
     - apt-get update
-    - apt-get install -y python3 openssl
+    - apt-get install -y python3 openssl gnupg
     - python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
     - python3 -m unittest discover -s tests -p 'test_gitlab*.py' -v
     - mkdir -p validation-reports
