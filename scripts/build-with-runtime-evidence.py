@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
 import re
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import runtime_evidence as runtime_info
@@ -33,6 +35,25 @@ def installed_auditable_version(environment):
     if versions != [expected]:
         raise RuntimeError(f'Install cargo-auditable {expected}; installed Cargo package record is {versions}')
     return versions[0]
+
+
+def prepare_remote_cross_image(target, base_image, environment):
+    # Cross 0.2.5's remote backend does not run custom_image_build. Execute the
+    # same reviewed pre-build commands explicitly, before handing it an image.
+    config = tomllib.loads((ROOT / 'Cross.toml').read_text())
+    commands = config['target'][target].get('pre-build')
+    if not isinstance(commands, list) or not commands or not all(isinstance(c, str) for c in commands):
+        raise RuntimeError('remote evidence builds require the target pre-build command list')
+    script = '\n'.join(commands)
+    key = hashlib.sha256((base_image + '\n' + target + '\n' + script).encode()).hexdigest()
+    image = 'psonoci-sbom-remote:' + key
+    directory = ROOT / '.sbom-tools' / target
+    directory.mkdir(parents=True, exist_ok=True)
+    dockerfile = directory / 'Dockerfile.remote'
+    dockerfile.write_text(f'FROM {base_image}\nARG CROSS_CMD\nRUN eval "$CROSS_CMD"\n')
+    run(['docker', 'build', '--file', str(dockerfile), '--tag', image,
+         '--build-arg', 'CROSS_CMD=' + script, str(ROOT)], env=environment)
+    return image
 
 
 def enrich_rust_runtime(target, evidence, environment):
@@ -115,6 +136,10 @@ def main():
             run(['docker', 'pull', args.image])
         inspected = json.loads(subprocess.check_output(['docker', 'image', 'inspect', args.image], text=True))[0]
         image = next(iter(inspected.get('RepoDigests', [])), inspected['Id'])
+        if environment.get('CROSS_REMOTE', '').lower() not in ('', '0', 'false'):
+            args.image = prepare_remote_cross_image(args.target, image, environment)
+            inspected = json.loads(subprocess.check_output(['docker', 'image', 'inspect', args.image], text=True))[0]
+            image = inspected['Id']
         cross_image = image
         if not inspected.get('RepoDigests'):
             # BuildKit resolves FROM by repository/tag, not a bare daemon image
