@@ -205,7 +205,7 @@ collect-artifacts:
     - apt-get update
     - apt-get install -y curl ca-certificates
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
-    - sh /tmp/rustup-init.sh -s -- -y --profile minimal --default-toolchain "${RUST_TOOLCHAIN}"
+    - sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain "${RUST_TOOLCHAIN}"
     - . /root/.cargo/env
     - curl -fL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz" -o /tmp/syft.tar.gz
     - echo "bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788  /tmp/syft.tar.gz" | sha256sum -c -
