@@ -368,7 +368,16 @@ PSONO_CI_CONFIG_PACKED="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ys
 
 ### Rust native
 
-If you have rust installed just run `cargo build --release`.
+With Rust installed, initialize the pinned OpenSSL source and build:
+
+```sh
+git submodule update --init --depth 1 vendor/openssl-src/openssl
+cargo build --release
+```
+
+Linux uses a vendored OpenSSL 3.5 LTS release. See
+[the source override notes](vendor/openssl-src/README.psonoci.md) for its pins and
+[SBOM.md](SBOM.md) for builds with release evidence.
 
 The current version is tested with Rust `1.94.1`.
 
@@ -376,9 +385,10 @@ The current version is tested with Rust `1.94.1`.
 
 [cross](https://github.com/rust-embedded/cross) (which uses `docker`) is used to cross compile `psonoci` to several architectures.
 
-After you installed `cross` just run:
+After installing `cross`, initialize the same source submodule and run:
 
 ```sh
+git submodule update --init --depth 1 vendor/openssl-src/openssl
 cross build --target aarch64-unknown-linux-musl --release
 ```
 

@@ -26,7 +26,8 @@ wrong source commit or dirty source checkout. CI checks out the direct submodule
 OpenSSL's optional test submodules are unnecessary.
 
 For updates, select a maintained upstream 3.5 LTS release, update the gitlink and
-`upstream.json`, and update this package's native-version build metadata. Verify
+`upstream.json`, and update this package's native-version build metadata and the
+runtime-version expectation in `tests/native_tls.rs`. Verify
 the official release signature, build every release target, test native TLS,
 regenerate and verify the SBOMs, and re-scan the native identity. Remove this
 override when compatible upstream source packages receive maintained updates.
