@@ -29,7 +29,7 @@ import runtime_evidence as runtime_info  # noqa: E402
 
 
 TOOL_NAME = "psonoci-sbom-adapter"
-TOOL_VERSION = "3.0.0"
+TOOL_VERSION = "3.1.0"
 CDX_SCHEMA = "https://cyclonedx.org/schema/bom-1.6.schema.json"
 BSI_TAXONOMY_VERSION = "0.1.2"
 BSI_TR_VERSION = "2.1.0"
@@ -357,6 +357,28 @@ def runtime_licenses(item: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"expression": item['license']}]
 
 
+def merge_runtime_components(components, runtime_components):
+    """One package identity can occur in both the application and Rust sysroot."""
+    by_purl = {item['purl']: item for item in components if item.get('purl')}
+    aliases = {}
+    for runtime_component in runtime_components:
+        ref = runtime_component['bom-ref']
+        existing = by_purl.get(runtime_component['purl'])
+        if existing is None:
+            components.append(runtime_component)
+            by_purl[runtime_component['purl']] = runtime_component
+            continue
+        for field in ('name', 'version', 'purl', 'licenses'):
+            if existing.get(field) != runtime_component.get(field):
+                raise SbomError(f'{ref}: application and sysroot package metadata disagree on {field}')
+        for field in ('properties', 'externalReferences'):
+            existing.setdefault(field, []).extend(item for item in runtime_component.get(field, [])
+                                                   if item not in existing[field])
+        aliases[existing['bom-ref']] = ref
+        existing['bom-ref'] = ref
+    return aliases
+
+
 def _generate(args: argparse.Namespace) -> dict[str, Any]:
     paths = [args.manifest_path, args.binary, args.artifact, args.syft_input, args.overrides]
     if missing := [str(path) for path in paths if not path.is_file()]:
@@ -461,7 +483,7 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
         if item["delivery"] == "bundled":
             component["properties"] += bsi_properties(executable=False, archive=False, structured=False, license_id=item["license"])
         runtime_components.append(component)
-    components.extend(runtime_components)
+    runtime_ref_aliases = merge_runtime_components(components, runtime_components)
 
     root_license = normalize_license(root.get("license"))
     root_authors = [author(item) for item in root.get("authors", []) if item.strip()]
@@ -501,7 +523,7 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
 
     ref_map = {
         scanned[key]["bom-ref"]: (
-            binary_ref if key == root_key else scanned[key]["bom-ref"]
+            binary_ref if key == root_key else runtime_ref_aliases.get(scanned[key]["bom-ref"], scanned[key]["bom-ref"])
         )
         for key in runtime
     }
@@ -513,9 +535,11 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     for trigger, native_ref in native_edges:
         dependencies[component_ref_by_key[trigger]].add(native_ref)
         dependencies[native_ref] = set()
-    for component in runtime_components:
-        dependencies[binary_ref].add(component["bom-ref"])
-        dependencies[component["bom-ref"]] = set()
+    for item in evidence['components']:
+        ref = item['purl']
+        parent = item.get('parentPurl', binary_ref)
+        dependencies.setdefault(parent, set()).add(ref)
+        dependencies.setdefault(ref, set()).update(item.get('dependsOn', []))
 
     now = (
         dt.datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), dt.timezone.utc)
@@ -562,6 +586,9 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
             "dependencies": sorted(item["bom-ref"] for item in components if item["bom-ref"] != binary_ref),
         }],
     }
+    if evidence.get('rustStdRegistry'):
+        tool = evidence['rustStdRegistry']['tool']
+        bom['metadata']['tools']['components'].append({'type': 'application', **tool})
     validate_document(bom)
     return bom
 
@@ -675,6 +702,11 @@ def validate_document(bom: dict[str, Any]) -> None:
                 evidence = json.loads(evidence_values[0])
                 runtime_info.validate_evidence(evidence, component_sha512(executable, "executable"),
                                           property_values(executable, "psonoci:release:target")[0], evidence["imports"])
+                if evidence.get('rustStdRegistry'):
+                    tool = evidence['rustStdRegistry']['tool']
+                    if not any(t.get('name') == tool['name'] and t.get('version') == tool['version']
+                               for t in metadata.get('tools', {}).get('components', [])):
+                        raise runtime_info.EvidenceError('SBOM does not identify its Rust runtime enricher')
                 runtime_by_ref = {c["bom-ref"]: c for c in components if property_values(c, "psonoci:runtime:delivery")}
                 if set(runtime_by_ref) != {c["purl"] for c in evidence["components"]}:
                     raise runtime_info.EvidenceError("runtime components do not match the evidence inventory")
@@ -693,8 +725,10 @@ def validate_document(bom: dict[str, Any]) -> None:
                         raise runtime_info.EvidenceError("runtime component imports differ from its evidence")
                     if item.get("license") and recorded.get("licenses") != runtime_licenses(item):
                         raise runtime_info.EvidenceError("runtime licensing differs from its evidence")
-                    if item["purl"] not in graph.get(executable["bom-ref"], []):
+                    if item["purl"] not in graph.get(item.get('parentPurl', executable["bom-ref"]), []):
                         raise runtime_info.EvidenceError("runtime component is disconnected from the executable")
+                    if set(item.get('dependsOn', [])) - set(graph.get(item['purl'], [])):
+                        raise runtime_info.EvidenceError('runtime package dependency edges differ from evidence')
             except (runtime_info.EvidenceError, ValueError, KeyError, IndexError, TypeError) as error:
                 errors.append(f"runtime evidence validation failed: {error}")
     if not primary or property_values(primary, "bsi:component:archive") != ["archive"]:

@@ -116,6 +116,69 @@ These checks do not constitute a full BSI conformity assessment. Source-level
 attribution within toolchain distributions and the interpretation of external
 platform version identifiers require review against the intended SBOM profile.
 
+## Rust runtime registry packages for musl
+
+The shared build helper automatically expands registry crates supplied by Rust's
+standard-library distribution into normal Cargo package identities for all
+three release musl targets:
+
+- `x86_64-unknown-linux-musl`;
+- `aarch64-unknown-linux-musl`; and
+- `armv7-unknown-linux-musleabihf`.
+
+This runs in local builds and CI workflows that use
+`scripts/build-with-runtime-evidence.py`. The helper installs the corresponding
+host-side Rust target distribution and checks that its archives exactly match
+the inputs captured inside Cross. Rust release and source commit must agree.
+The resulting `psonoci.runtime.json` already contains the enrichment; the
+normal SBOM generation command consumes it without additional flags.
+
+Preparation downloads Rust's `library/Cargo.lock` at the captured source commit
+and verifies each selected registry archive against its locked SHA-256. Package
+versions, licenses, and repository URLs come from those verified manifests.
+Catalogs are cached under `.sbom-tools/rust-runtime/<target>/`. The subsequent
+enrichment is offline. Ambiguous package versions, changed registry archives,
+and mismatching toolchain inputs stop the build.
+
+For a manual comparison using an existing capture, regenerate an unenriched
+sidecar first, then prepare and enrich it. For example:
+
+```sh
+python3 scripts/runtime_evidence.py \
+  --target x86_64-unknown-linux-musl \
+  --binary target/x86_64-unknown-linux-musl/release/psonoci \
+  --capture target/x86_64-unknown-linux-musl/release/runtime-capture \
+  --output .sbom-tools/psonoci-unenriched.runtime.json
+
+python3 scripts/enrich-rust-runtime.py prepare \
+  --evidence .sbom-tools/psonoci-unenriched.runtime.json \
+  --catalog .sbom-tools/rust-runtime/x86_64-unknown-linux-musl
+
+python3 scripts/enrich-rust-runtime.py enrich \
+  --evidence .sbom-tools/psonoci-unenriched.runtime.json \
+  --catalog .sbom-tools/rust-runtime/x86_64-unknown-linux-musl \
+  --sysroot "$(rustc --print sysroot)" \
+  --output .sbom-tools/psonoci-enriched.runtime.json
+```
+
+Pass the selected sidecar with `--runtime-evidence` to the SBOM generator. Use
+the same binary, archive, and Syft output for both documents. The adapter merges
+shared application/sysroot package identities and retains their dependency
+relationships and both sets of attribution evidence. The SBOM records the
+runtime enricher's version and the verified source-lock and package checksums.
+
+The scope is registry packages observed in supplied sysroot linker archives.
+Internal Rust crates, compiler builtins, and native unwind code retain their
+distribution identities. Archive input evidence does not establish retention of
+every function or exploitability of a package advisory. Completeness remains
+`incomplete`.
+
+Scanner results also depend on identifier support. Grype recognizes the Cargo
+PURLs; generic native package PURLs alone may lack a supported matching identity.
+Its debug log discloses skipped CPE searches. Explicit, reviewed native CPEs or
+separately assessed CPE inference should be evaluated before interpreting zero
+matches as coverage of native components.
+
 ## Dependencies
 
 `sbom/tool-versions.env` pins the SBOM tool versions. Generation requires:

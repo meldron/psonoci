@@ -373,6 +373,37 @@ def validate_evidence(document: dict, binary_hash: str, target: str, required_im
         raise EvidenceError('runtime evidence omits the linked Rust standard library')
     if 'musl' in target and not any(c['name'] == 'musl' and c['delivery'] == 'bundled' for c in components):
         raise EvidenceError('runtime evidence omits the linked musl libc')
+    registry_components = [c for c in components if c.get('origin') == 'rust-std-registry']
+    if registry_components:
+        provenance = document.get('rustStdRegistry', {})
+        commit = rust_commit[0].split(': ', 1)[1]
+        if (provenance.get('format') != 1 or provenance.get('rustCommit') != commit
+                or provenance.get('rustRelease') != rust_release[1]
+                or not re.fullmatch(r'[0-9a-f]{64}', provenance.get('lockSha256', ''))
+                or provenance.get('lockUrl') != f'https://raw.githubusercontent.com/rust-lang/rust/{commit}/library/Cargo.lock'
+                or provenance.get('tool') != {'name': 'psonoci-rust-runtime-enricher', 'version': '1.0.0'}):
+            raise EvidenceError('Rust runtime registry provenance differs from captured toolchain')
+        records = provenance.get('packages', [])
+        if len(records) != sum(len(c['evidence']) for c in registry_components):
+            raise EvidenceError('Rust runtime registry proof inventory is incomplete')
+        for item in registry_components:
+            if item['purl'] != f"pkg:cargo/{quote(item['name'], safe='.-_')}@{quote(item['version'], safe='.-_+')}":
+                raise EvidenceError('Rust registry runtime requires its canonical Cargo identity')
+            parent = next((c for c in components if c['purl'] == item.get('parentPurl')), None)
+            if not parent or parent['name'] != 'Rust standard library':
+                raise EvidenceError('Rust registry runtime must identify its standard-library parent')
+            if set(item.get('dependsOn', [])) - set(keys):
+                raise EvidenceError('Rust runtime dependency evidence has dangling references')
+            for proof in item['evidence']:
+                matching = [r for r in records if r.get('purl') == item['purl'] and r.get('archiveSha512') == proof['sha512']]
+                if (len(matching) != 1
+                        or matching[0].get('archive') != Path(normalized_path(proof['path'])).name
+                        or not re.fullmatch(r'[0-9a-f]{64}', proof.get('registryPackageSha256', ''))):
+                    raise EvidenceError('Rust registry package checksum proof is missing')
+                if (proof.get('rustCommit') != commit
+                        or proof.get('libraryLockSha256') != provenance['lockSha256']
+                        or matching[0].get('registryPackageSha256') != proof['registryPackageSha256']):
+                    raise EvidenceError('Rust registry package checksum proof differs from source provenance')
 
 
 def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> dict:

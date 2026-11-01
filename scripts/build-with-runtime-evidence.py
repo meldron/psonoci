@@ -24,6 +24,27 @@ def run(command, **kwargs):
     return subprocess.run(command, cwd=ROOT, check=True, **kwargs)
 
 
+def enrich_musl_runtime(target, evidence, environment):
+    if 'musl' not in target:
+        return
+    # Cross captures inputs inside its toolchain. Verify them against the same
+    # target distribution installed on the host before assigning Cargo versions.
+    # Native and Cross builds both use the repository's pinned Rust toolchain.
+    run(['rustup', 'target', 'add', target], env=environment)
+    sysroot = subprocess.check_output(['rustc', '--print', 'sysroot'], cwd=ROOT,
+                                      env=environment, text=True).strip()
+    catalog = ROOT / '.sbom-tools' / 'rust-runtime' / target
+    script = str(ROOT / 'scripts/enrich-rust-runtime.py')
+    command = [os.fspath(Path(os.sys.executable)), script]
+    common = ['--evidence', str(evidence), '--catalog', str(catalog)]
+    run([*command, 'prepare', *common], env=environment)
+    # Replace the sidecar only after enrichment and its validation succeed.
+    enriched = evidence.with_suffix('.enriched.json')
+    enriched.unlink(missing_ok=True)
+    run([*command, 'enrich', *common, '--sysroot', sysroot, '--output', str(enriched)], env=environment)
+    enriched.replace(evidence)
+
+
 def msvc_environment(environment):
     vswhere = Path(environment.get('ProgramFiles(x86)', 'C:/Program Files (x86)')) / 'Microsoft Visual Studio/Installer/vswhere.exe'
     installation = subprocess.check_output([str(vswhere), '-latest', '-products', '*', '-requires',
@@ -133,6 +154,7 @@ def main():
     binary = release / ('psonoci.exe' if 'windows' in args.target else 'psonoci')
     run([os.fspath(Path(os.sys.executable)), str(ROOT / 'scripts/runtime_evidence.py'),
          '--target', args.target, '--binary', str(binary), '--capture', str(capture), '--output', str(evidence)])
+    enrich_musl_runtime(args.target, evidence, environment)
     print(f'Runtime evidence: {evidence}')
 
 
