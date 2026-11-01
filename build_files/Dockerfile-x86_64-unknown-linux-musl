@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y wget
 RUN mkdir -m777 /opt/rust /opt/cargo
 ENV RUSTUP_HOME=/opt/rust CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
 RUN wget --https-only --secure-protocol=TLSv1_2 -O- https://sh.rustup.rs | sh /dev/stdin -y
-RUN rustup toolchain install 1.94.1 --profile minimal && rustup default 1.94.1
+RUN rustup toolchain install 1.99.1 --profile minimal && rustup default 1.99.1
 RUN rustup target add x86_64-unknown-linux-musl
 RUN cargo install --locked cargo-auditable --version 0.7.5
 RUN real_cargo="$(rustup which cargo)" && real_rustc="$(rustup which rustc)" && cargo_proxy="$(command -v cargo)" && \

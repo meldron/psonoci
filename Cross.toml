@@ -11,9 +11,9 @@ pre-build = [
     auditable_version="0.7.5"
     marker="$CARGO_HOME/.psonoci-auditable-wrapper-$auditable_version"
     if [ ! -e "$marker" ]; then
-        rustup toolchain install 1.94.1 --profile minimal
-        rustup default 1.94.1
-        rustup target add armv7-unknown-linux-musleabihf --toolchain 1.94.1
+        rustup toolchain install 1.99.1 --profile minimal
+        rustup default 1.99.1
+        rustup target add armv7-unknown-linux-musleabihf --toolchain 1.99.1
         real_cargo="$(rustup which cargo)"
         real_rustc="$(rustup which rustc)"
         RUSTC="$real_rustc" "$real_cargo" install --locked cargo-auditable --version "$auditable_version"
@@ -34,9 +34,9 @@ pre-build = [
     auditable_version="0.7.5"
     marker="$CARGO_HOME/.psonoci-auditable-wrapper-$auditable_version"
     if [ ! -e "$marker" ]; then
-        rustup toolchain install 1.94.1 --profile minimal
-        rustup default 1.94.1
-        rustup target add armv7-unknown-linux-gnueabihf --toolchain 1.94.1
+        rustup toolchain install 1.99.1 --profile minimal
+        rustup default 1.99.1
+        rustup target add armv7-unknown-linux-gnueabihf --toolchain 1.99.1
         real_cargo="$(rustup which cargo)"
         real_rustc="$(rustup which rustc)"
         RUSTC="$real_rustc" "$real_cargo" install --locked cargo-auditable --version "$auditable_version"
@@ -57,9 +57,9 @@ pre-build = [
     auditable_version="0.7.5"
     marker="$CARGO_HOME/.psonoci-auditable-wrapper-$auditable_version"
     if [ ! -e "$marker" ]; then
-        rustup toolchain install 1.94.1 --profile minimal
-        rustup default 1.94.1
-        rustup target add aarch64-unknown-linux-musl --toolchain 1.94.1
+        rustup toolchain install 1.99.1 --profile minimal
+        rustup default 1.99.1
+        rustup target add aarch64-unknown-linux-musl --toolchain 1.99.1
         real_cargo="$(rustup which cargo)"
         real_rustc="$(rustup which rustc)"
         RUSTC="$real_rustc" "$real_cargo" install --locked cargo-auditable --version "$auditable_version"
@@ -83,9 +83,9 @@ pre-build = [
     auditable_version="0.7.5"
     marker="$CARGO_HOME/.psonoci-auditable-wrapper-$auditable_version"
     if [ ! -e "$marker" ]; then
-        rustup toolchain install 1.94.1 --profile minimal
-        rustup default 1.94.1
-        rustup target add x86_64-unknown-linux-musl --toolchain 1.94.1
+        rustup toolchain install 1.99.1 --profile minimal
+        rustup default 1.99.1
+        rustup target add x86_64-unknown-linux-musl --toolchain 1.99.1
         real_cargo="$(rustup which cargo)"
         real_rustc="$(rustup which rustc)"
         RUSTC="$real_rustc" "$real_cargo" install --locked cargo-auditable --version "$auditable_version"
@@ -106,9 +106,9 @@ pre-build = [
     auditable_version="0.7.5"
     marker="$CARGO_HOME/.psonoci-auditable-wrapper-$auditable_version"
     if [ ! -e "$marker" ]; then
-        rustup toolchain install 1.94.1 --profile minimal
-        rustup default 1.94.1
-        rustup target add x86_64-pc-windows-gnu --toolchain 1.94.1
+        rustup toolchain install 1.99.1 --profile minimal
+        rustup default 1.99.1
+        rustup target add x86_64-pc-windows-gnu --toolchain 1.99.1
         real_cargo="$(rustup which cargo)"
         real_rustc="$(rustup which rustc)"
         RUSTC="$real_rustc" "$real_cargo" install --locked cargo-auditable --version "$auditable_version"

@@ -1,7 +1,7 @@
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV RUST_VERSION=1.94.1
+ENV RUST_VERSION=1.99.1
 
 # Keep the windows-gnu builder on Ubuntu 24.04 so build scripts run against
 # the same glibc generation as the GitLab base image.

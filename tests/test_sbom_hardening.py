@@ -65,35 +65,36 @@ class ElfLoaderTests(unittest.TestCase):
 
 class ReviewedLicenseTests(unittest.TestCase):
     def setUp(self):
-        self.directory = ROOT / 'sbom/toolchain-sources/1.94.1'
+        self.release = tomllib.loads((ROOT / 'rust-toolchain.toml').read_text())['toolchain']['channel']
+        self.directory = ROOT / 'sbom/toolchain-sources' / self.release
         self.provenance = json.loads((self.directory / 'provenance.json').read_text())
         self.commit = self.provenance['rustCommit']
 
     def test_compiler_builtins_preserves_exact_source_declaration(self):
         package = tomllib.loads((self.directory / 'compiler-builtins.Cargo.toml').read_text())['package']
-        component = runtime.toolchain_runtime('compiler-builtins', '1.94.1', self.commit)
+        component = runtime.toolchain_runtime('compiler-builtins', self.release, self.commit)
         self.assertEqual(component['license'], package['license'])
         self.assertIn('AND Apache-2.0 WITH LLVM-exception', component['license'])
         self.assertIn(package['version'], component['versionContext'])
 
     def test_startup_is_llvm_and_unwind_keeps_complete_notice(self):
-        startup = runtime.toolchain_runtime('startup', '1.94.1', self.commit)
+        startup = runtime.toolchain_runtime('startup', self.release, self.commit)
         self.assertEqual(startup['license'], 'Apache-2.0 WITH LLVM-exception')
-        unwind = runtime.toolchain_runtime('unwind', '1.94.1', self.commit)
+        unwind = runtime.toolchain_runtime('unwind', self.release, self.commit)
         self.assertEqual(unwind['licenseText'], (self.directory / 'libunwind.LICENSE.txt').read_text())
         self.assertIn('University of Illinois', unwind['licenseText'])
 
     def test_source_changes_and_wrong_toolchain_are_rejected(self):
         with self.assertRaises(runtime.EvidenceError):
-            runtime.toolchain_runtime('compiler-builtins', '1.94.1', 'a' * 40)
+            runtime.toolchain_runtime('compiler-builtins', self.release, 'a' * 40)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            destination = root / 'sbom/toolchain-sources/1.94.1'
+            destination = root / 'sbom/toolchain-sources' / self.release
             shutil.copytree(self.directory, destination)
             (destination / 'compiler-builtins.Cargo.toml').write_text('[package]\nlicense="MIT"')
             with patch.object(runtime, '__file__', str(root / 'scripts/runtime_evidence.py')):
                 with self.assertRaisesRegex(runtime.EvidenceError, 'checksum mismatch'):
-                    runtime.toolchain_runtime('compiler-builtins', '1.94.1', self.commit)
+                    runtime.toolchain_runtime('compiler-builtins', self.release, self.commit)
 
 
 class ObjectCoverageTests(unittest.TestCase):

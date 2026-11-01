@@ -81,7 +81,7 @@ jobs:
           python-version: "3.12"
 
       # Keep this pinned to the repository toolchain in rust-toolchain.toml.
-      - uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # 1.94.1
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
           targets: ${{ matrix.target }}
           components: rustfmt
