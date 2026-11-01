@@ -490,6 +490,12 @@ pub struct GenericSecret {
     pub website_password_username: Option<String>,
     pub website_password_url: Option<String>,
     pub website_password_title: Option<String>,
+    pub website_password_totp_code: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_u32_or_string")]
+    pub website_password_totp_period: Option<u32>,
+    pub website_password_totp_algorithm: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_u32_or_string")]
+    pub website_password_totp_digits: Option<u32>,
 
     // application password
     pub application_password_notes: Option<String>,
@@ -564,6 +570,32 @@ pub struct GenericSecret {
     pub elster_certificate_notes: Option<String>,
 }
 
+// Older Psono native exports can store website TOTP settings as decimal strings.
+// Keep the typed representation numeric; raw payload merging preserves the
+// original spelling until a setting's value actually changes.
+fn deserialize_optional_u32_or_string<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum NumberOrString {
+        Number(u32),
+        String(String),
+    }
+    match Option::<NumberOrString>::deserialize(deserializer)? {
+        None => Ok(None),
+        Some(NumberOrString::Number(value)) => Ok(Some(value)),
+        Some(NumberOrString::String(value)) if value.is_empty() => Ok(None),
+        Some(NumberOrString::String(value)) if value.bytes().all(|byte| byte.is_ascii_digit()) => {
+            value.parse().map(Some).map_err(serde::de::Error::custom)
+        }
+        _ => Err(serde::de::Error::custom(
+            "TOTP setting must be an unsigned 32-bit integer or decimal string",
+        )),
+    }
+}
+
 impl GenericSecret {
     pub fn new() -> Self {
         GenericSecret {
@@ -600,6 +632,10 @@ impl GenericSecret {
             website_password_url: None,
             website_password_url_filter: None,
             website_password_username: None,
+            website_password_totp_code: None,
+            website_password_totp_period: None,
+            website_password_totp_algorithm: None,
+            website_password_totp_digits: None,
             environment_variables_notes: None,
             environment_variables_title: None,
             environment_variables_variables: None,
@@ -721,7 +757,7 @@ pub struct Identity {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Totp {
     pub period: Option<u32>,
     pub algorithm: Option<String>,
@@ -982,6 +1018,12 @@ impl Secret {
                 gs.website_password_url = self.url.clone();
                 gs.website_password_url_filter = self.url_filter.clone();
                 gs.website_password_username = self.username.clone();
+                if let Some(totp) = &self.totp {
+                    gs.website_password_totp_code = totp.code.clone();
+                    gs.website_password_totp_period = totp.period;
+                    gs.website_password_totp_algorithm = totp.algorithm.clone();
+                    gs.website_password_totp_digits = totp.digits;
+                }
             }
             SecretType::Application => {
                 gs.application_password_notes = self.notes.clone();
@@ -1161,6 +1203,17 @@ impl Secret {
     }
 
     pub fn set_value(&mut self, secret_value_type: &SecretValueType, value: String) -> Result<()> {
+        if self.secret_type == SecretType::Website
+            && matches!(
+                secret_value_type,
+                SecretValueType::totp_code
+                    | SecretValueType::totp_period
+                    | SecretValueType::totp_algorithm
+                    | SecretValueType::totp_digits
+            )
+        {
+            self.totp.get_or_insert_with(Totp::default);
+        }
         match (&self.secret_type, secret_value_type) {
             // WEBSITE
             (_, SecretValueType::json) => {
@@ -1348,9 +1401,10 @@ impl Secret {
             // TOTP
             (SecretType::Totp, SecretValueType::title) => self.title = Some(value),
             (SecretType::Totp, SecretValueType::notes) => self.notes = Some(value),
-            (SecretType::Totp, SecretValueType::totp_period) => {
+            (SecretType::Totp | SecretType::Website, SecretValueType::totp_period) => {
                 if let Some(totp) = &mut self.totp {
                     match value.parse() {
+                        Ok(0) => bail!("TOTP period must be greater than zero"),
                         Ok(parsed) => totp.period = Some(parsed),
                         Err(_) => {
                             return Err(anyhow!(
@@ -1362,7 +1416,7 @@ impl Secret {
                     return Err(anyhow!("TOTP is None when trying to set totp_period"));
                 }
             }
-            (SecretType::Totp, SecretValueType::totp_algorithm) => {
+            (SecretType::Totp | SecretType::Website, SecretValueType::totp_algorithm) => {
                 if let Some(totp) = &mut self.totp {
                     if !is_valid_totp_algorithm(&value) {
                         bail!("Invalid algorithm. Only SHA1, SHA256, or SHA512 are allowed");
@@ -1373,7 +1427,7 @@ impl Secret {
                     return Err(anyhow!("TOTP is None when trying to set totp_algorithm"));
                 }
             }
-            (SecretType::Totp, SecretValueType::totp_digits) => {
+            (SecretType::Totp | SecretType::Website, SecretValueType::totp_digits) => {
                 if let Some(totp) = &mut self.totp {
                     match value.parse::<u32>() {
                         Ok(parsed) => {
@@ -1395,7 +1449,7 @@ impl Secret {
                     return Err(anyhow!("TOTP is None when trying to set totp_digits"));
                 }
             }
-            (SecretType::Totp, SecretValueType::totp_code) => {
+            (SecretType::Totp | SecretType::Website, SecretValueType::totp_code) => {
                 if let Some(totp) = &mut self.totp {
                     totp.code = Some(value);
                 } else {
@@ -1564,6 +1618,10 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             || s.website_password_url.is_some()
             || s.website_password_url_filter.is_some()
             || s.website_password_username.is_some()
+            || s.website_password_totp_code.is_some()
+            || s.website_password_totp_period.is_some()
+            || s.website_password_totp_algorithm.is_some()
+            || s.website_password_totp_digits.is_some()
         {
             let mut secret = Secret::new(SecretType::Website);
 
@@ -1573,6 +1631,18 @@ impl DataTransform<GenericSecret, Secret> for Secret {
             secret.url = s.website_password_url;
             secret.url_filter = s.website_password_url_filter;
             secret.username = s.website_password_username;
+            if s.website_password_totp_code.is_some()
+                || s.website_password_totp_period.is_some()
+                || s.website_password_totp_algorithm.is_some()
+                || s.website_password_totp_digits.is_some()
+            {
+                secret.totp = Some(Totp {
+                    code: s.website_password_totp_code,
+                    period: s.website_password_totp_period,
+                    algorithm: s.website_password_totp_algorithm,
+                    digits: s.website_password_totp_digits,
+                });
+            }
 
             return Ok(secret);
         }
@@ -2487,6 +2557,170 @@ mod tests {
                 changed["password_modification_datetime"].as_str().unwrap()
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn website_totp_fields_round_trip_and_update_without_changing_password_age() {
+        let original = json!({
+            "website_password_title": "Test", "website_password_password": "password",
+            "website_password_totp_code": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            "website_password_totp_period": 60, "website_password_totp_algorithm": "SHA256",
+            "website_password_totp_digits": 8, "password_modification_datetime": "2025-01-01T00:00:00Z",
+            "future": {"keep": true}, "custom_fields": [{"name": "owner", "value": "fixture"}]
+        });
+        let mut secret = Secret::transform(original.clone()).unwrap();
+        assert_eq!(secret.secret_type, SecretType::Website);
+        assert_eq!(
+            secret.clone().get_value(&SecretValueType::totp_period),
+            Some("60".into())
+        );
+        assert_eq!(
+            secret.as_generic_secret().website_password_totp_digits,
+            Some(8)
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+            original
+        );
+        let mut expected = original;
+        for (field, value_type, value) in [
+            (
+                "website_password_totp_period",
+                SecretValueType::totp_period,
+                "45",
+            ),
+            (
+                "website_password_totp_algorithm",
+                SecretValueType::totp_algorithm,
+                "SHA512",
+            ),
+            (
+                "website_password_totp_digits",
+                SecretValueType::totp_digits,
+                "7",
+            ),
+            (
+                "website_password_totp_code",
+                SecretValueType::totp_code,
+                "CHANGEDSEED",
+            ),
+        ] {
+            secret.set_value(&value_type, value.into()).unwrap();
+            expected[field] = if matches!(
+                value_type,
+                SecretValueType::totp_period | SecretValueType::totp_digits
+            ) {
+                json!(value.parse::<u32>().unwrap())
+            } else {
+                json!(value)
+            };
+            assert_eq!(
+                serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn website_totp_numeric_strings_are_read_and_preserved_on_unrelated_edits() {
+        for field in [
+            "website_password_totp_period",
+            "website_password_totp_digits",
+        ] {
+            for (value, expected) in [
+                (json!(30), Some(30)),
+                (json!("30"), Some(30)),
+                (json!("0006"), Some(6)),
+                (json!("0"), Some(0)),
+                (json!("4294967295"), Some(u32::MAX)),
+                (Value::Null, None),
+                (json!(""), None),
+            ] {
+                let original =
+                    json!({"website_password_title": "Test", field: value, "future": [true, null]});
+                let mut secret = Secret::transform(original.clone()).unwrap();
+                let actual = secret.totp.as_ref().and_then(|totp| {
+                    if field.ends_with("period") {
+                        totp.period
+                    } else {
+                        totp.digits
+                    }
+                });
+                assert_eq!(actual, expected);
+                secret
+                    .set_value(&SecretValueType::notes, "updated notes".into())
+                    .unwrap();
+                let mut expected_payload = original;
+                expected_payload["website_password_notes"] = json!("updated notes");
+                assert_eq!(
+                    serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+                    expected_payload
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn malformed_website_totp_numbers_are_still_errors() {
+        for field in [
+            "website_password_totp_period",
+            "website_password_totp_digits",
+        ] {
+            for value in [
+                json!("bad"),
+                json!("-1"),
+                json!("+1"),
+                json!(" 6 "),
+                json!("6.0"),
+                json!("4294967296"),
+                json!(-1),
+                json!(6.5),
+                json!(4294967296_u64),
+                json!(false),
+                json!([]),
+                json!({}),
+            ] {
+                assert!(
+                    Secret::transform(json!({"website_password_title": "Test", field: value}))
+                        .is_err()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn website_totp_can_be_added_and_invalid_settings_cannot_be_saved() {
+        let original = json!({"website_password_title": "Test", "future": [true, null]});
+        let mut secret = Secret::transform(original.clone()).unwrap();
+        assert!(secret.totp.is_none());
+        secret
+            .set_value(&SecretValueType::totp_code, "TESTSEED".into())
+            .unwrap();
+        let mut expected = original;
+        expected["website_password_totp_code"] = json!("TESTSEED");
+        assert_eq!(
+            serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+            expected
+        );
+        for (field, value) in [
+            (SecretValueType::totp_period, "0"),
+            (SecretValueType::totp_period, "-1"),
+            (SecretValueType::totp_algorithm, "MD5"),
+            (SecretValueType::totp_digits, "5"),
+        ] {
+            assert!(secret.set_value(&field, value.into()).is_err());
+            assert_eq!(
+                serde_json::from_str::<Value>(&secret.serialize_payload().unwrap()).unwrap(),
+                expected
+            );
+        }
+        assert!(Secret::transform(json!({"website_password_totp_period": "bad"})).is_err());
+        assert_eq!(
+            Secret::transform(json!({"website_password_totp_code": "TESTSEED"}))
+                .unwrap()
+                .secret_type,
+            SecretType::Website
         );
     }
 

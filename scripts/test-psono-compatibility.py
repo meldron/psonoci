@@ -13,6 +13,8 @@ import argparse
 import base64
 import contextlib
 from datetime import datetime, timezone
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -23,6 +25,7 @@ import tempfile
 import threading
 import time
 import uuid
+from urllib.parse import parse_qs, unquote, urlparse
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
 
@@ -39,7 +42,7 @@ def database():
                "--env", "POSTGRES_PASSWORD=psonoci-test-only",
                "--env", "POSTGRES_DB=psonoci_test", "postgres:17")
         for _ in range(120):
-            if subprocess.run(["docker", "exec", name, "pg_isready", "-U", "postgres"],
+            if subprocess.run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                               timeout=10).returncode == 0:
                 break
@@ -137,15 +140,15 @@ class Fixture:
         )
         return secret, box
 
-    def cli(self, *args):
+    def cli(self, *args, success=True):
         result = subprocess.run([
             self.binary, "--api-key-id", str(self.api_key.id),
             "--api-secret-key-hex", bytes(self.key).hex(), "--server-url", self.url,
             *map(str, args),
         ], capture_output=True, text=True, timeout=15)
-        if result.returncode:
+        if (result.returncode == 0) != success:
             raise AssertionError(f"CLI failed: {result.stderr}")
-        return result.stdout
+        return result.stdout if success else result.stderr
 
     @staticmethod
     def payload(secret, box):
@@ -195,6 +198,88 @@ def password_checks(fixture):
     print(f"PASS: {count} password scenarios and unrelated note, through CLI/HTTP/Psono/Postgres")
 
 
+def token(seed, algorithm, digits, period, timestamp):
+    """Independent RFC 6238 calculation, without the Rust TOTP library."""
+    counter = int(timestamp // period).to_bytes(8, "big")
+    digest = hmac.new(base64.b32decode(seed), counter,
+                      getattr(hashlib, algorithm.lower())).digest()
+    offset = digest[-1] & 15
+    number = int.from_bytes(digest[offset:offset + 4], "big") & 0x7fffffff
+    return str(number % (10 ** digits)).zfill(digits)
+
+
+def totp_checks(fixture):
+    seed = base64.b32encode(b"12345678901234567890").decode()
+    replacement_seed = base64.b32encode(b"09876543210987654321").decode()
+    cases = [
+        ("website_password_totp", {}, "SHA1", 6, 30),
+        ("website_password_totp", {"code": "JBSWY3DPEHPK3PXP"}, "SHA1", 6, 30),
+        ("website_password_totp", {"period": None, "algorithm": None, "digits": None}, "SHA1", 6, 30),
+        ("website_password_totp", {"period": 0, "algorithm": "", "digits": 0}, "SHA1", 6, 30),
+        ("website_password_totp", {"period": 60, "algorithm": "SHA256", "digits": 8}, "SHA256", 8, 60),
+        ("website_password_totp", {"period": "60", "algorithm": "SHA256", "digits": "7"}, "SHA256", 7, 60),
+        ("website_password_totp", {"period": "", "algorithm": "", "digits": ""}, "SHA1", 6, 30),
+        ("website_password_totp", {"period": 45, "algorithm": "SHA512", "digits": 7}, "SHA512", 7, 45),
+        ("totp", {"period": 30, "algorithm": "SHA1", "digits": 6}, "SHA1", 6, 30),
+    ]
+    for prefix, settings, algorithm, digits, period in cases:
+        original = {f"{prefix}_code": seed, **{f"{prefix}_{key}": value for key, value in settings.items()}}
+        secret_seed = original[f"{prefix}_code"]
+        if prefix == "website_password_totp":
+            original.update(website_password_title="Fixture", website_password_password="before",
+                            password_modification_datetime="2025-01-01T00:00:00Z",
+                            custom_fields=[{"name": "owner", "value": "fixture"}])
+        secret, box = fixture.create(original)
+        start = time.time()
+        generated = fixture.cli("totp", "get-token", secret.id)
+        assert generated in {token(secret_seed, algorithm, digits, period, start),
+                             token(secret_seed, algorithm, digits, period, time.time())}
+        fixture.cli("totp", "validate-token", secret.id,
+                    token(secret_seed, algorithm, digits, period, time.time()))
+        error = fixture.cli("totp", "validate-token", secret.id, "not-a-token", success=False)
+        assert "token invalid" in error
+        uri = fixture.cli("totp", "get-url", secret.id, "--issuer", "Fixture", "--account-name", "test@example.com")
+        parsed = urlparse(uri)
+        query = parse_qs(parsed.query)
+        assert parsed.scheme == "otpauth" and parsed.netloc == "totp"
+        assert unquote(parsed.path) == "/Fixture:test@example.com"
+        assert query["secret"] == [secret_seed]
+        assert query.get("algorithm", ["SHA1"]) == [algorithm]
+        assert query.get("digits", ["6"]) == [str(digits)]
+        assert query.get("period", ["30"]) == [str(period)]
+        assert fixture.payload(secret, box) == original, "TOTP read modified stored payload"
+        assert fixture.cli("secret", "get", secret.id, "totp-code") == secret_seed
+        if prefix == "website_password_totp":
+            for key, value in [("period", "90"), ("algorithm", "SHA256"), ("digits", "8"), ("code", replacement_seed)]:
+                before = fixture.payload(secret, box)
+                fixture.cli("secret", "set", secret.id, f"totp-{key}", value)
+                expected = {**before, f"{prefix}_{key}": int(value) if key in {"period", "digits"} else value}
+                assert fixture.payload(secret, box) == expected, "TOTP edit modified unrelated fields"
+
+    # Adding an authenticator to a website must not require an existing TOTP object.
+    secret, box = fixture.create({"website_password_title": "No authenticator"})
+    assert "TOTP data is not set" in fixture.cli("totp", "get-token", secret.id, success=False)
+    fixture.cli("secret", "set", secret.id, "totp-code", seed)
+    assert fixture.payload(secret, box) == {"website_password_title": "No authenticator", "website_password_totp_code": seed}
+    fixture.cli("totp", "get-token", secret.id)
+
+    for payload, message in [
+        ({"note_title": "Not TOTP"}, "not a TOTP or website secret"),
+        ({"website_password_totp_code": "invalid!"}, "Could not decode base32 secret"),
+        ({"website_password_totp_code": ""}, "TOTP seed is empty"),
+        ({"website_password_totp_code": seed, "website_password_totp_algorithm": "MD5"}, "Unsupported Algorithm"),
+        ({"website_password_totp_code": seed, "website_password_totp_digits": 5}, "Could not create TOTP Instance"),
+        ({"website_password_totp_code": seed, "website_password_totp_period": "bad"}, "parsing decrypted secret payload fields failed"),
+        ({"totp_code": seed, "totp_period": 0, "totp_algorithm": "SHA1", "totp_digits": 6}, "period must be greater than zero"),
+    ]:
+        secret, box = fixture.create(payload)
+        error = fixture.cli("totp", "get-token", secret.id, success=False)
+        assert message in error, error
+        assert seed not in error
+        assert fixture.payload(secret, box) == payload
+    print(f"PASS: {len(cases)} TOTP configurations, independent HMAC checks, edits and failure cases")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--server-source", required=True, type=Path)
@@ -212,6 +297,7 @@ def main():
         try:
             fixture = Fixture(binary, f"http://127.0.0.1:{server.server_port}/")
             password_checks(fixture)
+            totp_checks(fixture)
         finally:
             server.shutdown()
             thread.join(timeout=5)

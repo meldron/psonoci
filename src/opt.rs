@@ -572,7 +572,7 @@ pub enum EnvVarsCommand {
 
 #[derive(Subcommand, Debug, Serialize)]
 pub enum TotpCommand {
-    #[clap(about = "Get the current token for a TOTP secret")]
+    #[clap(about = "Get the current token for a TOTP or website secret")]
     GetToken {
         #[clap(
             required = true,
@@ -580,7 +580,7 @@ pub enum TotpCommand {
         )]
         secret_id: Uuid,
     },
-    #[clap(about = "Check if a token is currently valid for a TOTP Secret")]
+    #[clap(about = "Check if a token is currently valid for a TOTP or website secret")]
     ValidateToken {
         #[clap(
             required = true,
@@ -590,7 +590,7 @@ pub enum TotpCommand {
         #[clap(required = true, help = "The token to validate")]
         token: String,
     },
-    #[clap(about = "Get the otpauth url for a TOTP secret")]
+    #[clap(about = "Get the otpauth url for a TOTP or website secret")]
     GetUrl {
         #[clap(
             required = true,

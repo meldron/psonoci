@@ -1,10 +1,11 @@
-psonoci 0.5.0
+psonoci 0.6.0
 Bernd Kaiser
 Psono CI Client (https://github.com/meldron/psonoci)
 
 Usage: psonoci [OPTIONS] <COMMAND>
 
 Commands:
+  onboard   Bootstraps a psonoci config via device authentication
   secret    Psono secret commands (/api-key-access/secret/)
   api-key   Psono api-key inspect (/api-key-access/inspect/)
   config    Config commands (create, save, pack,...)

@@ -1,4 +1,4 @@
-Check if a token is currently valid for a TOTP Secret
+Check if a token is currently valid for a TOTP or website secret
 
 Usage: psonoci totp validate-token <SECRET_ID> <TOKEN>
 

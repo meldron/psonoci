@@ -186,6 +186,12 @@ Returns with exit code `0` if the signature is valid, otherwise displays an erro
 
 Since version `0.4` `psonoci` supports Psono's [Time-based one-time password (TOTP)](https://en.wikipedia.org/wiki/Time-based_one-time_password) secret type.
 
+The same commands also accept website secrets with an embedded authenticator.
+Website TOTP settings default to SHA1, 6 digits and 30 seconds, matching Psono.
+`secret get` and `secret set` expose the embedded settings through `totp-code`,
+`totp-algorithm`, `totp-digits` and `totp-period`; `totp-code` is the stored seed.
+Reading a token or exporting an otpauth URL does not modify the secret.
+
 Besides the standard functionality to read and write the secret info (`secret` subcommand), 
 `psonoci` also supports the creation and validation of tokens (both commands require a correctly configured system time).
 

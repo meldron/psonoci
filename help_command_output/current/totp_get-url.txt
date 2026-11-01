@@ -1,4 +1,4 @@
-Get the otpauth url for a TOTP secret
+Get the otpauth url for a TOTP or website secret
 
 Usage: psonoci totp get-url [OPTIONS] <SECRET_ID>
 
