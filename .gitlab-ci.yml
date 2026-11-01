@@ -33,16 +33,12 @@ variables:
     # gitlab ci build uses docker images from jfrog and not dockerhub
     # - mv Cross_Gitlab.toml Cross.toml
     - cargo --version
-    - cargo install cross
+    - cargo install --locked cross --version "${CROSS_VERSION}"
     - cross --version
     # - cross test --release --target "${BUILD_ENV}"
-    - |
-      if [ "$BUILD_ENV" = x86_64-pc-windows-gnu ]; then
-        python3 scripts/build-with-runtime-evidence.py --target "$BUILD_ENV" --cross
-      else
-        python3 scripts/build-with-runtime-evidence.py --target "$BUILD_ENV" --cross \
-          --image "meldron/psonoci_builder:$BUILD_ENV"
-      fi
+    - cargo install --locked cargo-auditable --version "${CARGO_AUDITABLE_VERSION}"
+    - python3 scripts/test-sbom-linker.py
+    - python3 scripts/build-with-runtime-evidence.py --target "$BUILD_ENV" --cross --image "meldron/psonoci_builder:$BUILD_ENV"
 
 .build-cross-base:
   stage: build
@@ -77,19 +73,23 @@ variables:
     # - ./jfrog rt u --target-props="CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME;CI_COMMIT_SHA=$CI_COMMIT_SHA;CI_COMMIT_URL=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA;CI_PROJECT_ID=$CI_PROJECT_ID;CI_PROJECT_NAME=$CI_PROJECT_NAME;CI_PROJECT_NAMESPACE=$CI_PROJECT_NAMESPACE;CI_PROJECT_URL=$CI_PROJECT_URL;CI_PIPELINE_ID=$CI_PIPELINE_ID;CI_PIPELINE_URL=$CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID;CI_JOB_ID=$CI_JOB_ID;CI_JOB_URL=$CI_PROJECT_URL/-/jobs/$CI_JOB_ID;CI_JOB_NAME=$CI_JOB_NAME;CI_JOB_STAGE=$CI_JOB_STAGE;CI_RUNNER_ID=$CI_RUNNER_ID;GITLAB_USER_ID=$GITLAB_USER_ID;CI_SERVER_VERSION=$CI_SERVER_VERSION" "target/${BUILD_ENV}/release/psonoci" "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci"
     # - ./jfrog rt sp "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci" "CI_COMMIT_TAG=$CI_COMMIT_TAG" || true
 
-.build-cross-windows:
-  extends: .build-cross-base
+.build-native-windows:
+  stage: build
+  tags:
+    - saas-windows-medium-amd64
+  script:
+    - .\var\build_windows.ps1 -Target $env:BUILD_ENV
   artifacts:
     name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"
     paths:
       - ./target/${BUILD_ENV}/release/psonoci.exe
       - ./target/${BUILD_ENV}/release/psonoci.runtime.json
     expire_in: 1 week
-  script:
-    - !reference [.build-cross-base-script, script]
-    - ls -la "target/${BUILD_ENV}/release/psonoci.exe"
-    # - ./jfrog rt u --target-props="CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME;CI_COMMIT_SHA=$CI_COMMIT_SHA;CI_COMMIT_URL=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA;CI_PROJECT_ID=$CI_PROJECT_ID;CI_PROJECT_NAME=$CI_PROJECT_NAME;CI_PROJECT_NAMESPACE=$CI_PROJECT_NAMESPACE;CI_PROJECT_URL=$CI_PROJECT_URL;CI_PIPELINE_ID=$CI_PIPELINE_ID;CI_PIPELINE_URL=$CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID;CI_JOB_ID=$CI_JOB_ID;CI_JOB_URL=$CI_PROJECT_URL/-/jobs/$CI_JOB_ID;CI_JOB_NAME=$CI_JOB_NAME;CI_JOB_STAGE=$CI_JOB_STAGE;CI_RUNNER_ID=$CI_RUNNER_ID;GITLAB_USER_ID=$GITLAB_USER_ID;CI_SERVER_VERSION=$CI_SERVER_VERSION" "target/${BUILD_ENV}/release/psonoci.exe" "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci.exe"
-    # - ./jfrog rt sp "psono/ci/${CI_COMMIT_REF_NAME}/${BUILD_ENV}/psonoci.exe" "CI_COMMIT_TAG=$CI_COMMIT_TAG" || true
+  except:
+    - schedules
+  only:
+    - branches@esaqa/psono/psono-ci
+    - tags@esaqa/psono/psono-ci
 
 # Build job for x86_64-unknown-linux-musl
 build-x86_64-unknown-linux-musl:
@@ -111,29 +111,14 @@ build-aarch64-unknown-linux-musl:
 
 # Build job for build-x86_64-pc-windows-gnu
 build-x86_64-pc-windows-gnu:
-  extends: .build-cross-windows
+  extends: .build-native-windows
   variables:
     BUILD_ENV: x86_64-pc-windows-gnu
 
 build-x86_64-pc-windows-msvc:
-  stage: build
-  script:
-    - .\var\build_windows.ps1
-  artifacts:
-    name: "psonoci_x86_64-pc-windows-msvc_$CI_COMMIT_REF_NAME"
-    paths:
-      - ./target/x86_64-pc-windows-msvc/release/psonoci.exe
-      - ./target/x86_64-pc-windows-msvc/release/psonoci.runtime.json
-    expire_in: 1 week
+  extends: .build-native-windows
   variables:
     BUILD_ENV: x86_64-pc-windows-msvc
-  tags:
-    - saas-windows-medium-amd64
-  except:
-    - schedules
-  only:
-    - branches@esaqa/psono/psono-ci
-    - tags@esaqa/psono/psono-ci
 
 .build-macos:
   stage: build
@@ -149,6 +134,8 @@ build-x86_64-pc-windows-msvc:
     - rustup target add "${BUILD_ENV}"
     - cargo --version
     - cargo install --locked cargo-auditable --version "${CARGO_AUDITABLE_VERSION}"
+    - brew install python@3.12
+    - export PATH="$(brew --prefix python@3.12)/libexec/bin:$PATH"
     - python3 scripts/build-with-runtime-evidence.py --target "${BUILD_ENV}"
   artifacts:
     name: "${BUILD_ENV}_${CI_COMMIT_REF_NAME}"

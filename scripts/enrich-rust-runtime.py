@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expose registry crates bundled in supported musl Rust sysroots.
+"""Expose registry crates bundled in supported Rust target sysroots.
 
 Prepare downloads the exact-commit library lockfile and checksum-verified crate
 metadata. Enrich is offline and requires captured inputs to match this sysroot.
@@ -15,27 +15,24 @@ import json
 import re
 import subprocess
 import tarfile
-import tomllib
+import tempfile
 import urllib.request
 from pathlib import Path
 
 import sbom
+import tomllib
 
 runtime = sbom.runtime_info
-SUPPORTED_TARGETS = frozenset({
-    'x86_64-unknown-linux-musl',
-    'aarch64-unknown-linux-musl',
-    'armv7-unknown-linux-musleabihf',
-})
+SUPPORTED_TARGETS = runtime.RUST_RUNTIME_TARGETS
 TOOL_NAME = 'psonoci-rust-runtime-enricher'
-TOOL_VERSION = '1.0.0'
+TOOL_VERSION = '1.1.0'
 
 
 def rust_identity(evidence):
     release = re.search(r'^release: (\S+)$', evidence['rustc'], re.M)
     commit = re.search(r'^commit-hash: ([0-9a-f]{40})$', evidence['rustc'], re.M)
     if not release or not commit or evidence['target'] not in SUPPORTED_TARGETS:
-        raise runtime.EvidenceError('runtime enrichment requires exact Rust identity and a supported musl target')
+        raise runtime.EvidenceError('runtime enrichment requires exact Rust identity and a supported release target')
     return release[1], commit[1]
 
 
@@ -89,24 +86,59 @@ def download(url):
         return response.read()
 
 
-def prepare(evidence, directory):
+def atomic_write(path: Path, data: bytes):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=path.name + '.', delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(data)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def prepare(evidence, directory, *, offline=False, refresh=False):
+    if offline and refresh:
+        raise runtime.EvidenceError('--offline and --refresh cannot be combined')
     release, commit = rust_identity(evidence)
     directory.mkdir(parents=True, exist_ok=True)
     url = f'https://raw.githubusercontent.com/rust-lang/rust/{commit}/library/Cargo.lock'
-    data = download(url)
+    lock_path = directory / 'Cargo.lock'
+    provenance_path = directory / 'provenance.json'
+    cached = lock_path.is_file() and provenance_path.is_file()
+    if cached and not refresh:
+        provenance = json.loads(provenance_path.read_text())
+        if (provenance.get('format'), provenance.get('rustRelease'), provenance.get('rustCommit'), provenance.get('lockUrl')) != (1, release, commit, url):
+            raise runtime.EvidenceError('cached catalog belongs to another toolchain; use --refresh')
+        data = lock_path.read_bytes()
+        if sha256(data) != provenance.get('lockSha256'):
+            raise runtime.EvidenceError('cached source lockfile is corrupt; use --refresh')
+    else:
+        if offline:
+            raise runtime.EvidenceError('source catalog is not cached; prepare it online first')
+        data = download(url)
     lock = tomllib.loads(data.decode())
     selected = selected_packages(evidence, lock)
     for package in {p['name']: p for p in selected.values()}.values():
         filename = f"{package['name']}-{package['version']}.crate"
         path = directory / filename
-        if not path.is_file():
-            path.write_bytes(download(f"https://static.crates.io/crates/{package['name']}/{filename}"))
-        package_metadata(directory, package)
-    (directory / 'Cargo.lock').write_bytes(data)
-    (directory / 'provenance.json').write_text(json.dumps({
+        if not path.is_file() or refresh:
+            if offline:
+                raise runtime.EvidenceError(f'{filename}: package is not cached')
+            payload = download(f"https://static.crates.io/crates/{package['name']}/{filename}")
+            if sha256(payload) != package['checksum']:
+                raise runtime.EvidenceError(f'{filename}: downloaded registry checksum mismatch')
+            atomic_write(path, payload)
+        try:
+            package_metadata(directory, package)
+        except runtime.EvidenceError as error:
+            raise runtime.EvidenceError(f'{error}; use --refresh to replace corrupt cache entries') from error
+    atomic_write(lock_path, data)
+    atomic_write(provenance_path, (json.dumps({
         'format': 1, 'rustRelease': release, 'rustCommit': commit,
         'lockUrl': url, 'lockSha256': sha256(data),
-    }, indent=2) + '\n')
+    }, indent=2) + '\n').encode())
     print(f'Prepared {len(selected)} checksum-verified registry packages at {commit}')
 
 
@@ -140,7 +172,7 @@ def enrich(evidence, directory, sysroot):
                                      f"https://crates.io/crates/{package['name']}", license_id)
         component.update(purl=sbom.purl('cargo', package['name'], package['version']),
                          source=manifest['repository'], delivery='bundled',
-                         origin='rust-std-registry', parentPurl=std['purl'],
+                         origin='rust-std-registry', parentPurl=std['purl'], dependencyGraph='incomplete',
                          versionContext='registry version in the exact Rust source library lockfile; supplied sysroot linker input, not a reachability claim')
         evidence_record = dict(proof, method='linked sysroot archive hash; exact-commit Rust library Cargo.lock; checksum-verified upstream crate manifest',
                                rustCommit=commit, libraryLockSha256=provenance['lockSha256'],
@@ -150,8 +182,9 @@ def enrich(evidence, directory, sysroot):
         std['evidence'].remove(proof)
         records.append({'purl': component['purl'], 'archive': archive_name,
                         'registryPackageSha256': package['checksum'], 'archiveSha512': proof['sha512']})
-    # Only preserve source-declared edges whose two archive inputs were observed.
-    # Rust workspace facade dependencies point back to the retained std group.
+    # Preserve observed package edges without turning core/alloc facades into
+    # cycles through the aggregate std group. Feature-specific/internal edges
+    # remain explicitly incomplete; source declarations are retained separately.
     by_name = {c['name']: c['purl'] for c in registry_components.values()}
     for package in selected.values():
         component = registry_components[sbom.purl('cargo', package['name'], package['version'])]
@@ -160,9 +193,9 @@ def enrich(evidence, directory, sysroot):
             name = dependency.split()[0]
             if name in by_name:
                 edges.add(by_name[name])
-            elif name.startswith('rustc-std-workspace-'):
-                edges.add(std['purl'])
         component['dependsOn'] = sorted(edges)
+        component['sourceDependencies'] = package.get('dependencies', [])
+    std['dependencyGraph'] = 'incomplete'
     result['components'].extend(registry_components.values())
     result['components'].sort(key=lambda c: c['purl'])
     result['rustStdRegistry'] = dict(provenance, packages=records,
@@ -178,12 +211,14 @@ def main():
     parser.add_argument('--evidence', required=True, type=Path)
     parser.add_argument('--catalog', required=True, type=Path)
     parser.add_argument('--sysroot', type=Path)
+    parser.add_argument('--offline', action='store_true', help='prepare only from verified cached inputs')
+    parser.add_argument('--refresh', action='store_true', help='atomically replace cached inputs from pinned sources')
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
     try:
         evidence = json.loads(args.evidence.read_text())
         if args.command == 'prepare':
-            prepare(evidence, args.catalog)
+            prepare(evidence, args.catalog, offline=args.offline, refresh=args.refresh)
         else:
             if not args.sysroot or not args.output:
                 parser.error('enrich requires --sysroot and --output')

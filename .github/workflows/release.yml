@@ -10,8 +10,28 @@ permissions:
   contents: write
 
 jobs:
+  test-sbom:
+    name: SBOM regression and advisory matching controls
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # 1.94.1
+      - name: Install pinned scanner
+        run: |
+          bash scripts/install-grype.sh "$RUNNER_TEMP/psonoci-grype"
+          echo "$RUNNER_TEMP/psonoci-grype" >> "$GITHUB_PATH"
+      - run: python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
+      - run: python3 scripts/test-sbom-linker.py
+      - run: python3 scripts/test-sbom-scanner.py
+
   create-release:
     name: create-release
+    needs: ["test-sbom"]
     runs-on: ubuntu-24.04
     steps:
       - name: Create draft release
@@ -39,6 +59,10 @@ jobs:
   build-release:
     name: build-release
     needs: ["create-release"]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     runs-on: ${{ matrix.os }}
     env:
       builder_image: meldron/psonoci_builder
@@ -90,7 +114,7 @@ jobs:
             use_cross: false
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Load pinned SBOM tool versions
         id: sbom_tools
@@ -99,21 +123,25 @@ jobs:
           . sbom/tool-versions.env
           echo "CARGO_AUDITABLE_VERSION=$CARGO_AUDITABLE_VERSION" >> "$GITHUB_ENV"
           echo "SYFT_VERSION=$SYFT_VERSION" >> "$GITHUB_ENV"
+          echo "CROSS_VERSION=$CROSS_VERSION" >> "$GITHUB_ENV"
+          echo "GRYPE_VERSION=$GRYPE_VERSION" >> "$GITHUB_ENV"
           echo "syft_version=$SYFT_VERSION" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
 
       - name: install rust
         # Keep this pinned to the repository toolchain in rust-toolchain.toml.
-        uses: dtolnay/rust-toolchain@1.94.1
+        uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # 1.94.1
         with:
           targets: ${{ matrix.target }}
 
       - name: Install cross
         if: matrix.use_cross
-        uses: taiki-e/install-action@cross
+        uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+        with:
+          tool: cross@${{ env.CROSS_VERSION }}
 
       - name: Install cargo-auditable
         shell: bash
@@ -144,9 +172,19 @@ jobs:
             python3 scripts/build-with-runtime-evidence.py --target "${{ matrix.target }}"
           fi
 
+      - name: Check GitLab Windows bootstrap syntax
+        if: matrix.target_type == 'windows'
+        shell: pwsh
+        run: |
+          $parseErrors = $null
+          $tokens = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/var/build_windows.ps1", [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
+
       - name: Upload runtime evidence diagnostics
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: runtime-evidence-${{ matrix.target }}
           path: |
@@ -167,7 +205,7 @@ jobs:
 
       - name: Import GPG key
         id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PRIVATE_KEY_PASSPHRASE }}
@@ -191,7 +229,7 @@ jobs:
             echo "ASSET_SIG=$staging.tar.gz.asc" >> $GITHUB_ENV
           fi
 
-      - name: Generate CRA SBOM
+      - name: Generate release SBOM
         shell: bash
         env:
           RELEASE_REPOSITORY: ${{ github.repository }}
@@ -218,8 +256,15 @@ jobs:
           echo "SBOM=$sbom" >> $GITHUB_ENV
           echo "SBOM_SIG=$sbom.asc" >> $GITHUB_ENV
 
+      - name: Attest archive and SBOM build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            ${{ env.ASSET }}
+            ${{ env.SBOM }}
+
       - name: Stage signed release files
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-${{ matrix.target }}
           path: |
@@ -235,14 +280,14 @@ jobs:
     needs: ["build-release"]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
 
       - name: Download signed release files
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: release-*
           path: release-assets

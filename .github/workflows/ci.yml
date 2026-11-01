@@ -45,10 +45,10 @@ jobs:
             target_type: unix
             use_cross: false
           - build: win-gnu
-            os: ubuntu-24.04
+            os: windows-latest
             target: x86_64-pc-windows-gnu
             target_type: windows
-            use_cross: true
+            use_cross: false
           - build: win-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: echo "SHA8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Load pinned SBOM tool versions
         id: sbom_tools
@@ -70,21 +70,25 @@ jobs:
           . sbom/tool-versions.env
           echo "CARGO_AUDITABLE_VERSION=$CARGO_AUDITABLE_VERSION" >> "$GITHUB_ENV"
           echo "SYFT_VERSION=$SYFT_VERSION" >> "$GITHUB_ENV"
+          echo "CROSS_VERSION=$CROSS_VERSION" >> "$GITHUB_ENV"
+          echo "GRYPE_VERSION=$GRYPE_VERSION" >> "$GITHUB_ENV"
           echo "syft_version=$SYFT_VERSION" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
 
       # Keep this pinned to the repository toolchain in rust-toolchain.toml.
-      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # 1.94.1
         with:
           targets: ${{ matrix.target }}
           components: rustfmt
 
       - name: Install cross
         if: matrix.use_cross
-        uses: taiki-e/install-action@cross
+        uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+        with:
+          tool: cross@${{ env.CROSS_VERSION }}
 
       - name: Install cargo-auditable
         shell: bash
@@ -109,9 +113,33 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
 
+      - name: Check GitLab Windows bootstrap syntax
+        if: matrix.target_type == 'windows'
+        shell: pwsh
+        run: |
+          $parseErrors = $null
+          $tokens = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/var/build_windows.ps1", [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
+
       - name: SBOM adapter unit tests
         if: matrix.build == 'linux'
         run: python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
+
+      - name: Link recorder unit tests
+        if: matrix.build == 'linux'
+        run: python3 scripts/test-sbom-linker.py
+
+      - name: Install Grype for advisory matching controls
+        if: matrix.build == 'linux'
+        run: |
+          bash scripts/install-grype.sh "$RUNNER_TEMP/psonoci-grype"
+          echo "$RUNNER_TEMP/psonoci-grype" >> "$GITHUB_PATH"
+
+      - name: Verify Cargo and native advisory matching
+        if: matrix.build == 'linux'
+        run: python3 scripts/test-sbom-scanner.py
 
       # - name: cargo test
       #   run: |
@@ -135,7 +163,7 @@ jobs:
             python3 scripts/build-with-runtime-evidence.py --target "${{ matrix.target }}"
           fi
 
-      - name: Test CRA SBOM generation and CycloneDX schema
+      - name: Test release SBOM generation and CycloneDX schema
         if: matrix.build == 'linux'
         shell: bash
         env:
@@ -155,14 +183,14 @@ jobs:
             validate --input-file /work/psonoci-ci.cdx.json --input-version v1_6 --fail-on-errors
 
       - name: upload unix artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: matrix.target_type == 'unix'
         with:
           name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/psonoci
 
       - name: upload windows artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: matrix.target_type == 'windows'
         with:
           name: psonoci-${{ env.SHA8 }}-${{ matrix.target }}

@@ -6,9 +6,12 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 from pathlib import Path
+
+import runtime_evidence as runtime_info
 
 ROOT = Path(__file__).resolve().parents[1]
 CROSS_LINKERS = {
@@ -16,7 +19,6 @@ CROSS_LINKERS = {
     'aarch64-unknown-linux-musl': 'aarch64-linux-musl-gcc',
     'armv7-unknown-linux-musleabihf': 'arm-linux-musleabihf-gcc',
     'armv7-unknown-linux-gnueabihf': 'arm-linux-gnueabihf-gcc',
-    'x86_64-pc-windows-gnu': 'x86_64-w64-mingw32-gcc',
 }
 
 
@@ -24,8 +26,17 @@ def run(command, **kwargs):
     return subprocess.run(command, cwd=ROOT, check=True, **kwargs)
 
 
-def enrich_musl_runtime(target, evidence, environment):
-    if 'musl' not in target:
+def installed_auditable_version(environment):
+    output = subprocess.check_output(['cargo', 'install', '--list'], cwd=ROOT, env=environment, text=True)
+    versions = re.findall(r'^cargo-auditable v([^\s:]+):$', output, re.M)
+    expected = runtime_info.pinned_tools()['CARGO_AUDITABLE_VERSION']
+    if versions != [expected]:
+        raise RuntimeError(f'Install cargo-auditable {expected}; installed Cargo package record is {versions}')
+    return versions[0]
+
+
+def enrich_rust_runtime(target, evidence, environment):
+    if target not in runtime_info.RUST_RUNTIME_TARGETS:
         return
     # Cross captures inputs inside its toolchain. Verify them against the same
     # target distribution installed on the host before assigning Cargo versions.
@@ -75,9 +86,20 @@ def main():
     parser.add_argument('--linker', help='Explicit real linker driver; no shell command')
     args = parser.parse_args()
     environment = dict(os.environ)
+    if args.cross and 'windows' in args.target:
+        parser.error('Windows runtime evidence requires a native Windows build runner')
+    auditable_version = installed_auditable_version(environment)
+    for key, value in environment.items():
+        prefix = args.target.replace('-', '_').upper()
+        if key in ('OPENSSL_NO_VENDOR', prefix + '_OPENSSL_NO_VENDOR') and value != '0':
+            parser.error(f'{key} disables the required vendored OpenSSL build')
     image = 'native'
     target_key = args.target.upper().replace('-', '_')
     if args.cross:
+        cross_version = subprocess.check_output(['cross', '--version'], env=environment, text=True).splitlines()[0]
+        expected_cross = runtime_info.pinned_tools()['CROSS_VERSION']
+        if cross_version != f'cross {expected_cross}':
+            parser.error(f'Cross {expected_cross} is required; found {cross_version}')
         supplied_image = bool(args.image)
         if not args.image:
             # The Windows GNU target uses a local Dockerfile in Cross.toml.
@@ -126,7 +148,7 @@ def main():
     tools.mkdir(parents=True, exist_ok=True)
     wrapper = tools / ('sbom-linker.exe' if os.name == 'nt' else 'sbom-linker')
     compile_env = environment | {'PSONOCI_SBOM_TARGET': args.target, 'PSONOCI_SBOM_LINKER': linker,
-                                 'PSONOCI_SBOM_IMAGE': image}
+                                 'PSONOCI_SBOM_IMAGE': image, 'PSONOCI_CARGO_AUDITABLE_VERSION': auditable_version}
     command = ['rustc', '--edition=2024', str(ROOT / 'scripts/sbom-linker.rs'), '-o', str(wrapper)]
     if args.cross:
         if platform.system() != 'Linux' or platform.machine() not in ('x86_64', 'AMD64'):
@@ -154,7 +176,7 @@ def main():
     binary = release / ('psonoci.exe' if 'windows' in args.target else 'psonoci')
     run([os.fspath(Path(os.sys.executable)), str(ROOT / 'scripts/runtime_evidence.py'),
          '--target', args.target, '--binary', str(binary), '--capture', str(capture), '--output', str(evidence)])
-    enrich_musl_runtime(args.target, evidence, environment)
+    enrich_rust_runtime(args.target, evidence, environment)
     print(f'Runtime evidence: {evidence}')
 
 

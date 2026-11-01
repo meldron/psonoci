@@ -3,7 +3,7 @@
 
 Syft owns binary package discovery, package references, and dependency edges.
 This standard-library-only adapter adds release context and the fields required
-by psonoci's CRA/BSI SBOM policy. It deliberately fails when Syft and Cargo do
+by psonoci's release SBOM policy. It deliberately fails when Syft and Cargo do
 not describe the same runtime packages.
 """
 
@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tarfile
@@ -29,7 +30,7 @@ import runtime_evidence as runtime_info  # noqa: E402
 
 
 TOOL_NAME = "psonoci-sbom-adapter"
-TOOL_VERSION = "3.1.0"
+TOOL_VERSION = "3.2.0"
 CDX_SCHEMA = "https://cyclonedx.org/schema/bom-1.6.schema.json"
 BSI_TAXONOMY_VERSION = "0.1.2"
 BSI_TR_VERSION = "2.1.0"
@@ -107,21 +108,37 @@ def verify_binary_target(path: Path, target: str) -> None:
 
 
 def archive_member_hashes(artifact: Path, filename: str) -> list[str]:
+    """Inventory the entire supported delivery archive: one binary, no links."""
     hashes: list[str] = []
+    def check_name(name):
+        path = Path(name)
+        if "\\" in name or path.is_absolute() or '..' in path.parts or (path.parts and ':' in path.parts[0]):
+            raise SbomError('release archive contains an unsafe member path')
     if artifact.suffix == ".zip":
         with zipfile.ZipFile(artifact) as archive:
-            for name in archive.namelist():
-                if Path(name).name == filename and not name.endswith("/"):
-                    with archive.open(name) as handle:
-                        hashes.append(sha512_stream(handle))
+            for member in archive.infolist():
+                check_name(member.filename)
+                kind = stat.S_IFMT(member.external_attr >> 16)
+                if kind not in (0, stat.S_IFREG, stat.S_IFDIR):
+                    raise SbomError('release archive contains a non-regular member')
+                if member.is_dir():
+                    continue
+                if Path(member.filename).name != filename:
+                    raise SbomError('release archive contains an uninventoried file')
+                with archive.open(member) as handle:
+                    hashes.append(sha512_stream(handle))
     elif artifact.name.endswith(".tar.gz"):
         with tarfile.open(artifact, "r:gz") as archive:
             for member in archive.getmembers():
-                if member.isfile() and Path(member.name).name == filename:
-                    handle = archive.extractfile(member)
-                    if handle:
-                        with handle:
-                            hashes.append(sha512_stream(handle))
+                check_name(member.name)
+                if member.isdir():
+                    continue
+                if not member.isfile():
+                    raise SbomError('release archive contains a non-regular member')
+                if Path(member.name).name != filename:
+                    raise SbomError('release archive contains an uninventoried file')
+                with archive.extractfile(member) as handle:
+                    hashes.append(sha512_stream(handle))
     else:
         raise SbomError(f"unsupported release archive format: {artifact}")
     return hashes
@@ -323,6 +340,8 @@ def native_components(
         trigger = next((key for key in runtime_ids if key[0] == native["trigger_package"]), None)
         if not trigger:
             continue
+        if native['name'] == 'OpenSSL' and 'vendored' not in nodes[runtime_ids[trigger]].get('features', []):
+            raise SbomError('OpenSSL source attribution requires the active openssl-sys vendored feature')
         source = next(
             (packages[dep["pkg"]] for dep in nodes[runtime_ids[trigger]].get("deps", [])
              if packages[dep["pkg"]]["name"] == native["source_package"]),
@@ -347,6 +366,8 @@ def native_components(
                 ),
             }
         )
+        if cpe := runtime_info.native_cpe(native['name'], version):
+            components[-1]['cpe'] = cpe
         edges.append((trigger, ref))
     return components, edges
 
@@ -392,6 +413,9 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     evidence_path = args.runtime_evidence or args.binary.with_name("psonoci.runtime.json")
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     runtime_info.validate_evidence(evidence, sha512(args.binary), args.target, runtime_info.imports(args.binary.read_bytes()))
+    pins = runtime_info.pinned_tools()
+    if args.cargo_auditable_version != pins['CARGO_AUDITABLE_VERSION'] or evidence.get('cargoAuditableVersion') != args.cargo_auditable_version:
+        raise SbomError('Cargo auditable version claim must match the checked build installation record')
 
     raw = json.loads(args.syft_input.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -399,8 +423,8 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
     if raw.get("bomFormat") != "CycloneDX" or raw.get("specVersion") != "1.6":
         raise SbomError("Syft input must be CycloneDX 1.6 JSON")
     syft_tools = raw.get("metadata", {}).get("tools", {}).get("components", [])
-    if not any(item.get("name") == "syft" for item in syft_tools):
-        raise SbomError("input does not identify Syft as its generator")
+    if not any(item.get("name") == "syft" and item.get('version') == pins['SYFT_VERSION'] for item in syft_tools):
+        raise SbomError('input must identify the pinned actual Syft version')
 
     metadata = cargo_metadata(args.manifest_path, args.target)
     expected_graph = runtime_graph(args.manifest_path, args.target)
@@ -463,6 +487,8 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
         for key in sorted(runtime - {root_key})
     ]
     extra_components, native_edges = native_components(metadata, runtime, overrides)
+    if any(c['name'] == 'OpenSSL' for c in extra_components) and evidence.get('buildPolicy', {}).get('opensslVendoredEnvironmentAllowed') is not True:
+        raise SbomError('OpenSSL vendored attribution requires the captured build environment policy')
     components.extend(extra_components)
     runtime_components = []
     for item in evidence["components"]:
@@ -478,6 +504,12 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
         }
         if item.get("versionContext"):
             component["properties"].append({"name": "psonoci:runtime:version-context", "value": item["versionContext"]})
+        if item.get('dependencyGraph'):
+            component['properties'].append({'name': 'psonoci:runtime:dependency-graph', 'value': item['dependencyGraph']})
+        if item.get('licenseSource'):
+            component['properties'].append({'name': 'psonoci:runtime:license-source', 'value': json.dumps(item['licenseSource'], sort_keys=True)})
+        if item.get('cpe'):
+            component['cpe'] = item['cpe']
         if item.get("license"):
             component["licenses"] = runtime_licenses(item)
         if item["delivery"] == "bundled":
@@ -540,6 +572,9 @@ def _generate(args: argparse.Namespace) -> dict[str, Any]:
         parent = item.get('parentPurl', binary_ref)
         dependencies.setdefault(parent, set()).add(ref)
         dependencies.setdefault(ref, set()).update(item.get('dependsOn', []))
+    for item in evidence['components']:
+        if item.get('dependencyGraph') in ('unknown', 'incomplete') and not dependencies[item['purl']]:
+            del dependencies[item['purl']]
 
     now = (
         dt.datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), dt.timezone.utc)
@@ -725,6 +760,12 @@ def validate_document(bom: dict[str, Any]) -> None:
                         raise runtime_info.EvidenceError("runtime component imports differ from its evidence")
                     if item.get("license") and recorded.get("licenses") != runtime_licenses(item):
                         raise runtime_info.EvidenceError("runtime licensing differs from its evidence")
+                    if recorded.get('cpe') != item.get('cpe'):
+                        raise runtime_info.EvidenceError('runtime advisory identity differs from evidence')
+                    if item.get('dependencyGraph') and property_values(recorded, 'psonoci:runtime:dependency-graph') != [item['dependencyGraph']]:
+                        raise runtime_info.EvidenceError('runtime dependency graph knowledge differs from evidence')
+                    if item.get('licenseSource') and property_values(recorded, 'psonoci:runtime:license-source') != [json.dumps(item['licenseSource'], sort_keys=True)]:
+                        raise runtime_info.EvidenceError('runtime license source differs from evidence')
                     if item["purl"] not in graph.get(item.get('parentPurl', executable["bom-ref"]), []):
                         raise runtime_info.EvidenceError("runtime component is disconnected from the executable")
                     if set(item.get('dependsOn', [])) - set(graph.get(item['purl'], [])):
@@ -740,11 +781,19 @@ def validate_document(bom: dict[str, Any]) -> None:
 
     graph_ref_list = [item.get("ref") for item in bom.get("dependencies", [])]
     graph_refs = set(graph_ref_list)
-    if graph_refs != refs:
-        errors.append("dependency graph must contain every component exactly once")
+    uncertain = {c['bom-ref'] for c in components if property_values(c, 'psonoci:runtime:dependency-graph') in (['unknown'], ['incomplete'])}
+    if graph_refs - refs or refs - graph_refs - uncertain:
+        errors.append("dependency graph must contain every known component exactly once")
+    incomplete_scope = {ref for composition in bom.get('compositions', [])
+                        if composition.get('aggregate') in ('incomplete', 'unknown')
+                        for ref in composition.get('dependencies', [])}
+    if uncertain - incomplete_scope:
+        errors.append('uncertain runtime graphs require an explicit incomplete composition scope')
     if len(graph_ref_list) != len(graph_refs):
         errors.append("dependency graph contains duplicate component records")
     for item in bom.get("dependencies", []):
+        if item.get('ref') in uncertain and not item.get('dependsOn'):
+            errors.append('unknown dependency graph must be opaque, not an explicit empty leaf')
         if set(item.get("dependsOn", [])) - refs:
             errors.append(f"{item.get('ref')}: dependency graph has dangling references")
     if not bom.get("compositions"):
@@ -839,7 +888,7 @@ def parse_args() -> argparse.Namespace:
     generate_parser.add_argument("--release-version")
     generate_parser.add_argument("--manifest-path", type=Path, default=Path("Cargo.toml"))
     generate_parser.add_argument("--overrides", type=Path, default=Path("sbom/overrides.json"))
-    validate_parser = commands.add_parser("validate", help="apply psonoci's CRA/BSI policy")
+    validate_parser = commands.add_parser("validate", help="apply psonoci's release SBOM policy")
     validate_parser.add_argument("--input", required=True, type=Path)
     verify_parser = commands.add_parser(
         "verify-release", help="validate policy and bind a staged archive to its SBOM"
@@ -866,7 +915,7 @@ def main() -> int:
             print(f"wrote {args.output}: {len(bom['components'])} components")
         elif args.command == "validate":
             validate_document(json.loads(args.input.read_text(encoding="utf-8")))
-            print(f"validated {args.input}: psonoci CRA/BSI policy passed")
+            print(f"validated {args.input}: psonoci release SBOM policy passed")
         elif args.command == "verify-release":
             verify_release(json.loads(args.input.read_text(encoding="utf-8")), args.artifact)
             print(f"verified {args.artifact}: archive and SBOM evidence match")

@@ -18,12 +18,86 @@ import struct
 import subprocess
 import sys
 import tarfile
+
+if sys.version_info < (3, 11):
+    raise SystemExit('psonoci SBOM tooling requires Python 3.11 or newer')
+import tomllib
 from pathlib import Path
 from urllib.parse import quote
 
+RUST_RUNTIME_TARGETS = frozenset({
+    'x86_64-unknown-linux-musl', 'aarch64-unknown-linux-musl',
+    'armv7-unknown-linux-musleabihf', 'armv7-unknown-linux-gnueabihf',
+    'x86_64-apple-darwin', 'aarch64-apple-darwin',
+    'x86_64-pc-windows-gnu', 'x86_64-pc-windows-msvc',
+})
+
+
+def pinned_tools() -> dict[str, str]:
+    path = Path(__file__).resolve().parents[1] / 'sbom/tool-versions.env'
+    return dict(line.split('=', 1) for line in path.read_text().splitlines()
+                if line and not line.startswith('#'))
 
 class EvidenceError(RuntimeError):
     pass
+
+
+def native_cpe(name: str, version: str) -> str | None:
+    # Reviewed NVD product names (CVE-2025-26519 and OpenSSL's NVD product).
+    # Do not infer identifiers for GCC/Rust distributions or build-host DLLs.
+    products = {'musl': ('musl-libc', 'musl'), 'openssl': ('openssl', 'openssl')}
+    if name.lower() not in products:
+        return None
+    if not re.fullmatch(r'\d+(?:\.\d+)+(?:[a-z])?', version):
+        raise EvidenceError('reviewed native CPE requires an upstream release version')
+    vendor, product = products[name.lower()]
+    return f'cpe:2.3:a:{vendor}:{product}:{version}:*:*:*:*:*:*:*'
+
+
+def toolchain_sources(release: str, commit: str) -> tuple[dict, Path]:
+    if not re.fullmatch(r'\d+\.\d+\.\d+', release):
+        raise EvidenceError('Rust toolchain license sources require a reviewed release')
+    root = Path(__file__).resolve().parents[1] / 'sbom/toolchain-sources' / release
+    try:
+        record = json.loads((root / 'provenance.json').read_text())
+    except FileNotFoundError as error:
+        raise EvidenceError(f'Rust {release}: review bundled toolchain license sources first') from error
+    if (record.get('format'), record.get('rustRelease'), record.get('rustCommit')) != (1, release, commit):
+        raise EvidenceError('reviewed toolchain source identity differs from captured Rust')
+    for name, source in record['files'].items():
+        if Path(name).name != name or hashlib.sha256((root / name).read_bytes()).hexdigest() != source['sha256']:
+            raise EvidenceError('reviewed toolchain source checksum mismatch')
+    return record, root
+
+
+def toolchain_runtime(kind: str, release: str, commit: str) -> dict:
+    record, root = toolchain_sources(release, commit)
+    if kind == 'compiler-builtins':
+        package = tomllib.loads((root / 'compiler-builtins.Cargo.toml').read_text())['package']
+        item = identity('Rust compiler builtins', release, package['repository'], package['license'])
+        item['source'] = record['files']['compiler-builtins.Cargo.toml']['url']
+        item['versionContext'] = f"Rust distribution release; in-tree compiler_builtins declares {package['version']}; no registry-byte equivalence asserted"
+    elif kind == 'unwind':
+        item = identity('Rust LLVM unwind runtime', release, 'https://llvm.org/', 'LicenseRef-LLVM-libunwind')
+        item['licenseText'] = (root / 'libunwind.LICENSE.txt').read_text()
+        item['source'] = record['files']['libunwind.LICENSE.txt']['url']
+        item['versionContext'] = 'Rust target distribution release; in-tree LLVM libunwind source and complete license notice are recorded'
+    elif kind == 'startup':
+        licenses = set()
+        for name in ('crtbegin.c', 'crtend.c'):
+            match = re.search(r'SPDX-License-Identifier:\s*([^\r\n]+)', (root / name).read_text())
+            if not match:
+                raise EvidenceError('reviewed startup source has no license declaration')
+            licenses.add(match[1].strip())
+        if len(licenses) != 1:
+            raise EvidenceError('startup source licenses require separate attribution')
+        item = identity('Rust target startup runtime', release, 'https://llvm.org/', licenses.pop())
+        item['source'] = record['crtBuildSource']
+        item['versionContext'] = 'Rust target distribution release; startup objects are built from the pinned LLVM compiler-rt sources'
+    else:
+        raise EvidenceError('unknown reviewed toolchain runtime')
+    item['licenseSource'] = record
+    return item
 
 
 def digest(path: Path) -> str:
@@ -36,6 +110,29 @@ def digest(path: Path) -> str:
 
 def normalized_path(value: str) -> str:
     return posixpath.normpath(value.replace('\\', '/'))
+
+
+def root_object_input(entry: dict, capture: dict, sha: str) -> dict | None:
+    role = entry.get('role')
+    if role not in ('root-rust-object', 'rustc-symbol-object', 'auditable-metadata-object'):
+        return None
+    path = normalized_path(entry['path'])
+    output = normalized_path(capture.get('output', ''))
+    directory = posixpath.dirname(output)
+    name = posixpath.basename(path)
+    stem = posixpath.splitext(posixpath.basename(output))[0]
+    explicit = path in {normalized_path(a) for a in capture['arguments']}
+    same_directory = posixpath.dirname(path) == directory
+    valid = explicit and (
+        (role == 'root-rust-object' and same_directory and name.startswith(stem + '.') and name.endswith(('.rcgu.o', '.rcgu.obj')))
+        or (role == 'auditable-metadata-object' and same_directory and name == 'psonoci_audit_data.o')
+        or (role == 'rustc-symbol-object' and name == 'symbols.o'
+            and posixpath.dirname(posixpath.dirname(path)) == directory
+            and posixpath.basename(posixpath.dirname(path)).startswith('rustc')))
+    if not valid:
+        raise EvidenceError('root object is not a recognized explicit compiler output')
+    return {'path': path, 'sha512': sha, 'role': role,
+            'method': 'explicit final root-crate link object; compiler/auditable output layout verified'}
 
 
 @functools.lru_cache(maxsize=16)
@@ -136,63 +233,89 @@ def macho_runtime_fingerprint(data: bytes) -> str:
     return hashlib.sha512(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
-def elf_soname(data: bytes) -> str | None:
-    """Read DT_SONAME from a resolved shared library, including .so symlinks."""
-    if data[:4] != b'\x7fELF':
-        return None
-    if data[5] != 1 or data[4] not in (1, 2):
-        raise EvidenceError('unsupported ELF byte order or class')
+def elf_runtime(data: bytes) -> tuple[list[str], str | None, str | None]:
+    """Read the loader's PT_DYNAMIC data; section headers are optional in ELF."""
+    if len(data) < 52 or data[:4] != b'\x7fELF' or data[5] != 1 or data[4] not in (1, 2):
+        raise EvidenceError('unsupported or truncated ELF header')
     wide = data[4] == 2
-    offset = struct.unpack_from('<Q' if wide else '<I', data, 40 if wide else 32)[0]
-    size, count = struct.unpack_from('<HH', data, 58 if wide else 46)
-    sections = []
+    header_size, entry_size = (64, 56) if wide else (52, 32)
+    if len(data) < header_size:
+        raise EvidenceError('truncated ELF header')
+    offset = struct.unpack_from('<Q' if wide else '<I', data, 32 if wide else 28)[0]
+    size, count = struct.unpack_from('<HH', data, 54 if wide else 42)
+    if count == 0xffff or (count and (not offset or size < entry_size or offset + size * count > len(data))):
+        raise EvidenceError('unsupported or invalid ELF program headers')
+    segments = []
+    dynamic = None
+    interpreter = None
     for i in range(count):
         start = offset + i * size
-        kind = struct.unpack_from('<I', data, start + 4)[0]
-        location, length = struct.unpack_from('<QQ' if wide else '<II', data, start + (24 if wide else 16))
-        link = struct.unpack_from('<I', data, start + (40 if wide else 24))[0]
-        sections.append((kind, location, length, link))
-    for kind, location, length, link in sections:
-        if kind == 6:
-            strings = sections[link][1]
-            for entry in range(location, location + length, 16 if wide else 8):
-                tag, value = struct.unpack_from('<QQ' if wide else '<II', data, entry)
-                if tag == 14:
-                    return cstring(data, strings + value)
-    return None
+        kind = struct.unpack_from('<I', data, start)[0]
+        if wide:
+            location, address, _, length = struct.unpack_from('<QQQQ', data, start + 8)
+        else:
+            location, address, _, length = struct.unpack_from('<IIII', data, start + 4)
+        if location + length > len(data):
+            raise EvidenceError('ELF segment extends beyond the file')
+        if kind == 1:
+            segments.append((address, length, location))
+        elif kind == 2:
+            if dynamic is not None:
+                raise EvidenceError('multiple ELF dynamic segments')
+            dynamic = (location, length)
+        elif kind == 3:
+            value = data[location:location + length]
+            if interpreter is not None or not value.endswith(b'\0') or b'\0' in value[:-1]:
+                raise EvidenceError('invalid ELF interpreter')
+            interpreter = value[:-1].decode('utf-8')
+    if dynamic is None:
+        # An executable with no PT_DYNAMIC is static. Relocatable objects are
+        # inspected separately for musl's allocated version data.
+        return [], None, interpreter
+    location, length = dynamic
+    stride = 16 if wide else 8
+    if not length or length % stride:
+        raise EvidenceError('invalid ELF dynamic segment size')
+    tags = {}
+    terminated = False
+    for start in range(location, location + length, stride):
+        tag, value = struct.unpack_from('<qQ' if wide else '<iI', data, start)
+        if tag == 0:
+            terminated = True
+            break
+        tags.setdefault(tag, []).append(value)
+    if not terminated:
+        raise EvidenceError('unterminated ELF dynamic segment')
+    if not (tags.get(1) or tags.get(14)):
+        return [], None, interpreter
+    if len(tags.get(5, [])) != 1 or len(tags.get(10, [])) != 1 or len(tags.get(14, [])) > 1:
+        raise EvidenceError('ELF dynamic strings have no unambiguous address/size')
+    address, string_size = tags[5][0], tags[10][0]
+    locations = {base + address - virtual for virtual, length, base in segments
+                 if virtual <= address and address + string_size <= virtual + length}
+    if len(locations) != 1 or not string_size:
+        raise EvidenceError('ELF dynamic string table is outside file-backed load segments')
+    base = locations.pop()
+    strings = data[base:base + string_size]
+    def dynamic_string(value):
+        return cstring(strings, value)
+    names = [dynamic_string(value) for value in tags.get(1, [])]
+    soname = dynamic_string(tags[14][0]) if tags.get(14) else None
+    return names, soname, interpreter
+
+
+def elf_soname(data: bytes) -> str | None:
+    return elf_runtime(data)[1] if data[:4] == b'\x7fELF' else None
 
 
 def imports(data: bytes) -> list[dict]:
     """Read ELF DT_NEEDED, Mach-O load commands, and PE normal/delay imports."""
     result = []
     if data[:4] == b'\x7fELF':
-        if data[5] != 1 or data[4] not in (1, 2):
-            raise EvidenceError('unsupported ELF byte order or class')
-        wide = data[4] == 2
-        offset = struct.unpack_from('<Q' if wide else '<I', data, 40 if wide else 32)[0]
-        size, count, _ = struct.unpack_from('<HHH', data, 58 if wide else 46)
-        sections = []
-        for i in range(count):
-            start = offset + i * size
-            kind = struct.unpack_from('<I', data, start + 4)[0]
-            location, length = struct.unpack_from('<QQ' if wide else '<II', data, start + (24 if wide else 16))
-            link = struct.unpack_from('<I', data, start + (40 if wide else 24))[0]
-            sections.append((kind, location, length, link))
-        for kind, location, length, link in sections:
-            if kind == 6:
-                strings = sections[link][1]
-                for entry in range(location, location + length, 16 if wide else 8):
-                    tag, value = struct.unpack_from('<QQ' if wide else '<II', data, entry)
-                    if tag == 1:
-                        result.append({'name': cstring(data, strings + value)})
-        program_offset = struct.unpack_from('<Q' if wide else '<I', data, 32 if wide else 28)[0]
-        program_size, program_count = struct.unpack_from('<HH', data, 54 if wide else 42)
-        for i in range(program_count):
-            start = program_offset + i * program_size
-            if struct.unpack_from('<I', data, start)[0] == 3:
-                location = struct.unpack_from('<Q' if wide else '<I', data, start + (8 if wide else 4))[0]
-                interpreter = cstring(data, location)
-                result.append({'name': interpreter.rsplit('/', 1)[-1], 'interpreterPath': interpreter})
+        names, _, interpreter = elf_runtime(data)
+        result.extend({'name': name} for name in names)
+        if interpreter is not None:
+            result.append({'name': interpreter.rsplit('/', 1)[-1], 'interpreterPath': interpreter})
     elif data[:4] == b'\xcf\xfa\xed\xfe':
         commands = struct.unpack_from('<I', data, 16)[0]
         offset = 32
@@ -320,6 +443,8 @@ def identity(name, version, creator, license_id=None):
             'evidence': [], 'imports': []}
     if license_id:
         item['license'] = license_id
+    if cpe := native_cpe(name, version):
+        item['cpe'] = cpe
     return item
 
 
@@ -337,6 +462,10 @@ def validate_evidence(document: dict, binary_hash: str, target: str, required_im
         raise EvidenceError('runtime evidence requires SHA-512 identities for link inputs')
     inventory = {i['sha512'] for i in inputs}
     covered = set(document.get('cargoInputHashes', []))
+    for item in document.get('rootObjectInputs', []):
+        if item.get('role') not in ('root-rust-object', 'rustc-symbol-object', 'auditable-metadata-object') or not item.get('method'):
+            raise EvidenceError('root object ownership evidence is missing')
+        covered.add(item['sha512'])
     for item in document.get('cargoNativeInputs', []):
         if not item.get('package') or not item.get('version') or not all(re.fullmatch(r'[0-9a-f]{64}', item.get(field, '')) for field in ('registryFileSha256', 'registryPackageSha256')):
             raise EvidenceError('native Cargo input lacks registry identity evidence')
@@ -349,14 +478,26 @@ def validate_evidence(document: dict, binary_hash: str, target: str, required_im
             raise EvidenceError('runtime component lacks an exact identity')
         if item['version'].lower() in ('unknown', 'unspecified', '*'):
             raise EvidenceError('runtime component version is unresolved')
-        if item['name'] in ('Rust standard library', 'Rust target startup runtime') and item['version'] != rust_release[1]:
+        if item['name'] in ('Rust standard library', 'Rust target startup runtime', 'Rust compiler builtins', 'Rust LLVM unwind runtime') and item['version'] != rust_release[1]:
             raise EvidenceError('runtime component version differs from the captured Rust release')
         if item.get('delivery') not in ('bundled', 'external'):
             raise EvidenceError('runtime component delivery boundary is required')
+        if expected_cpe := native_cpe(item['name'], item['version']):
+            if item.get('cpe') != expected_cpe:
+                raise EvidenceError('native advisory identity differs from reviewed mapping')
+        if item.get('dependencyGraph') not in (None, 'unknown', 'incomplete', 'complete'):
+            raise EvidenceError('invalid runtime dependency graph knowledge')
         if item['delivery'] == 'bundled' and not item.get('license'):
             raise EvidenceError('bundled runtime component requires license metadata')
         if not item.get('evidence'):
             raise EvidenceError('runtime component requires identity evidence')
+        kinds = {'Rust compiler builtins': 'compiler-builtins', 'Rust LLVM unwind runtime': 'unwind',
+                 'Rust target startup runtime': 'startup'}
+        if item['name'] in kinds:
+            expected = toolchain_runtime(kinds[item['name']], rust_release[1], rust_commit[0].split(': ', 1)[1])
+            for field in ('license', 'licenseText', 'licenseSource'):
+                if item.get(field) != expected.get(field):
+                    raise EvidenceError('toolchain runtime licensing differs from reviewed source')
         for proof in item['evidence']:
             if not re.fullmatch(r'[0-9a-f]{128}', proof.get('sha512', '')) or not proof.get('method'):
                 raise EvidenceError('runtime component evidence lacks a hash or identification method')
@@ -381,7 +522,7 @@ def validate_evidence(document: dict, binary_hash: str, target: str, required_im
                 or provenance.get('rustRelease') != rust_release[1]
                 or not re.fullmatch(r'[0-9a-f]{64}', provenance.get('lockSha256', ''))
                 or provenance.get('lockUrl') != f'https://raw.githubusercontent.com/rust-lang/rust/{commit}/library/Cargo.lock'
-                or provenance.get('tool') != {'name': 'psonoci-rust-runtime-enricher', 'version': '1.0.0'}):
+                or provenance.get('tool') != {'name': 'psonoci-rust-runtime-enricher', 'version': '1.1.0'}):
             raise EvidenceError('Rust runtime registry provenance differs from captured toolchain')
         records = provenance.get('packages', [])
         if len(records) != sum(len(c['evidence']) for c in registry_components):
@@ -434,6 +575,7 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
     inputs = []
     cargo_hashes = []
     cargo_native = []
+    root_objects = []
     unknown = []
     gcc = capture.get('compiler') or {}
     gcc_hashes = {digest(directory / file) for file in gcc.get('files', [])}
@@ -454,6 +596,7 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
 
     def register(component, proof, delivery='bundled', imported_names=()):
         component['delivery'] = delivery
+        component.setdefault('dependencyGraph', 'unknown')
         existing = components.setdefault(component['purl'], component)
         if existing['delivery'] != delivery:
             raise EvidenceError('one runtime identity crosses delivery boundaries')
@@ -466,7 +609,9 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
         sha = digest(file)
         inputs.append({'path': path, 'sha512': sha})
         proof = {'path': path, 'sha512': sha, 'method': ''}
-        if sha in registry:
+        if root_object := root_object_input(entry, capture, sha):
+            root_objects.append(root_object)
+        elif sha in registry:
             provider = registry[sha]
             if not provider.get('source') or not provider.get('method'):
                 raise EvidenceError('provider override requires an identity source and method')
@@ -483,10 +628,16 @@ def collect(binary: Path, target: str, directory: Path, provider_path: Path) -> 
             proof['method'] = 'musl startup object beside the linked, versioned libc.a in the target sysroot'
             register(component, proof)
         elif '/rustlib/' in path and re.fullmatch(r'crt(?:begin|end)\w*\.o', name):
-            component = identity('Rust target startup runtime', release[1], 'https://www.rust-lang.org/', 'GPL-3.0-or-later WITH GCC-exception-3.1')
-            component['source'] = f'https://github.com/rust-lang/rust/tree/{commit[1]}/src/ci'
-            component['versionContext'] = 'Rust target distribution release; this is not a claim about the upstream GCC source version'
+            component = toolchain_runtime('startup', release[1], commit[1])
             proof['method'] = 'startup object delivered in the exact Rust target distribution, bound by input hash'
+            register(component, proof)
+        elif '/rustlib/' in path and re.fullmatch(r'libcompiler_builtins-[0-9a-f]+\.rlib', name):
+            component = toolchain_runtime('compiler-builtins', release[1], commit[1])
+            proof['method'] = 'linked compiler-builtins sysroot archive; reviewed exact-commit in-tree manifest license'
+            register(component, proof)
+        elif '/rustlib/' in path and name == 'libunwind.a':
+            component = toolchain_runtime('unwind', release[1], commit[1])
+            proof['method'] = 'linked native unwind archive in the Rust distribution; pinned bootstrap recipe and complete LLVM libunwind license'
             register(component, proof)
         elif '/rustlib/' in path and (name.endswith('.rlib') or name in ('libunwind.a',)):
             component = identity('Rust standard library', release[1], 'https://www.rust-lang.org/', 'MIT OR Apache-2.0')
@@ -613,7 +764,12 @@ try { $s=New-Object System.Text.StringBuilder 32768; if ([NativeRuntime]::GetMod
                 'capturedAt': dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'rustc': capture['rustc'], 'builderImage': capture['builderImage'],
                 'imports': imported, 'inputs': inputs, 'cargoInputHashes': cargo_hashes, 'cargoNativeInputs': cargo_native,
+                'rootObjectInputs': root_objects,
                 'components': sorted(components.values(), key=lambda item: item['purl'])}
+    if 'buildPolicy' in capture:
+        document['buildPolicy'] = capture['buildPolicy']
+    if 'cargoAuditableVersion' in capture:
+        document['cargoAuditableVersion'] = capture['cargoAuditableVersion']
     if post_link:
         document['postLink'] = post_link
     validate_evidence(document, binary_hash, target, imported)

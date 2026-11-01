@@ -82,16 +82,16 @@ class RustRuntimeEnrichmentTests(unittest.TestCase):
                 self.assertEqual({c['purl'] for c in crates}, {'pkg:cargo/cfg-if@1.0.4', 'pkg:cargo/libc@0.2.178'})
                 self.assertEqual(len(result['inputs']), len(evidence['inputs']))
                 self.assertEqual(len(next(c for c in result['components'] if c['name'] == 'Rust standard library')['evidence']), 1)
-                self.assertTrue(all(c['dependsOn'] == [evidence['components'][0]['purl']] for c in crates))
+                self.assertTrue(all(c['dependsOn'] == [] and c['dependencyGraph'] == 'incomplete' for c in crates))
                 self.assertNotIn('rustStdRegistry', evidence)
 
-    def test_every_release_musl_target_is_supported(self):
+    def test_every_release_target_is_supported(self):
         workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/release.yml').read_text()
-        targets = set(re.findall(r'target: (\S*musl\S*)', workflow))
+        targets = set(re.findall(r'target: (\S+)' , workflow))
         self.assertEqual(targets, enrichment.SUPPORTED_TARGETS)
 
-    def test_build_helper_enriches_all_musl_targets_and_skips_other_platforms(self):
-        for target in enrichment.SUPPORTED_TARGETS | {'armv7-unknown-linux-gnueabihf', 'x86_64-apple-darwin', 'x86_64-pc-windows-gnu', 'x86_64-pc-windows-msvc'}:
+    def test_build_helper_enriches_release_targets_and_skips_unknown_targets(self):
+        for target in enrichment.SUPPORTED_TARGETS | {'unsupported-target'}:
             with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 evidence = root / 'psonoci.runtime.json'
@@ -104,7 +104,7 @@ class RustRuntimeEnrichmentTests(unittest.TestCase):
                         Path(command[command.index('--output') + 1]).write_text('enriched evidence')
 
                 with patch.object(helper, 'ROOT', root), patch.object(helper, 'run', side_effect=run), patch.object(helper.subprocess, 'check_output', return_value='/exact/sysroot\n') as sysroot:
-                    helper.enrich_musl_runtime(target, evidence, {})
+                    helper.enrich_rust_runtime(target, evidence, {})
                 if target in enrichment.SUPPORTED_TARGETS:
                     self.assertEqual(evidence.read_text(), 'enriched evidence')
                     self.assertEqual(commands[0], ['rustup', 'target', 'add', target])
@@ -127,7 +127,7 @@ class RustRuntimeEnrichmentTests(unittest.TestCase):
 
             with patch.object(helper, 'ROOT', root), patch.object(helper, 'run', side_effect=run), patch.object(helper.subprocess, 'check_output', return_value='/sysroot\n'):
                 with self.assertRaises(subprocess.CalledProcessError):
-                    helper.enrich_musl_runtime('aarch64-unknown-linux-musl', evidence, {})
+                    helper.enrich_rust_runtime('aarch64-unknown-linux-musl', evidence, {})
             self.assertEqual(evidence.read_text(), 'original evidence')
 
     def test_modified_registry_archive_source_lock_and_sysroot_fail(self):
@@ -145,6 +145,44 @@ class RustRuntimeEnrichmentTests(unittest.TestCase):
                     evidence['rustc'] = evidence['rustc'].replace('a' * 40, 'b' * 40)
                 with self.assertRaises(sbom.runtime_info.EvidenceError):
                     enrichment.enrich(evidence, catalog, sysroot)
+
+    def test_prepare_reuses_verified_cache_without_network_even_offline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, catalog, _ = self.fixture(Path(directory))
+            with patch.object(enrichment, 'download', side_effect=AssertionError('unexpected network')):
+                enrichment.prepare(evidence, catalog)
+                enrichment.prepare(evidence, catalog, offline=True)
+
+    def test_prepare_offline_missing_and_corrupt_cache_fail_with_recovery(self):
+        for part in ('lock', 'package', 'corrupt'):
+            with self.subTest(part=part), tempfile.TemporaryDirectory() as directory:
+                evidence, catalog, _ = self.fixture(Path(directory))
+                if part == 'lock':
+                    (catalog / 'Cargo.lock').unlink()
+                elif part == 'package':
+                    next(catalog.glob('*.crate')).unlink()
+                else:
+                    next(catalog.glob('*.crate')).write_bytes(b'partial')
+                with patch.object(enrichment, 'download', side_effect=AssertionError('unexpected network')):
+                    with self.assertRaises(sbom.runtime_info.EvidenceError):
+                        enrichment.prepare(evidence, catalog, offline=True)
+
+    def test_failed_download_cannot_poison_valid_cached_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, catalog, _ = self.fixture(Path(directory))
+            before = {p.name: p.read_bytes() for p in catalog.iterdir()}
+            with patch.object(enrichment, 'download', side_effect=[before['Cargo.lock'], b'partial']):
+                with self.assertRaisesRegex(sbom.runtime_info.EvidenceError, 'downloaded registry checksum mismatch'):
+                    enrichment.prepare(evidence, catalog, refresh=True)
+            self.assertEqual(before, {p.name: p.read_bytes() for p in catalog.iterdir()})
+
+    def test_build_helper_checks_plugin_installation_record(self):
+        with patch.object(helper.subprocess, 'check_output', return_value='cargo-auditable v0.7.5:\n    cargo-auditable\n'):
+            self.assertEqual(helper.installed_auditable_version({}), '0.7.5')
+        for output in ('cargo 1.94.1\n', 'cargo-auditable v0.7.4:\n    cargo-auditable\n'):
+            with self.subTest(output=output), patch.object(helper.subprocess, 'check_output', return_value=output):
+                with self.assertRaises(RuntimeError):
+                    helper.installed_auditable_version({})
 
     def test_enriched_evidence_rejects_changed_registry_provenance(self):
         with tempfile.TemporaryDirectory() as directory:

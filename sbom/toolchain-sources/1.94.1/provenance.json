@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "rustRelease": "1.94.1",
+  "rustCommit": "e408947bfd200af42db322daf0fadfe7e26d3bd1",
+  "llvmCommit": "00d23d10dc48c6bb9d57ba96d4a748d85d77d0c7",
+  "distributionSource": "https://github.com/rust-lang/rust/blob/e408947bfd200af42db322daf0fadfe7e26d3bd1/src/bootstrap/src/core/build_steps/compile.rs",
+  "crtBuildSource": "https://github.com/rust-lang/rust/blob/e408947bfd200af42db322daf0fadfe7e26d3bd1/src/bootstrap/src/core/build_steps/llvm.rs#L1504",
+  "files": {
+    "compiler-builtins.Cargo.toml": {
+      "url": "https://github.com/rust-lang/rust/blob/e408947bfd200af42db322daf0fadfe7e26d3bd1/library/compiler-builtins/compiler-builtins/Cargo.toml",
+      "sha256": "4633d08478ed8eb8ddb27ca271c44146edec3eaef9780af471ccb590f2105f57"
+    },
+    "libunwind.LICENSE.txt": {
+      "url": "https://github.com/rust-lang/llvm-project/blob/00d23d10dc48c6bb9d57ba96d4a748d85d77d0c7/libunwind/LICENSE.TXT",
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+    },
+    "crtbegin.c": {
+      "url": "https://github.com/rust-lang/llvm-project/blob/00d23d10dc48c6bb9d57ba96d4a748d85d77d0c7/compiler-rt/lib/builtins/crtbegin.c",
+      "sha256": "3c6e3dc6145c336c0c042674665f11342104ec23142f8e28a71ad8617c8b4044"
+    },
+    "crtend.c": {
+      "url": "https://github.com/rust-lang/llvm-project/blob/00d23d10dc48c6bb9d57ba96d4a748d85d77d0c7/compiler-rt/lib/builtins/crtend.c",
+      "sha256": "6d5a61b8f2f6fa541a12ec52aea40b5085e40fcf8626984d318523cb30335d06"
+    }
+  }
+}

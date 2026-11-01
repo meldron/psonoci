@@ -15,27 +15,31 @@ runtime = sbom.runtime_info
 
 
 def elf(names=(), version=None):
-    data = bytearray(512)
+    data = bytearray(1024)
     data[:6] = b'\x7fELF\x02\x01'
+    struct.pack_into('<H', data, 16, 3 if version is None else 1)
     struct.pack_into('<H', data, 18, 62)
-    struct.pack_into('<Q', data, 40, 64)
-    struct.pack_into('<HHH', data, 58, 64, 3, 2)
     if version is not None:
+        struct.pack_into('<Q', data, 40, 64)
+        struct.pack_into('<HHH', data, 58, 64, 3, 2)
         value = version.encode() + b'\0'
         struct.pack_into('<I', data, 128 + 4, 1)
         struct.pack_into('<Q', data, 128 + 8, 2)
-        struct.pack_into('<QQ', data, 128 + 24, 300, len(value))
-        data[300:300 + len(value)] = value
+        struct.pack_into('<QQ', data, 128 + 24, 600, len(value))
+        data[600:600 + len(value)] = value
     else:
+        struct.pack_into('<Q', data, 32, 64)
+        struct.pack_into('<HH', data, 54, 56, 2)
+        struct.pack_into('<IIQQQQQQ', data, 64, 1, 4, 0, 0x400000, 0, len(data), len(data), 4096)
         strings = b'\0'
         for index, name in enumerate(names):
             struct.pack_into('<QQ', data, 256 + index * 16, 1, len(strings))
             strings += name.encode() + b'\0'
-        struct.pack_into('<I', data, 128 + 4, 6)
-        struct.pack_into('<QQI', data, 128 + 24, 256, (len(names) + 1) * 16, 2)
-        struct.pack_into('<I', data, 192 + 4, 3)
-        struct.pack_into('<QQ', data, 192 + 24, 400, len(strings))
-        data[400:400 + len(strings)] = strings
+        location = 256 + len(names) * 16
+        struct.pack_into('<QQQQQQ', data, location, 5, 0x400000 + 600, 10, len(strings), 0, 0)
+        size = (len(names) + 3) * 16
+        struct.pack_into('<IIQQQQQQ', data, 120, 2, 4, 256, 0x400100, 0, size, size, 8)
+        data[600:600 + len(strings)] = strings
     return bytes(data)
 
 
@@ -104,11 +108,10 @@ class BinaryRuntimeTests(unittest.TestCase):
 
     def test_elf_interpreter_is_a_direct_external_runtime(self):
         data = bytearray(elf())
-        struct.pack_into('<Q', data, 32, 256)
-        struct.pack_into('<HH', data, 54, 56, 1)
-        struct.pack_into('<IIQ', data, 256, 3, 0, 320)
+        struct.pack_into('<HH', data, 54, 56, 3)
         value = b'/lib64/ld-linux-x86-64.so.2\0'
-        data[320:320 + len(value)] = value
+        struct.pack_into('<IIQQQQQQ', data, 176, 3, 4, 700, 0, 0, len(value), len(value), 1)
+        data[700:700 + len(value)] = value
         self.assertEqual(runtime.imports(bytes(data)), [{'name': 'ld-linux-x86-64.so.2',
                          'interpreterPath': '/lib64/ld-linux-x86-64.so.2'}])
 

@@ -70,12 +70,36 @@ fn library(path: &Path) -> bool {
             || name.ends_with(".dylib")
             || name.ends_with(".tbd")
             || name.contains(".so")
-            || (name.ends_with(".o")
-                && (name.starts_with("crt")
-                    || name.starts_with("Scrt")
-                    || name.starts_with("rcrt")
-                    || name.starts_with("rsbegin")
-                    || name.starts_with("rsend"))))
+            || name.ends_with(".o")
+            || name.ends_with(".obj"))
+}
+
+fn object_role(path: &Path, output: &Path, explicit: bool) -> &'static str {
+    if !explicit {
+        return "provider";
+    }
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let stem = output.file_stem().unwrap_or_default().to_string_lossy();
+    let directory = output.parent();
+    if path.parent() == directory
+        && name.starts_with(&format!("{stem}."))
+        && (name.ends_with(".rcgu.o") || name.ends_with(".rcgu.obj"))
+    {
+        return "root-rust-object";
+    }
+    if path.parent() == directory && name == "psonoci_audit_data.o" {
+        return "auditable-metadata-object";
+    }
+    if name == "symbols.o"
+        && path.parent().and_then(Path::parent) == directory
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|n| n.to_string_lossy().starts_with("rustc"))
+    {
+        return "rustc-symbol-object";
+    }
+    "provider"
 }
 
 fn traced_paths(line: &str) -> Vec<PathBuf> {
@@ -108,6 +132,23 @@ fn traced_paths(line: &str) -> Vec<PathBuf> {
 fn capture() -> Result<i32, Box<dyn std::error::Error>> {
     let target = env!("PSONOCI_SBOM_TARGET");
     let linker = env!("PSONOCI_SBOM_LINKER");
+    let prefix = target.replace('-', "_").to_uppercase();
+    for key in [
+        String::from("OPENSSL_NO_VENDOR"),
+        format!("{prefix}_OPENSSL_NO_VENDOR"),
+    ] {
+        if env::var_os(&key).is_some_and(|value| value != "0") {
+            return Err(format!("{key} disables the required vendored OpenSSL build").into());
+        }
+    }
+    for key in [
+        String::from("OPENSSL_STATIC"),
+        format!("{prefix}_OPENSSL_STATIC"),
+    ] {
+        if env::var_os(&key).is_some_and(|value| value == "0") {
+            return Err(format!("{key} disables the required static OpenSSL build").into());
+        }
+    }
     let args: Vec<String> = env::args().skip(1).collect();
     let expanded = response_args(&args)?;
     let output = expanded
@@ -190,10 +231,16 @@ fn capture() -> Result<i32, Box<dyn std::error::Error>> {
                 .to_string_lossy()
         );
         fs::copy(path, directory.join(&name))?;
+        let role = object_role(
+            path,
+            &output,
+            expanded.iter().any(|arg| Path::new(arg) == path),
+        );
         entries.push(format!(
-            "{{\"path\":{},\"copy\":{}}}",
+            "{{\"path\":{},\"copy\":{},\"role\":{}}}",
             quote(&path.to_string_lossy()),
-            quote(&name)
+            quote(&name),
+            quote(role)
         ));
     }
     fs::copy(&output, directory.join("binary"))?;
@@ -256,14 +303,16 @@ fn capture() -> Result<i32, Box<dyn std::error::Error>> {
     fs::write(
         directory.join("capture.json"),
         format!(
-            "{{\"format\":1,\"target\":{},\"linker\":{},\"builderImage\":{},\"rustc\":{},\"arguments\":[{}],\"inputs\":[{}],\"compiler\":{}}}\n",
+            "{{\"format\":1,\"target\":{},\"linker\":{},\"builderImage\":{},\"rustc\":{},\"arguments\":[{}],\"inputs\":[{}],\"compiler\":{},\"output\":{},\"buildPolicy\":{{\"opensslVendoredEnvironmentAllowed\":true}},\"cargoAuditableVersion\":{}}}\n",
             quote(target),
             quote(linker),
             quote(option_env!("PSONOCI_SBOM_IMAGE").unwrap_or("native")),
             quote(&String::from_utf8_lossy(&version.stdout)),
             invocation,
             entries.join(","),
-            compiler
+            compiler,
+            quote(&output.to_string_lossy()),
+            quote(option_env!("PSONOCI_CARGO_AUDITABLE_VERSION").unwrap_or("unverified"))
         ),
     )?;
     Ok(0)
@@ -282,6 +331,32 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_objects_are_captured_and_only_explicit_compiler_outputs_are_classified() {
+        let root = env::temp_dir().join(format!("sbom-object-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let output = root.join("psonoci-abcdef");
+        for name in ["codec.o", "assembly.obj", "psonoci-abcdef.unit.rcgu.o"] {
+            let object = root.join(name);
+            fs::write(&object, b"object").unwrap();
+            assert!(library(&object));
+            assert_eq!(
+                traced_paths(&object.display().to_string()),
+                vec![object.clone()]
+            );
+            assert_eq!(object_role(&object, &output, false), "provider");
+            assert_eq!(
+                object_role(&object, &output, true),
+                if name.ends_with(".rcgu.o") {
+                    "root-rust-object"
+                } else {
+                    "provider"
+                }
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn recognizes_gnu_trace_variants_and_parentheses_in_paths() {

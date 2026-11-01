@@ -9,10 +9,11 @@ psonoci-<release>-<rust-target>.cdx.json.asc  # GitHub
 psonoci-<release>-<rust-target>.cdx.json.sig  # GitLab
 ```
 
-The repository's SBOM checks are based on Regulation EU 2024/2847, the Cyber
-Resilience Act, and BSI TR-03183-2 v2.1.0. Other CRA obligations include
-vulnerability handling, reporting, support periods, and product requirements.
-The SBOM alone does not establish CRA conformity.
+The psonoci release SBOM policy implements selected fields and checks informed
+by Regulation EU 2024/2847 (the Cyber Resilience Act) and BSI TR-03183-2 v2.1.0.
+It is a project policy, not a complete CRA or BSI conformity validator. Other
+CRA obligations include vulnerability handling, reporting, support periods,
+and product requirements.
 
 ## How it works
 
@@ -44,6 +45,15 @@ The release pipeline builds and checks each SBOM as follows:
    the runtime evidence. Every target must have one archive, one SBOM, and both
    signatures. Missing targets and unexpected files stop publication.
 
+GitHub build jobs also produce GitHub artifact attestations for each archive
+and SBOM, binding their digests to the workflow, runner and source commit.
+The workflow commit identifies the collector and recorder implementation.
+Release actions are pinned by commit and Cross by version. The captured image
+digest identifies the Cross base image; pre-build hooks modify the effective
+builder. Native runner and package installations are not hermetic. Attestations
+authenticate build claims; they do not establish inventory completeness. GitLab
+currently publishes detached signatures without this GitHub provenance layer.
+
 New GitHub releases stay in draft during the build and checks. The workflow
 uploads the files to the release's Assets section and checks that the uploaded
 filenames match the validated set. It then publishes the release. Failed runs
@@ -64,7 +74,9 @@ Each SBOM describes one target's release archive and includes:
 - dependency relationships, exact versions, Package URLs, SPDX license
   expressions, and creator or project identity;
 - vendored OpenSSL as a native component, with the upstream version derived
-  from the locked `openssl-src` package; and
+  from the locked `openssl-src` package, the active `openssl-sys` vendored feature,
+  and build-time guards rejecting environment overrides that disable vendoring
+  or static linkage; and
 - the BSI CycloneDX properties for executable, archive, structured-file,
   filename, and effective-license classification.
 
@@ -75,10 +87,15 @@ remains `incomplete`; this discloses the boundary and does not waive coverage
 checks for the delivered software or its direct imports.
 
 The Rust standard library is identified by its Rust distribution release and
-source commit, with hashes of the linked sysroot libraries. Bundled target
-startup runtimes are recorded separately. Distribution versions identify these
-redistributed packages; they do not assert independent resolution of every
-third-party upstream source release inside the Rust distribution.
+source commit, with hashes of the linked sysroot libraries. Compiler builtins,
+native LLVM libunwind and target startup objects are recorded separately when
+linked. Their reviewed license sources and checksums are stored under
+`sbom/toolchain-sources/<rust-release>/`: compiler builtins preserves its composite
+SPDX expression, libunwind carries its complete notice, and startup objects use
+the LLVM compiler-rt license. Toolchain upgrades require reviewing this catalog.
+Distribution versions identify redistributed packages; they do not assert
+registry-byte equivalence for in-tree compiler crates or resolve every upstream
+source release inside the distribution.
 
 For musl, the collector reads allocated version data in `version.lo` inside the
 linked `libc.a`. It does not substitute the Cargo `libc` crate version or the
@@ -116,15 +133,21 @@ These checks do not constitute a full BSI conformity assessment. Source-level
 attribution within toolchain distributions and the interpretation of external
 platform version identifiers require review against the intended SBOM profile.
 
-## Rust runtime registry packages for musl
+| Policy area | Implemented check | Remaining boundary |
+| --- | --- | --- |
+| Artifact binding | Full archive inventory, executable/ archive hashes, target checks, signatures | Current archives contain exactly one executable; adding files requires extending the inventory |
+| Package identity | Runtime Cargo graph, reviewed native providers and exact sysroot archive hashes | Link inputs and Cargo resolution do not prove per-function retention or reachability |
+| BSI properties | File classification and effective-license properties for delivered components | External runtime/interface components intentionally omit delivery-file classification; full taxonomy conformance is not claimed |
+| Licensing | Manifest declarations, reviewed toolchain notices, hash-specific overrides | Declaration and nonempty fields do not establish legal applicability; some SDK labels require further review |
+| Dependency completeness | Direct imports covered; unknown/partial runtime graphs scoped as incomplete | External transitive closure and exact std feature activation remain unresolved |
+| Vulnerability handling | Cargo and reviewed native identity matching controls | Findings require triage; VEX/CSAF, deployment context and other CRA obligations are separate |
+
+## Rust runtime registry packages
 
 The shared build helper automatically expands registry crates supplied by Rust's
-standard-library distribution into normal Cargo package identities for all
-three release musl targets:
-
-- `x86_64-unknown-linux-musl`;
-- `aarch64-unknown-linux-musl`; and
-- `armv7-unknown-linux-musleabihf`.
+standard-library distribution into normal Cargo package identities for all eight
+GitHub release targets: the three musl targets, ARMv7 GNU Linux, both macOS
+architectures, and Windows GNU/MSVC.
 
 This runs in local builds and CI workflows that use
 `scripts/build-with-runtime-evidence.py`. The helper installs the corresponding
@@ -136,9 +159,13 @@ normal SBOM generation command consumes it without additional flags.
 Preparation downloads Rust's `library/Cargo.lock` at the captured source commit
 and verifies each selected registry archive against its locked SHA-256. Package
 versions, licenses, and repository URLs come from those verified manifests.
-Catalogs are cached under `.sbom-tools/rust-runtime/<target>/`. The subsequent
-enrichment is offline. Ambiguous package versions, changed registry archives,
-and mismatching toolchain inputs stop the build.
+Catalogs are cached under `.sbom-tools/rust-runtime/<target>/`. A verified cache
+avoids downloads, and `prepare --offline` requires all source metadata to be
+cached. `prepare --refresh` explicitly replaces corrupt/stale entries. Downloads
+are checksum-verified before atomic replacement. Enrichment is offline.
+Ambiguous package versions, changed registry archives, and mismatching toolchain
+inputs stop the build. The exact-commit HTTPS source-lock download is trusted
+build input; its recorded checksum is an integrity check, not an upstream signature.
 
 For a manual comparison using an existing capture, regenerate an unenriched
 sidecar first, then prepare and enrich it. For example:
@@ -173,11 +200,19 @@ distribution identities. Archive input evidence does not establish retention of
 every function or exploitability of a package advisory. Completeness remains
 `incomplete`.
 
+Registry edges come from the exact source lockfile and are restricted to observed
+registry inputs; they do not prove feature-specific activation. Internal std
+facades remain source declarations instead of backedges into the aggregate std
+component. Unknown runtime subgraphs have no explicit empty dependency record;
+partial graphs and their component scope remain marked incomplete.
+
 Scanner results also depend on identifier support. Grype recognizes the Cargo
 PURLs; generic native package PURLs alone may lack a supported matching identity.
-Its debug log discloses skipped CPE searches. Explicit, reviewed native CPEs or
-separately assessed CPE inference should be evaluated before interpreting zero
-matches as coverage of native components.
+The adapter emits reviewed upstream CPE mappings for musl and OpenSSL. It does
+not guess CPEs for Rust/GCC distributions or build-host DLLs. CI runs isolated
+positive controls for Cargo, musl and OpenSSL matching, plus a negative control.
+Controls use intentionally old versions and are never added to release SBOMs.
+An advisory match is a triage candidate, not proof of vulnerability reachability.
 
 ## Dependencies
 
@@ -186,7 +221,13 @@ matches as coverage of native components.
 - the repository's pinned Rust toolchain and Cargo;
 - `cargo-auditable` 0.7.5 at build time;
 - Syft 1.50.0 at generation time; and
-- Python 3 for the psonoci adapter.
+- Python 3.11 or newer for the psonoci adapter (GitHub uses 3.12; GitLab
+  bootstraps a declared compatible interpreter on macOS and Windows).
+
+Syft's generated tool metadata must identify the pinned version. The helper
+checks cargo-auditable's Cargo installation record and records the result in
+link evidence; `cargo auditable --version` forwards to Cargo and cannot verify
+the plugin version. These are build checks, not executable-signature attestations.
 
 The Python script uses only the standard library and needs no package
 installation or virtual environment. If it gains third-party dependencies,
@@ -272,8 +313,12 @@ scripts/generate-sbom.sh \
 The wrapper creates a temporary Syft scan and passes it to the Python script
 with the pinned cargo-auditable version. It uses `SOURCE_DATE_EPOCH` for the
 SBOM timestamp. If that variable is unset, it uses the latest source commit's
-timestamp. The commit, target, release version, binary hash, archive hash, and
-timestamp determine the UUIDv5 serial number.
+timestamp. The commit, target, release version, binary hash, archive hash,
+timestamp, and digest of the complete runtime evidence determine the UUIDv5
+serial number. Identical inputs including captured evidence reproduce the
+document. A new capture records wall-clock time, absolute input paths and build
+host details; identical binaries across builds need not produce identical SBOM
+bytes or serials. A serial change alone does not establish a dependency change.
 
 You can also run Syft and the Python script separately:
 
@@ -357,6 +402,9 @@ Run the tests:
 
 ```sh
 python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
+python3 scripts/test-sbom-linker.py
+# Requires the pinned Grype and a current database. Add --offline to reuse one.
+python3 scripts/test-sbom-scanner.py
 ```
 
 Run the official schema check used by CI:
@@ -374,6 +422,13 @@ Verify the detached signature with the psonoci release public key:
 ```sh
 gpg --verify psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json.asc \
   psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json
+```
+
+For a GitHub-produced release, verify archive and SBOM provenance separately:
+
+```sh
+gh attestation verify psonoci-v0.6.0-x86_64-unknown-linux-musl.tar.gz --repo meldron/psonoci
+gh attestation verify psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json --repo meldron/psonoci
 ```
 
 GitHub downloads the pinned Syft release through Anchore's action. GitLab

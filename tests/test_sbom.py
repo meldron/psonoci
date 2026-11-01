@@ -423,7 +423,7 @@ class NativeAndNormalizationTests(unittest.TestCase):
                 {"id": "openssl-src-id", "name": "openssl-src", "version": "300.5.4+3.5.4"},
             ],
             "resolve": {"nodes": [
-                {"id": "openssl-sys-id", "deps": [{"pkg": "openssl-src-id"}]},
+                {"id": "openssl-sys-id", "features": ["vendored"], "deps": [{"pkg": "openssl-src-id"}]},
                 {"id": "openssl-src-id", "deps": []},
             ]},
         }
@@ -433,6 +433,10 @@ class NativeAndNormalizationTests(unittest.TestCase):
         )
         self.assertEqual(components[0]["version"], "3.5.4")
         self.assertEqual(edges[0][0], ("openssl-sys", "0.9.111"))
+        self.assertEqual(components[0]['cpe'], 'cpe:2.3:a:openssl:openssl:3.5.4:*:*:*:*:*:*:*')
+        metadata['resolve']['nodes'][0]['features'] = []
+        with self.assertRaisesRegex(sbom.SbomError, 'active openssl-sys vendored feature'):
+            sbom.native_components(metadata, {('openssl-sys', '0.9.111')}, overrides)
 
     def test_license_and_purl_normalization(self):
         self.assertEqual(sbom.normalize_license("MIT/Apache-2.0"), "MIT OR Apache-2.0")
