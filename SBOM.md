@@ -482,3 +482,13 @@ Coordinate the setting change with the updated pipeline configuration: old
 pipeline configurations without the environment declaration cannot obtain the
 upload credential after its scope changes. Retrying an old job does not adopt
 the new YAML. Use the updated configuration for subsequent production releases.
+
+To recheck schemas after a validator change, run a pipeline on a branch with
+`SBOM_SCHEMA_SOURCE_JOB_ID` set to the numeric ID of an existing successful
+`collect-artifacts` job in this project. This selects only
+`recheck-release-sbom-schemas`, downloads that job's SBOMs with the current CI job
+token, and runs the same schema script and pinned validator as release pipelines.
+The initiating user needs access to the source artifacts. A Maintainer-only
+SHA-256 manifest identifies the exact documents checked; this does not rebuild
+or re-sign binaries, or repeat the other release checks. Release tags always
+run the complete pipeline, even if this variable is supplied.

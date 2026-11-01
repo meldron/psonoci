@@ -71,7 +71,10 @@ check-release-validation-isolation:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   except:
-    - schedules
+    refs:
+      - schedules
+    variables:
+      - '$CI_COMMIT_BRANCH && $SBOM_SCHEMA_SOURCE_JOB_ID =~ /^[0-9]+$/'
   only:
     - branches@esaqa/psono/psono-ci
     - tags@esaqa/psono/psono-ci
@@ -107,7 +110,10 @@ check-release-validation-isolation:
       - ./target/cargo-timings/*.html
     expire_in: 1 week
   except:
-    - schedules
+    refs:
+      - schedules
+    variables:
+      - '$CI_COMMIT_BRANCH && $SBOM_SCHEMA_SOURCE_JOB_ID =~ /^[0-9]+$/'
   only:
     - branches@esaqa/psono/psono-ci
     - tags@esaqa/psono/psono-ci
@@ -166,7 +172,10 @@ build-x86_64-pc-windows-msvc:
       - ./target/cargo-timings/*.html
     expire_in: 1 week
   except:
-    - schedules
+    refs:
+      - schedules
+    variables:
+      - '$CI_COMMIT_BRANCH && $SBOM_SCHEMA_SOURCE_JOB_ID =~ /^[0-9]+$/'
   only:
     - branches@esaqa/psono/psono-ci
     - tags@esaqa/psono/psono-ci
@@ -235,19 +244,40 @@ collect-artifacts:
     - gitlab-release-test-tag
     - gitlab-release-test-tag2
 
-validate-release-sboms:
+.sbom-schema-validator:
   image:
     name: cyclonedx/cyclonedx-cli:0.33.1@sha256:252c2e26f468c25fea1e63ecde1bc3198ad6e9dbb57f5ed3236bddcb2281b3a7
     entrypoint: [""]
   stage: sbom-validate
   script:
+    - sh scripts/validate-sbom-schemas.sh collected_artifacts
+
+# Recheck an existing collection after a validator fix without rebuilding binaries.
+# This is branch-only; release tags always retain the complete release pipeline.
+recheck-release-sbom-schemas:
+  extends: .sbom-schema-validator
+  dependencies: []
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl unzip ca-certificates
     - >-
-      for sbom in collected_artifacts/*.cdx.json; do
-        /cyclonedx validate
-        --input-file "$sbom"
-        --input-version v1_6
-        --fail-on-errors;
-      done
+      curl --fail --location --silent --show-error
+      --header "JOB-TOKEN: $CI_JOB_TOKEN"
+      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$SBOM_SCHEMA_SOURCE_JOB_ID/artifacts"
+      --output /tmp/source-artifacts.zip
+    - unzip -q /tmp/source-artifacts.zip 'collected_artifacts/*.cdx.json'
+  after_script:
+    - sha256sum collected_artifacts/*.cdx.json > schema-validation.sha256
+  artifacts:
+    access: maintainer
+    paths:
+      - schema-validation.sha256
+    expire_in: 1 week
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $SBOM_SCHEMA_SOURCE_JOB_ID =~ /^[0-9]+$/'
+
+validate-release-sboms:
+  extends: .sbom-schema-validator
   dependencies:
     - collect-artifacts
   artifacts:
