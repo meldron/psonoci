@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+set -eu
+
+bash "$(dirname "$0")/release-mode.sh" production
+: "${GOOGLE_APPLICATION_CREDENTIALS:?Production upload credential is unavailable}"
+
 apt-get update && \
 apt-get install -y lsb-release curl gnupg && \
 echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \

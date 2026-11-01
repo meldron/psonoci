@@ -1,0 +1,21 @@
+# Included only for the two protected validation tags. Preserve production access.
+.build-cross-linux:
+  artifacts:
+    access: maintainer
+
+.build-native-windows:
+  artifacts:
+    access: maintainer
+
+.build-macos:
+  artifacts:
+    access: maintainer
+
+collect-artifacts:
+  artifacts:
+    access: maintainer
+    expire_in: 1 week
+
+validate-release-sboms:
+  artifacts:
+    access: maintainer

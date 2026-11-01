@@ -75,9 +75,13 @@ for TARGET in "${TARGETS[@]}"; do
 
   # Syft extracts the graph embedded by cargo-auditable. The adapter adds the
   # release boundary and applies the repository's CRA/BSI policy.
+  URL_ARGS=()
+  if ! bash var/release-mode.sh validation; then
+    URL_ARGS=(--artifact-url "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/$(basename "$OUTPUT_FILE")")
+  fi
   scripts/generate-sbom.sh \
     "$TARGET" "$BINARY_PATH" "$OUTPUT_FILE" "$SBOM_FILE" \
-    --artifact-url "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/$(basename "$OUTPUT_FILE")" \
+    "${URL_ARGS[@]}" \
     --commit "$CI_COMMIT_SHA" \
     "${VERSION_ARGS[@]}"
   echo "$GPG_PRIVATE_KEY_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \

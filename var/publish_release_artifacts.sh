@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+bash "$(dirname "$0")/release-mode.sh" production
 sh ./var/login_gcp.sh
 
 for artifact in collected_artifacts/*; do

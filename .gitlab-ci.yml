@@ -1,4 +1,10 @@
+include:
+  - local: /.gitlab/validation-artifacts.yml
+    rules:
+      - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'
+
 stages:
+  - validation-preflight
   - build
   - release-prepare
   - sbom-validate
@@ -8,8 +14,17 @@ stages:
 
 variables:
   GIT_SUBMODULE_STRATEGY: normal
-  RUST_TOOLCHAIN: "1.94.1"
+  RUST_TOOLCHAIN: "1.99.1"
   DOCKER_HOST: "tcp://docker:2375"
+
+# No builds or signing jobs start unless the validation credential check passes.
+check-release-validation-isolation:
+  image: psono-docker.jfrog.io/ubuntu:24.04
+  stage: validation-preflight
+  script:
+    - bash var/check_release_validation.sh
+  rules:
+    - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'
 
 ## BUILD
 
@@ -67,6 +82,7 @@ variables:
     paths:
       - ./target/${BUILD_ENV}/release/psonoci
       - ./target/${BUILD_ENV}/release/psonoci.runtime.json
+      - ./target/cargo-timings/*.html
     expire_in: 1 week
   script:
     - !reference [.build-cross-base-script, script]
@@ -85,6 +101,7 @@ variables:
     paths:
       - ./target/${BUILD_ENV}/release/psonoci.exe
       - ./target/${BUILD_ENV}/release/psonoci.runtime.json
+      - ./target/cargo-timings/*.html
     expire_in: 1 week
   except:
     - schedules
@@ -143,6 +160,7 @@ build-x86_64-pc-windows-msvc:
     paths:
       - ./target/${BUILD_ENV}/release/psonoci
       - ./target/${BUILD_ENV}/release/psonoci.runtime.json
+      - ./target/cargo-timings/*.html
     expire_in: 1 week
   except:
     - schedules
@@ -267,14 +285,15 @@ validate-release-policy:
 publish-release-artifacts:
   image: psono-docker.jfrog.io/ubuntu:24.04
   stage: release-publish
+  environment:
+    name: release-production
+    action: access
   script:
     - bash var/publish_release_artifacts.sh
   dependencies:
     - validate-release-sboms
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
-    - gitlab-release-test-tag
-    - gitlab-release-test-tag2
 
 gitlab-release:
   image: registry.gitlab.com/gitlab-org/release-cli:latest
@@ -347,8 +366,6 @@ gitlab-release:
           url: "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/psonoci-${CI_COMMIT_TAG}-aarch64-apple-darwin.cdx.json.sig"
   only:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
-    - gitlab-release-test-tag
-    - gitlab-release-test-tag2
 
 # deploy-artifacts:
 #   except:
@@ -373,7 +390,11 @@ deploy-latest:
     - schedules
   stage: deploy
   image: psono-docker.jfrog.io/ubuntu:24.04
+  environment:
+    name: release-production
+    action: access
   script:
+    - bash var/release-mode.sh production
     - sh ./var/login_gcp.sh
     # Linux x86_64
     - gsutil cp ./target/x86_64-unknown-linux-musl/release/psonoci gs://get.psono.com/$CI_PROJECT_PATH/x86_64-linux/psonoci
@@ -413,3 +434,24 @@ deploy-latest:
 #     url: https://static.psono.com/gitlab.com/psono/psono-client/changelog.json
 #   only:
 #     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
+
+# The validation-only runtime check consumes the exact final static build.
+validate-release-runtime:
+  image: psono-docker.jfrog.io/ubuntu:24.04
+  stage: sbom-validate
+  script:
+    - apt-get update
+    - apt-get install -y python3 openssl
+    - python3 -m unittest discover -s tests -p 'test_sbom*.py' -v
+    - python3 -m unittest discover -s tests -p 'test_gitlab*.py' -v
+    - mkdir -p validation-reports
+    - python3 scripts/test-release-binary-tls.py target/x86_64-unknown-linux-musl/release/psonoci --output validation-reports/binary-tls-validation.json
+  dependencies:
+    - build-x86_64-unknown-linux-musl
+  artifacts:
+    access: maintainer
+    paths:
+      - validation-reports/*.json
+    expire_in: 1 week
+  rules:
+    - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'

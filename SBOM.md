@@ -453,3 +453,31 @@ publication.
 
 The SBOM excludes vulnerability findings. BSI TR-03183-2 calls for separate
 vulnerability information, for example through VEX or CSAF.
+
+## GitLab validation-only releases
+
+The protected tags `gitlab-release-test-tag` and `gitlab-release-test-tag2`
+build the existing seven GitLab targets, package and sign their archives and
+SBOMs, and run the schema, signature, inventory, and static-binary TLS checks.
+They do not upload to download storage or create GitLab Release entries.
+Validation SBOMs omit download-server URLs because those files are not published.
+
+Validation artifacts, including raw build outputs, are restricted to Maintainers
+and Owners through GitLab's artifact download controls. Downstream CI jobs can
+still fetch the artifacts through GitLab's job-token mechanisms. They expire
+after one week, subject to the project's existing keep-latest setting, which can
+retain the latest pipeline's artifacts longer. Cargo timing reports are retained
+with the build artifacts. Production artifact access remains unchanged.
+
+Before running a validation tag, edit the existing `GOOGLE_APPLICATION_CREDENTIALS`
+variable in GitLab **Settings > CI/CD > Variables**. Change its environment scope
+from `*` to `release-production`, preserving its value and protected status.
+The two production upload jobs declare that environment; validation jobs do not.
+A preflight job blocks validation if it receives the upload credential or lacks
+the existing signing configuration. Authentication and upload scripts also refuse
+test tags before doing any external work.
+
+Coordinate the setting change with the updated pipeline configuration: old
+pipeline configurations without the environment declaration cannot obtain the
+upload credential after its scope changes. Retrying an old job does not adopt
+the new YAML. Use the updated configuration for subsequent production releases.
