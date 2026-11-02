@@ -1136,8 +1136,10 @@ impl Secret {
             "gpg_key_private": &self.gpg_key_private,
             "gpg_key_public": &self.gpg_key_public,
             "env_vars": &self.env_vars,
+            "ssh_key": &self.ssh_key,
             "totp": &self.totp,
             "credit_card": &self.credit_card,
+            "elster_certificate": &self.elster_certificate,
             "type": &self.secret_type.as_str(),
         });
 
