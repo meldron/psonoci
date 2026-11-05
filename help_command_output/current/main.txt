@@ -1,4 +1,4 @@
-psonoci 0.6.0
+psonoci 0.7.0
 Bernd Kaiser
 Psono CI Client (https://github.com/meldron/psonoci)
 

@@ -1,6 +1,6 @@
 # psonoci software bill of materials
 
-Each release archive has a matching CycloneDX 1.6 software bill of materials,
+Starting with 0.7.0, each release archive has a matching CycloneDX 1.6 software bill of materials,
 or SBOM. The filenames identify the release and Rust target:
 
 ```text
@@ -308,7 +308,7 @@ for Cross versions that otherwise return only Cargo-declared artifacts.
 Create the release archive from that exact binary:
 
 ```sh
-tar -czf psonoci-v0.6.0-x86_64-unknown-linux-musl.tar.gz \
+tar -czf psonoci-v0.7.0-x86_64-unknown-linux-musl.tar.gz \
   -C target/x86_64-unknown-linux-musl/release psonoci
 ```
 
@@ -318,10 +318,10 @@ Then run the wrapper:
 scripts/generate-sbom.sh \
   x86_64-unknown-linux-musl \
   target/x86_64-unknown-linux-musl/release/psonoci \
-  psonoci-v0.6.0-x86_64-unknown-linux-musl.tar.gz \
-  psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json \
+  psonoci-v0.7.0-x86_64-unknown-linux-musl.tar.gz \
+  psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json \
   --commit "$(git rev-parse HEAD)" \
-  --release-version v0.6.0
+  --release-version v0.7.0
 ```
 
 The wrapper creates a temporary Syft scan and passes it to the Python script
@@ -343,12 +343,12 @@ syft target/x86_64-unknown-linux-musl/release/psonoci \
 python3 scripts/sbom.py generate \
   --target x86_64-unknown-linux-musl \
   --binary target/x86_64-unknown-linux-musl/release/psonoci \
-  --artifact psonoci-v0.6.0-x86_64-unknown-linux-musl.tar.gz \
+  --artifact psonoci-v0.7.0-x86_64-unknown-linux-musl.tar.gz \
   --syft-input raw-syft.cdx.json \
   --commit "$(git rev-parse HEAD)" \
   --cargo-auditable-version 0.7.5 \
-  --release-version v0.6.0 \
-  --output psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json
+  --release-version v0.7.0 \
+  --output psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json
 ```
 
 Generation stops if required data is missing, the tag and Cargo versions
@@ -401,15 +401,15 @@ Check the required SBOM fields:
 
 ```sh
 python3 scripts/sbom.py validate \
-  --input psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json
+  --input psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json
 ```
 
 Check that the archive and its executable match the hashes in the SBOM:
 
 ```sh
 python3 scripts/sbom.py verify-release \
-  --input psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json \
-  --artifact psonoci-v0.6.0-x86_64-unknown-linux-musl.tar.gz
+  --input psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json \
+  --artifact psonoci-v0.7.0-x86_64-unknown-linux-musl.tar.gz
 ```
 
 Run the tests:
@@ -427,22 +427,22 @@ Run the official schema check used by CI:
 docker run --rm -v "$PWD:/work" \
   cyclonedx/cyclonedx-cli:0.33.1@sha256:252c2e26f468c25fea1e63ecde1bc3198ad6e9dbb57f5ed3236bddcb2281b3a7 \
   validate \
-  --input-file /work/psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json \
+  --input-file /work/psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json \
   --input-version v1_6 --fail-on-errors
 ```
 
 Verify the detached signature with the psonoci release public key:
 
 ```sh
-gpg --verify psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json.asc \
-  psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json
+gpg --verify psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json.asc \
+  psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json
 ```
 
 For a GitHub-produced release, verify archive and SBOM provenance separately:
 
 ```sh
-gh attestation verify psonoci-v0.6.0-x86_64-unknown-linux-musl.tar.gz --repo meldron/psonoci
-gh attestation verify psonoci-v0.6.0-x86_64-unknown-linux-musl.cdx.json --repo meldron/psonoci
+gh attestation verify psonoci-v0.7.0-x86_64-unknown-linux-musl.tar.gz --repo meldron/psonoci
+gh attestation verify psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json --repo meldron/psonoci
 ```
 
 GitHub downloads the pinned Syft release through Anchore's action. GitLab

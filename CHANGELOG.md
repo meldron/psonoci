@@ -1,3 +1,20 @@
+# v0.7.0 (unreleased)
+
+- Added: `totp get-token`, `validate-token`, `get-url` and the `totp-*` secret fields now support website authenticators. They accept existing short seeds and period and digit settings stored as strings.
+- Added: each release archive has a signed CycloneDX 1.6 SBOM. It lists Rust dependencies, bundled native libraries and direct external runtime dependencies. Release jobs check signatures, schema, target coverage and archive hashes before publishing. GitHub releases also include artifact attestations.
+- Fixed: secret updates keep fields that `psonoci` does not recognize, including custom fields, tags, attachments and metadata on individual environment variables.
+- Fixed: updates send the server's previous `write_date`. If the secret changed, the command stops without overwriting it. Servers that omit the timestamp keep the old update behavior.
+- Fixed: unknown secret types no longer break bulk reads or `run`. You can read them as raw JSON. Typed updates to these secrets fail. Invalid known fields and decryption errors still stop the command.
+- Fixed: `run --filter` fetches only selected secrets. Problems with excluded entries no longer stop the command.
+- Fixed: password changes update Psono's `password_modification_datetime`. Other edits keep the password's age. Older entries without a valid timestamp use the previous server write date when available.
+- Fixed: a standalone TOTP secret with a zero period now returns an error before token generation.
+- Fixed: SSH and Elster JSON exports include their stored key and certificate fields.
+- Changed: SSH key handling now uses `russh` in place of `russh-keys`. RSA keys and SSH-agent constraints still work.
+- Changed: command-line and config parsing now store API secret keys in sensitive types.
+- Changed: vendored native TLS now uses pinned OpenSSL 3.5.9 LTS source. Initialize its Git submodule before building from source. See the README.
+- Changed: this release uses Rust `1.99.1` and updates dependencies and release tools.
+- Changed: security updates cover only the latest stable minor series. Once 0.7.0 is released, earlier versions are no longer supported.
+
 # v0.6.0 (`2026-04-06`)
 
 - Breaking: config files are now written with user-only permissions (`0600` on Linux/macOS, user-only ACL on Windows)

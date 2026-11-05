@@ -8,7 +8,7 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 
 ## Software bill of materials
 
-Every release publishes a target-specific CycloneDX 1.6 SBOM and detached GPG
+Since 0.7.0, release archives have a target-specific CycloneDX 1.6 SBOM and detached GPG
 signature next to the release archive. The same generator and policy checks are
 used by GitHub Actions and GitLab CI. See [SBOM.md](SBOM.md) for the generation
 model, verification commands, and declared delivery boundary.
@@ -18,13 +18,14 @@ model, verification commands, and declared delivery boundary.
 `psonoci --help`
 
 ```
-psonoci 0.6.0
+psonoci 0.7.0
 Bernd Kaiser
 Psono CI Client (https://github.com/meldron/psonoci)
 
 Usage: psonoci [OPTIONS] <COMMAND>
 
 Commands:
+  onboard   Bootstraps a psonoci config via device authentication
   secret    Psono secret commands (/api-key-access/secret/)
   api-key   Psono api-key inspect (/api-key-access/inspect/)
   config    Config commands (create, save, pack,...)
@@ -71,19 +72,25 @@ Options:
 
 ### Required Options
 
-These three options must be supplied (and be in front of the subcommand):
+To access secrets, supply these settings through command-line options,
+environment variables or a config. Put command-line options before the
+subcommand. `onboard` needs only the server URL.
 
 | Option                   | Env var                     | Type               | Required | Default | Description                                                               |
 | ------------------------ | --------------------------- | ------------------ | -------- | ------- | ------------------------------------------------------------------------- |
 | --api-key-id             | PSONO_CI_API_KEY_ID         | UUID               | yes      | None    | The UUID of your API key                                                  |
-| --api-secret-key-hex     | PSONO_CI_API_SECRET_KEY_HEX | 64 byte hex string | yes      | None    | Secret key used for decryption of the user's secret key                   |
+| --api-secret-key-hex     | PSONO_CI_API_SECRET_KEY_HEX | 64 hex characters  | yes      | None    | 32-byte key that decrypts the assigned secrets' encryption keys             |
 | --server-url             | PSONO_CI_SERVER_URL         | URL                | yes      | None    | Address of the PSONO's backend server - e.g.: https://www.psono.pw/server |
 
 There are several more options, please use the `help` commands for more info.
 
-Since version `0.6.0` psonoci` now uses `clap` for command-line parsing. The canonical option and enum value spelling shown in help output is kebab-case (for example `url-filter`), but for backward compatibility the legacy snake_case forms (for example `url_filter`) are still accepted for secret value types.
+Since version `0.6.0`, `psonoci` uses `clap` for command-line parsing. The canonical option and enum value spelling shown in help output is kebab-case (for example `url-filter`), but for backward compatibility the legacy snake_case forms (for example `url_filter`) are still accepted for secret value types.
 
 Identity secrets are available through the same `secret get` interface as the other typed secrets. For example, `psonoci secret get <uuid> identity-email` returns the stored email address, while `psonoci secret get <uuid> json` includes the nested `identity` object in the JSON output.
+
+Since 0.7.0, secret updates keep fields that `psonoci` does not recognize,
+including custom fields, tags, attachments and metadata on individual environment
+variables. Updates preserve attachment metadata without downloading the files.
 
 When the server returns a secret's `write_date`, updates send that timestamp
 back as `old_write_date`. If someone changed the secret in the meantime, the
@@ -186,8 +193,10 @@ Returns with exit code `0` if the signature is valid, otherwise displays an erro
 
 Since version `0.4` `psonoci` supports Psono's [Time-based one-time password (TOTP)](https://en.wikipedia.org/wiki/Time-based_one-time_password) secret type.
 
-The same commands also accept website secrets with an embedded authenticator.
+Since 0.7.0, the TOTP commands also work with authenticators stored in website secrets.
 Website TOTP settings default to SHA1, 6 digits and 30 seconds, matching Psono.
+The commands accept existing short seeds and period and digit settings stored as
+decimal strings. They support SHA1, SHA256 and SHA512 with 6, 7 or 8 digits.
 `secret get` and `secret set` expose the embedded settings through `totp-code`,
 `totp-algorithm`, `totp-digits` and `totp-period`; `totp-code` is the stored seed.
 Reading a token or exporting an otpauth URL does not modify the secret.
@@ -374,6 +383,11 @@ PSONO_CI_CONFIG_PACKED="5dtuTPxg1kDP3Qoz2HKbMxT4kDqTYxbUo8mxR9yEp7YNSYq6dP8Gv4ys
 -   Credit Card
 -   TOTP
 -   SSH Key
+-   Elster Certificate
+
+You can read passkey and SSH/RDP/VNC connection secrets as raw JSON. These types
+have no typed commands. File and attachment downloads need separate APIs, which
+`psonoci` does not support.
 
 ## Build
 
@@ -390,7 +404,7 @@ Linux uses a vendored OpenSSL 3.5 LTS release. See
 [the source override notes](vendor/openssl-src/README.psonoci.md) for its pins and
 [SBOM.md](SBOM.md) for builds with release evidence.
 
-The current version is tested with Rust `1.94.1`.
+Tests run with Rust `1.99.1`, as pinned in `rust-toolchain.toml`.
 
 ### cross
 
@@ -465,7 +479,8 @@ new fixtures and IDs. Existing Psono databases and accounts are not used.
 
 ## Supported Architectures
 
--   x86_64-unknown-linux-gnu
+GitHub releases publish archives for these eight targets:
+
 -   x86_64-unknown-linux-musl
 -   x86_64-pc-windows-msvc
 -   x86_64-pc-windows-gnu
@@ -474,6 +489,9 @@ new fixtures and IDs. Existing Psono databases and accounts are not used.
 -   aarch64-unknown-linux-musl
 -   armv7-unknown-linux-gnueabihf
 -   armv7-unknown-linux-musleabihf
+
+CI also tests `x86_64-unknown-linux-gnu`. GitHub releases use musl for Linux
+x86_64.
 
 ~~Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is able to link against `MUSL v1.2.2`.~~
 

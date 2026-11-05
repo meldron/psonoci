@@ -60,6 +60,8 @@ jobs:
             fi
           else
             cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          See the [changelog](https://github.com/${GH_REPO}/blob/${RELEASE_TAG}/CHANGELOG.md) for the changes in this release.
+
           Each binary archive in Assets has a matching target-specific CycloneDX 1.6 SBOM (.cdx.json) and detached GPG signatures (.asc).
 
           See [SBOM verification instructions](https://github.com/${GH_REPO}/blob/${RELEASE_TAG}/SBOM.md).

@@ -2,13 +2,13 @@
 
 ## Supported Versions
 
-The following versions are still supported and receive security updates
+Only the latest stable minor series receives security updates. After 0.7.0 is
+released, the supported versions are:
 
 | Version | Supported |
 | ------- | --------- |
-| 0.3.x   | ✔️        |
-| 0.2.x   | ❌        |
-| < 0.2.0 | ❌        |
+| 0.7.x   | ✔️        |
+| < 0.7.0 | ❌        |
 
 ## Reporting a Vulnerability
 
