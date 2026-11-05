@@ -417,6 +417,52 @@ cargo build --locked
     --server-source /path/to/psono-server --binary target/debug/psonoci
 ```
 
+### Running a local Psono test server
+
+This starts the real Psono API with a separate disposable PostgreSQL container.
+It listens on `127.0.0.1:18183`. It seeds test secrets and writes a private CLI
+config and fixture IDs under the ignored `.local-psono/` directory. This setup
+tests CLI access through an API key. It does not include a browser client.
+
+Use the server's Python environment with its dependencies installed. Docker,
+a cached `postgres:17` image, `openssl` and `ssh-keygen` are also required.
+
+```sh
+/path/to/psono-server/.venv/bin/python -B scripts/local-psono-server.py serve \
+    --server-source /path/to/psono-server --binary target/debug/psonoci \
+    --full-validation
+```
+
+Keep that process running. In another terminal, check the server or use the CLI:
+
+```sh
+python3 scripts/local-psono-server.py check
+python3 scripts/local-psono-server.py cli api-key info
+```
+
+The `cli` command uses the local config and removes inherited `PSONO_CI_*`
+settings. Read the fixture IDs from `.local-psono/server.json`, then use, for
+example, `cli secret get <uuid> json`.
+If a forwarded command starts with an option, put `--` after `cli`, for example
+`cli -- --help`.
+
+The fixtures include a generated Ed25519 SSH key, a self-signed PKCS#12
+certificate for the Elster fields, a website authenticator, a note, environment
+variables and an unsupported connection entry. The checks compare SSH and
+Elster JSON fields with hashes of the seeded values, update and restore the
+note, validate a TOTP token and run a process with the fixture environment.
+`--full-validation` also runs the password-timestamp and TOTP compatibility
+tests against the server.
+
+Press Ctrl-C in the server terminal, or stop it from another terminal:
+
+```sh
+python3 scripts/local-psono-server.py stop
+```
+
+Stopping removes the database and generated credentials. Starting again creates
+new fixtures and IDs. Existing Psono databases and accounts are not used.
+
 ## Supported Architectures
 
 -   x86_64-unknown-linux-gnu
