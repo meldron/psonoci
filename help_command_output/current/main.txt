@@ -1,6 +1,6 @@
 psonoci 0.7.0
 Bernd Kaiser
-Psono CI Client (https://github.com/meldron/psonoci)
+Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)
 
 Usage: psonoci [OPTIONS] <COMMAND>
 

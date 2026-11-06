@@ -13,6 +13,7 @@
 - Changed: command-line and config parsing now store API secret keys in sensitive types.
 - Changed: vendored native TLS now uses pinned OpenSSL 3.5.9 LTS source. Initialize its Git submodule before building from source. See the README.
 - Changed: this release uses Rust `1.99.1` and updates dependencies and release tools.
+- Changed: GitLab is the primary repository for development and releases; GitHub remains a secondary repository.
 - Changed: security updates cover only the latest stable minor series. Once 0.7.0 is released, earlier versions are no longer supported.
 
 # v0.6.0 (`2026-04-06`)

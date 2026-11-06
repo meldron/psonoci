@@ -1,12 +1,19 @@
 # psonoci software bill of materials
 
 Starting with 0.7.0, each release archive has a matching CycloneDX 1.6 software bill of materials,
-or SBOM. The filenames identify the release and Rust target:
+or SBOM.
+
+The [primary GitLab releases](https://gitlab.com/esaqa/psono/psono-ci/-/releases)
+publish archives, SBOMs and `.sig` signatures on `get.psono.com`.
+[GitHub](https://github.com/meldron/psonoci) is the secondary repository; its
+release builds use `.asc` signatures and include GitHub artifact attestations.
+
+The filenames identify the release and Rust target:
 
 ```text
 psonoci-<release>-<rust-target>.cdx.json
-psonoci-<release>-<rust-target>.cdx.json.asc  # GitHub
-psonoci-<release>-<rust-target>.cdx.json.sig  # GitLab
+psonoci-<release>-<rust-target>.cdx.json.sig  # Primary GitLab release
+psonoci-<release>-<rust-target>.cdx.json.asc  # Secondary GitHub release
 ```
 
 The psonoci release SBOM policy implements selected fields and checks informed
@@ -145,9 +152,9 @@ platform version identifiers require review against the intended SBOM profile.
 ## Rust runtime registry packages
 
 The shared build helper automatically expands registry crates supplied by Rust's
-standard-library distribution into normal Cargo package identities for all eight
-GitHub release targets: the three musl targets, ARMv7 GNU Linux, both macOS
-architectures, and Windows GNU/MSVC.
+standard-library distribution into normal Cargo package identities for all seven
+primary GitLab release targets and the additional ARMv7 musl target built by the
+secondary GitHub workflow.
 
 This runs in local builds and CI workflows that use
 `scripts/build-with-runtime-evidence.py`. The helper installs the corresponding
@@ -434,11 +441,12 @@ docker run --rm -v "$PWD:/work" \
 Verify the detached signature with the psonoci release public key:
 
 ```sh
-gpg --verify psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json.asc \
+gpg --verify psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json.sig \
   psonoci-v0.7.0-x86_64-unknown-linux-musl.cdx.json
 ```
 
-For a GitHub-produced release, verify archive and SBOM provenance separately:
+For a secondary GitHub release, use its `.asc` signature instead, and verify
+archive and SBOM provenance separately:
 
 ```sh
 gh attestation verify psonoci-v0.7.0-x86_64-unknown-linux-musl.tar.gz --repo meldron/psonoci

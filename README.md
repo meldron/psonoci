@@ -6,12 +6,24 @@ PSONO is a secure Open Source Password Manager, which can be self hosted by anyo
 
 `psonoci` allows a secure access to your psono passwords (and other values) within your CI process.
 
+## Repositories and releases
+
+[GitLab](https://gitlab.com/esaqa/psono/psono-ci) is the primary repository for
+development and releases. Please use GitLab for
+[issues](https://gitlab.com/esaqa/psono/psono-ci/-/issues) and
+[merge requests](https://gitlab.com/esaqa/psono/psono-ci/-/merge_requests).
+The [primary releases](https://gitlab.com/esaqa/psono/psono-ci/-/releases) link
+to signed archives and SBOMs hosted on `get.psono.com`.
+
+[GitHub](https://github.com/meldron/psonoci) is a secondary repository with its
+own CI and [release builds](https://github.com/meldron/psonoci/releases).
+
 ## Software bill of materials
 
 Since 0.7.0, release archives have a target-specific CycloneDX 1.6 SBOM and detached GPG
 signature next to the release archive. The same generator and policy checks are
-used by GitHub Actions and GitLab CI. See [SBOM.md](SBOM.md) for the generation
-model, verification commands, and declared delivery boundary.
+used by GitLab CI and the secondary GitHub Actions builds. See [SBOM.md](SBOM.md)
+for the generation model, verification commands, and declared delivery boundary.
 
 ## Usage
 
@@ -20,7 +32,7 @@ model, verification commands, and declared delivery boundary.
 ```
 psonoci 0.7.0
 Bernd Kaiser
-Psono CI Client (https://github.com/meldron/psonoci)
+Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)
 
 Usage: psonoci [OPTIONS] <COMMAND>
 
@@ -391,6 +403,13 @@ have no typed commands. File and attachment downloads need separate APIs, which
 
 ## Build
 
+Clone the primary repository:
+
+```sh
+git clone https://gitlab.com/esaqa/psono/psono-ci.git
+cd psono-ci
+```
+
 ### Rust native
 
 With Rust installed, initialize the pinned OpenSSL source and build:
@@ -479,7 +498,7 @@ new fixtures and IDs. Existing Psono databases and accounts are not used.
 
 ## Supported Architectures
 
-GitHub releases publish archives for these eight targets:
+Primary GitLab releases publish archives for these seven targets:
 
 -   x86_64-unknown-linux-musl
 -   x86_64-pc-windows-msvc
@@ -488,10 +507,10 @@ GitHub releases publish archives for these eight targets:
 -   aarch64-apple-darwin
 -   aarch64-unknown-linux-musl
 -   armv7-unknown-linux-gnueabihf
--   armv7-unknown-linux-musleabihf
 
-CI also tests `x86_64-unknown-linux-gnu`. GitHub releases use musl for Linux
-x86_64.
+Secondary GitHub releases also include `armv7-unknown-linux-musleabihf`.
+GitHub CI additionally tests `x86_64-unknown-linux-gnu`. Release archives use
+musl for Linux x86_64.
 
 ~~Sadly I have to drop support for `armv7-unknown-linux-musleabihf` until Rust is able to link against `MUSL v1.2.2`.~~
 
@@ -504,6 +523,10 @@ Since version `0.4` the `aarch64-apple-darwin` target is also build and released
 ## Install
 
 Download `psonoci` binary, make executable (`chmod +x psonoci`), and place into a directory which is part of your `$PATH`.
+
+Use the [primary GitLab releases](https://gitlab.com/esaqa/psono/psono-ci/-/releases)
+to find the versioned archives, SBOMs and signatures on `get.psono.com`.
+See [SBOM.md](SBOM.md) for verification instructions.
 
 ## License
 

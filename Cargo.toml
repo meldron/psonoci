@@ -2,10 +2,10 @@
 authors = ["Bernd Kaiser <bk@dfjk.eu>"]
 description = "Command-line client for securely accessing Psono secrets in CI pipelines"
 edition = "2024"
-homepage = "https://github.com/meldron/psonoci"
+homepage = "https://gitlab.com/esaqa/psono/psono-ci"
 license = "MIT"
 name = "psonoci"
-repository = "https://github.com/meldron/psonoci"
+repository = "https://gitlab.com/esaqa/psono/psono-ci"
 version = "0.7.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -22,7 +22,7 @@ pub struct Opt {
 #[derive(Parser, Debug, Serialize)]
 #[command(
     name = "psonoci",
-    about = "Psono CI Client (https://github.com/meldron/psonoci)",
+    about = "Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)",
     author = "Bernd Kaiser",
     version,
     help_template = "{name} {version}\n{author-with-newline}{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}"
@@ -37,7 +37,7 @@ struct ParsedOpt {
 #[derive(Parser, Debug, Serialize)]
 #[command(
     name = "psonoci",
-    about = "Psono CI Client (https://github.com/meldron/psonoci)",
+    about = "Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)",
     author = "Bernd Kaiser",
     version,
     help_template = "{name} {version}\n{author-with-newline}{about-with-newline}\n{usage-heading} {usage}\n\n{all-args}"
