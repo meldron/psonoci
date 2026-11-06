@@ -76,7 +76,9 @@ for TARGET in "${TARGETS[@]}"; do
   # Syft extracts the graph embedded by cargo-auditable. The adapter adds the
   # release boundary and applies the repository's CRA/BSI policy.
   URL_ARGS=()
-  if ! bash var/release-mode.sh validation; then
+  if bash var/release-mode.sh prerelease; then
+    URL_ARGS=(--artifact-url "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/psonoci/${CI_COMMIT_TAG}/$(basename "$OUTPUT_FILE")")
+  elif bash var/release-mode.sh production; then
     URL_ARGS=(--artifact-url "https://get.psono.com/${CI_PROJECT_PATH}/${CI_COMMIT_TAG}/$(basename "$OUTPUT_FILE")")
   fi
   scripts/generate-sbom.sh \

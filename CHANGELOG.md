@@ -1,5 +1,6 @@
-# v0.7.0 (unreleased)
+# v0.7.0-rc.1 (`2026-11-06`)
 
+- Added: alpha, beta and release-candidate tags publish downloadable prereleases on GitLab and GitHub, including signed archives and SBOMs, without uploading to `get.psono.com`.
 - Added: `totp get-token`, `validate-token`, `get-url` and the `totp-*` secret fields now support website authenticators. They accept existing short seeds and period and digit settings stored as strings.
 - Added: each release archive has a signed CycloneDX 1.6 SBOM. It lists Rust dependencies, bundled native libraries and direct external runtime dependencies. Release jobs check signatures, schema, target coverage and archive hashes before publishing. GitHub releases also include artifact attestations.
 - Fixed: secret updates keep fields that `psonoci` does not recognize, including custom fields, tags, attachments and metadata on individual environment variables.

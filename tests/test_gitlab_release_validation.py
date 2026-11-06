@@ -55,7 +55,7 @@ class ReleaseValidationTests(unittest.TestCase):
 
     def test_publish_and_login_refuse_validation_before_any_external_command(self):
         for script in ('var/publish_release_artifacts.sh', 'var/login_gcp.sh'):
-            for tag in (*TEST_TAGS, ''):
+            for tag in (*TEST_TAGS, '', 'v1.2.3-rc.1', 'v1.2.3-beta.2', 'v1.2.3-alpha.0'):
                 with self.subTest(script=script, tag=tag):
                     result = self.run_script(script, CI_COMMIT_TAG=tag)
                     self.assertNotEqual(result.returncode, 0)
@@ -70,7 +70,7 @@ class ReleaseValidationTests(unittest.TestCase):
 
     def test_preflight_accepts_signing_without_upload_credentials(self):
         environment = self.signing_environment()
-        for tag in TEST_TAGS:
+        for tag in (*TEST_TAGS, 'v1.2.3-rc.1'):
             result = self.run_script('var/check_release_validation.sh',
                                      **(environment | {'CI_COMMIT_TAG': tag}))
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -147,20 +147,25 @@ class ReleaseValidationTests(unittest.TestCase):
                 'psonoci.exe' if 'windows' in target else 'psonoci')
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b'test fixture')
-        for tag in (*TEST_TAGS, 'v1.2.3'):
+        for tag in (*TEST_TAGS, 'v1.2.3', 'v1.2.3-rc.1'):
             with self.subTest(tag=tag):
                 self.log.unlink(missing_ok=True)
                 environment = self.signing_environment() | {
                     'CI_COMMIT_TAG': tag, 'CI_COMMIT_SHA': 'a' * 40,
                     'CI_PROJECT_PATH': 'esaqa/psono/psono-ci', 'SOURCE_DATE_EPOCH': '0',
+                    'CI_API_V4_URL': 'https://gitlab.com/api/v4', 'CI_PROJECT_ID': '19437616',
                 }
                 result = self.run_script('var/upload_artifacts.sh', **environment)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 calls = [json.loads(line) for line in self.log.read_text().splitlines()]
                 self.assertEqual(len(calls), 7)
                 for call in calls:
-                    self.assertEqual('--artifact-url' in call, tag == 'v1.2.3')
-                    self.assertEqual('--release-version' in call, tag == 'v1.2.3')
+                    self.assertEqual('--artifact-url' in call, tag.startswith('v'))
+                    if tag.endswith('-rc.1'):
+                        url = call[call.index('--artifact-url') + 1]
+                        self.assertIn('/packages/generic/psonoci/v1.2.3-rc.1/', url)
+                        self.assertNotIn('get.psono.com', url)
+                    self.assertEqual('--release-version' in call, tag.startswith('v'))
 
 
 if __name__ == '__main__':

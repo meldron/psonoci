@@ -1,4 +1,5 @@
-# Included only for the two protected validation tags. Preserve production access.
+# Test and prerelease jobs restrict temporary artifacts; public prerelease
+# downloads are published separately to the Package Registry.
 .build-cross-linux:
   artifacts:
     access: maintainer

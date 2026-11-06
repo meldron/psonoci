@@ -9,6 +9,9 @@ case "${1:-}" in
       *) exit 1 ;;
     esac
     ;;
+  prerelease)
+    [[ "${CI_COMMIT_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$ ]]
+    ;;
   production)
     if [[ ! "${CI_COMMIT_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       echo "Refusing production publication or authentication outside a version release tag" >&2
@@ -16,7 +19,7 @@ case "${1:-}" in
     fi
     ;;
   *)
-    echo "usage: $0 <validation|production>" >&2
+    echo "usage: $0 <validation|prerelease|production>" >&2
     exit 2
     ;;
 esac

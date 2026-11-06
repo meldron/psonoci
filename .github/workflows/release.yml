@@ -3,7 +3,6 @@ on:
   push:
     tags:
       - "v*.*.*"
-      - "v*.*.*-rc*"
       - "release-test"
 
 permissions:
@@ -372,7 +371,7 @@ jobs:
           printf '%s\n' "${assets[@]##*/}" | LC_ALL=C sort > "$RUNNER_TEMP/expected-release-assets.txt"
           diff -u "$RUNNER_TEMP/expected-release-assets.txt" "$RUNNER_TEMP/remote-release-assets.txt"
           release_args=(--draft=false)
-          if [[ "$RELEASE_TAG" == "release-test" || "$RELEASE_TAG" == *-rc* ]]; then
+          if [[ "$RELEASE_TAG" == "release-test" || "$RELEASE_TAG" == *-* ]]; then
             release_args+=(--prerelease --latest=false)
           fi
           gh release edit "$RELEASE_TAG" "${release_args[@]}"

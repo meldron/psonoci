@@ -2,6 +2,7 @@ include:
   - local: /.gitlab/validation-artifacts.yml
     rules:
       - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'
+      - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$/'
 
 stages:
   - validation-preflight
@@ -17,7 +18,7 @@ variables:
   RUST_TOOLCHAIN: "1.99.1"
   DOCKER_HOST: "tcp://docker:2375"
 
-# No builds or signing jobs start unless the validation credential check passes.
+# Test and prerelease builds wait for credential isolation and signing checks.
 check-release-validation-isolation:
   image: psono-docker.jfrog.io/ubuntu:24.04
   stage: validation-preflight
@@ -28,6 +29,7 @@ check-release-validation-isolation:
     - bash var/check_release_signing.sh
   rules:
     - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$/'
 
 ## BUILD
 
@@ -243,6 +245,7 @@ collect-artifacts:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
     - gitlab-release-test-tag2
+    - /^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$/
 
 .sbom-schema-validator:
   image:
@@ -292,6 +295,7 @@ validate-release-sboms:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
     - gitlab-release-test-tag2
+    - /^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$/
 
 validate-release-policy:
   image: psono-docker.jfrog.io/ubuntu:24.04
@@ -314,6 +318,7 @@ validate-release-policy:
     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
     - gitlab-release-test-tag
     - gitlab-release-test-tag2
+    - /^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$/
 
 publish-release-artifacts:
   image: psono-docker.jfrog.io/ubuntu:24.04
@@ -468,7 +473,7 @@ deploy-latest:
 #   only:
 #     - /^v[0-9]*\.[0-9]*\.[0-9]*$/
 
-# The validation-only runtime check consumes the exact final static build.
+# Test and prerelease runtime checks consume the exact final static build.
 validate-release-runtime:
   image: psono-docker.jfrog.io/ubuntu:24.04
   stage: sbom-validate
@@ -488,3 +493,18 @@ validate-release-runtime:
     expire_in: 1 week
   rules:
     - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$/'
+
+# Durable public downloads live in GitLab, without production credentials.
+publish-prerelease:
+  image: psono-docker.jfrog.io/ubuntu:24.04
+  stage: release
+  script:
+    - bash var/check_release_validation.sh
+    - apt-get update
+    - apt-get install -y python3 ca-certificates
+    - python3 scripts/publish-gitlab-prerelease.py
+  dependencies:
+    - validate-release-sboms
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.(0|[1-9][0-9]*)$/'

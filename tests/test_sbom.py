@@ -386,7 +386,7 @@ class GithubReleaseTests(unittest.TestCase):
         self.assertEqual([command[1] for command in state["commands"]], ["view", "upload", "view", "edit"])
 
     def test_test_tags_and_release_candidates_are_prereleases(self):
-        for tag in ["release-test", "v1.0.0-rc1"]:
+        for tag in ["release-test", "v1.0.0-rc1", "v1.0.0-rc.1", "v1.0.0-alpha.1", "v1.0.0-beta.2"]:
             with self.subTest(tag=tag):
                 result, state = self.run_step(
                     "Upload validated files and publish release",

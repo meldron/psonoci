@@ -13,10 +13,32 @@ development and releases. Please use GitLab for
 [issues](https://gitlab.com/esaqa/psono/psono-ci/-/issues) and
 [merge requests](https://gitlab.com/esaqa/psono/psono-ci/-/merge_requests).
 The [primary releases](https://gitlab.com/esaqa/psono/psono-ci/-/releases) link
-to signed archives and SBOMs hosted on `get.psono.com`.
+to signed stable archives and SBOMs hosted on `get.psono.com`.
 
 [GitHub](https://github.com/meldron/psonoci) is a secondary repository with its
 own CI and [release builds](https://github.com/meldron/psonoci/releases).
+
+## Prereleases
+
+Tags such as `v0.7.0-rc.1` create downloadable prereleases on both platforms
+from the same source commit. Supported tags are `vX.Y.Z-alpha.N`,
+`vX.Y.Z-beta.N` and `vX.Y.Z-rc.N`; the Cargo package version must match the tag
+without its leading `v`. Push the same tag to both remotes to start both builds.
+
+Find downloads on the [GitLab releases page](https://gitlab.com/esaqa/psono/psono-ci/-/releases)
+or the secondary [GitHub releases page](https://github.com/meldron/psonoci/releases).
+Each target includes an archive, a CycloneDX SBOM and detached GPG signatures.
+GitLab hosts prerelease files in its Package Registry, so release links survive
+CI artifact expiration. GitHub hosts its files in release Assets and marks the
+release as a prerelease without replacing its latest stable release.
+GitLab uses “Prerelease” in the release name because it has no equivalent flag;
+its generic latest-release permalink can select a prerelease. Use explicit
+stable tags when downloading stable builds.
+
+Prereleases never upload to `get.psono.com` or update its latest binaries.
+Only stable `vX.Y.Z` tags enable those GitLab production jobs. GitLab prerelease
+tags must be protected (covered by `v*`) to access signing credentials; production
+upload credentials must remain scoped to the `release-production` environment.
 
 ## Software bill of materials
 
@@ -30,7 +52,7 @@ for the generation model, verification commands, and declared delivery boundary.
 `psonoci --help`
 
 ```
-psonoci 0.7.0
+psonoci 0.7.0-rc.1
 Bernd Kaiser
 Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)
 

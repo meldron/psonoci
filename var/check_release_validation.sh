@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-bash "$(dirname "$0")/release-mode.sh" validation
+if ! bash "$(dirname "$0")/release-mode.sh" validation; then
+  bash "$(dirname "$0")/release-mode.sh" prerelease
+fi
 if [[ "${CI_COMMIT_REF_PROTECTED:-}" != true ]]; then
-  echo "Release validation requires one of the protected test tags" >&2
+  echo "Release validation requires a protected test or prerelease tag" >&2
   exit 1
 fi
 if [[ ${GOOGLE_APPLICATION_CREDENTIALS+x} ]]; then
@@ -14,4 +16,4 @@ if [[ ! -f "${GPG_PRIVATE_KEY:-}" || ${GPG_PRIVATE_KEY_PASSPHRASE+x} != x ]]; th
   echo "Validation requires the existing GPG key file and signing passphrase" >&2
   exit 1
 fi
-echo "Validation isolation checked: protected test tag, signing configured, no GCP upload credential"
+echo "Validation isolation checked: protected tag, signing configured, no GCP upload credential"

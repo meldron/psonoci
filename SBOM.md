@@ -500,3 +500,12 @@ The initiating user needs access to the source artifacts. A Maintainer-only
 SHA-256 manifest identifies the exact documents checked; this does not rebuild
 or re-sign binaries, or repeat the other release checks. Release tags always
 run the complete pipeline, even if this variable is supplied.
+
+## Prerelease downloads
+
+Prereleases use the same SBOM, signature, schema and archive validation as stable
+releases. GitLab prerelease release links point to the project's Generic Package
+Registry instead of `get.psono.com`; the SBOM distribution URL points to that same
+archive. The `.sig` verification commands above apply. GitHub prereleases retain
+`.asc` signatures and build attestations. Both platforms build the same tagged
+commit, but archives and signatures are produced independently.
