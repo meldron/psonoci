@@ -1,3 +1,7 @@
+# v0.7.0-rc.2 (`2026-11-07`)
+
+- Added: GitLab releases now include the static `armv7-unknown-linux-musleabihf` build, with its signed archive and SBOM, matching GitHub target coverage.
+
 # v0.7.0-rc.1 (`2026-11-06`)
 
 - Added: alpha, beta and release-candidate tags publish downloadable prereleases on GitLab and GitHub, including signed archives and SBOMs, without uploading to `get.psono.com`.

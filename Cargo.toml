@@ -6,7 +6,7 @@ homepage = "https://gitlab.com/esaqa/psono/psono-ci"
 license = "MIT"
 name = "psonoci"
 repository = "https://gitlab.com/esaqa/psono/psono-ci"
-version = "0.7.0-rc.1"
+version = "0.7.0-rc.2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

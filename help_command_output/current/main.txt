@@ -1,4 +1,4 @@
-psonoci 0.7.0-rc.1
+psonoci 0.7.0-rc.2
 Bernd Kaiser
 Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)
 

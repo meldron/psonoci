@@ -52,7 +52,7 @@ for the generation model, verification commands, and declared delivery boundary.
 `psonoci --help`
 
 ```
-psonoci 0.7.0-rc.1
+psonoci 0.7.0-rc.2
 Bernd Kaiser
 Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)
 
@@ -520,7 +520,7 @@ new fixtures and IDs. Existing Psono databases and accounts are not used.
 
 ## Supported Architectures
 
-Primary GitLab releases publish archives for these seven targets:
+The GitLab and GitHub release pipelines build archives for these eight targets:
 
 -   x86_64-unknown-linux-musl
 -   x86_64-pc-windows-msvc
@@ -529,8 +529,10 @@ Primary GitLab releases publish archives for these seven targets:
 -   aarch64-apple-darwin
 -   aarch64-unknown-linux-musl
 -   armv7-unknown-linux-gnueabihf
+-   armv7-unknown-linux-musleabihf
 
-Secondary GitHub releases also include `armv7-unknown-linux-musleabihf`.
+GitLab includes the ARMv7 musl build starting with `v0.7.0-rc.2`. The musl build
+is statically linked, providing an alternative to the glibc ARMv7 build.
 GitHub CI additionally tests `x86_64-unknown-linux-gnu`. Release archives use
 musl for Linux x86_64.
 

@@ -28,6 +28,7 @@ gpg --batch --yes --import "$GPG_PRIVATE_KEY"
 TARGETS=(
   "x86_64-unknown-linux-musl"
   "armv7-unknown-linux-gnueabihf"
+  "armv7-unknown-linux-musleabihf"
   "aarch64-unknown-linux-musl"
   "x86_64-apple-darwin"
   "aarch64-apple-darwin"

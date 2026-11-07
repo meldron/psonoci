@@ -139,6 +139,7 @@ class ReleaseValidationTests(unittest.TestCase):
             '    out.write(json.dumps(sys.argv[1:]) + "\\n")\n')
         generator.chmod(0o755)
         targets = ('x86_64-unknown-linux-musl', 'armv7-unknown-linux-gnueabihf',
+                   'armv7-unknown-linux-musleabihf',
                    'aarch64-unknown-linux-musl', 'x86_64-apple-darwin',
                    'aarch64-apple-darwin', 'x86_64-pc-windows-gnu',
                    'x86_64-pc-windows-msvc')
@@ -158,7 +159,7 @@ class ReleaseValidationTests(unittest.TestCase):
                 result = self.run_script('var/upload_artifacts.sh', **environment)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 calls = [json.loads(line) for line in self.log.read_text().splitlines()]
-                self.assertEqual(len(calls), 7)
+                self.assertEqual(len(calls), 8)
                 for call in calls:
                     self.assertEqual('--artifact-url' in call, tag.startswith('v'))
                     if tag.endswith('-rc.1'):

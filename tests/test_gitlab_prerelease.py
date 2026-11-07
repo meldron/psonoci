@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -67,7 +68,7 @@ class PrereleaseTests(unittest.TestCase):
 
     def test_complete_downloads_are_verified_before_release_creation(self):
         self.publish()
-        self.assertEqual(len(self.client.files), 28)
+        self.assertEqual(len(self.client.files), 32)
         self.assertEqual(self.client.calls[-1], ("POST", "/releases"))
         release = self.client.release
         self.assertIn("Prerelease", release["name"])
@@ -75,7 +76,7 @@ class PrereleaseTests(unittest.TestCase):
         self.assertIn("a" * 40, release["description"])
         self.assertIn("- Added: prereleases", release["description"])
         self.assertNotIn("Old changes", release["description"])
-        self.assertEqual(len(release["assets"]["links"]), 28)
+        self.assertEqual(len(release["assets"]["links"]), 32)
         for link in release["assets"]["links"]:
             self.assertTrue(link["url"].startswith(self.client.base + "/packages/generic/psonoci/"))
             self.assertNotIn("get.psono.com", link["url"])
@@ -85,7 +86,7 @@ class PrereleaseTests(unittest.TestCase):
         path = f"/packages/generic/psonoci/{self.tag}/{first.name}"
         self.client.files[path] = first.read_bytes()
         self.publish()
-        self.assertEqual(sum(method == "PUT" for method, _ in self.client.calls), 27)
+        self.assertEqual(sum(method == "PUT" for method, _ in self.client.calls), 31)
 
     def test_corruption_or_upload_failure_never_creates_release(self):
         for failure in ("corrupt", "fail_upload"):
@@ -123,6 +124,26 @@ class PrereleaseTests(unittest.TestCase):
                 result = subprocess.run(["bash", str(ROOT / "var/release-mode.sh"), "prerelease"],
                                         env=os.environ | {"CI_COMMIT_TAG": tag}, capture_output=True)
                 self.assertEqual(result.returncode == 0, bool(publisher.PRERELEASE.fullmatch(tag)))
+
+    def test_gitlab_build_collection_and_release_links_cover_both_platforms(self):
+        workflow = (ROOT / ".gitlab-ci.yml").read_text()
+        github = (ROOT / ".github/workflows/release.yml").read_text()
+        expected = set(publisher.TARGETS)
+        self.assertIn("armv7-unknown-linux-musleabihf", expected)
+        self.assertEqual(set(re.findall(r"^    BUILD_ENV: (\S+)$", workflow, re.MULTILINE)), expected)
+        self.assertEqual(set(re.findall(r"^\s+target: (\S+)$", github, re.MULTILINE)), expected)
+        collection = workflow.split("\ncollect-artifacts:\n", 1)[1].split("\n.sbom-schema-validator:", 1)[0]
+        dependencies = re.findall(r"^    - build-(\S+)$", collection, re.MULTILINE)
+        self.assertEqual(set(dependencies), expected)
+        release = workflow.split("\ngitlab-release:\n", 1)[1].split("\n  only:", 1)[0]
+        links = re.findall(r'^        - name: "([^"]+)"$', release, re.MULTILINE)
+        names = set()
+        for target in expected:
+            base = f"psonoci-${{CI_COMMIT_TAG}}-{target}"
+            archive = base + (".zip" if "windows" in target else ".tar.gz")
+            names.update((archive, archive + ".sig", base + ".cdx.json", base + ".cdx.json.sig"))
+        self.assertEqual(set(links), names)
+        self.assertEqual(len(links), len(names))
 
 
 if __name__ == "__main__":

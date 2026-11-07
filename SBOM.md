@@ -152,9 +152,8 @@ platform version identifiers require review against the intended SBOM profile.
 ## Rust runtime registry packages
 
 The shared build helper automatically expands registry crates supplied by Rust's
-standard-library distribution into normal Cargo package identities for all seven
-primary GitLab release targets and the additional ARMv7 musl target built by the
-secondary GitHub workflow.
+standard-library distribution into normal Cargo package identities for all eight
+release targets shared by GitLab and the secondary GitHub workflow.
 
 This runs in local builds and CI workflows that use
 `scripts/build-with-runtime-evidence.py`. The helper installs the corresponding
@@ -465,7 +464,7 @@ vulnerability information, for example through VEX or CSAF.
 ## GitLab validation-only releases
 
 The protected tags `gitlab-release-test-tag` and `gitlab-release-test-tag2`
-build the existing seven GitLab targets, package and sign their archives and
+build all eight GitLab targets, package and sign their archives and
 SBOMs, and run the schema, signature, inventory, and static-binary TLS checks.
 They do not upload to download storage or create GitLab Release entries.
 Validation SBOMs omit download-server URLs because those files are not published.
