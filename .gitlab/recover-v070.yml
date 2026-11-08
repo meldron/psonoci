@@ -1,9 +1,0 @@
-recover-v0.7.0-uploads:
-  image: psono-docker.jfrog.io/ubuntu:24.04
-  stage: deploy
-  dependencies: []
-  environment:
-    name: release-production
-    action: access
-  script:
-    - bash .gitlab/recover-v070.sh
