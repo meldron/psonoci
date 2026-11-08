@@ -1,4 +1,7 @@
 include:
+  - local: /.gitlab/recover-v070.yml
+    rules:
+      - if: '$CI_PIPELINE_SOURCE == "api" && $CI_COMMIT_BRANCH == "master" && $CI_COMMIT_REF_PROTECTED == "true" && $RELEASE_RECOVERY_V070 == "true" && $SBOM_SCHEMA_SOURCE_JOB_ID == "17840092943"'
   - local: /.gitlab/validation-artifacts.yml
     rules:
       - if: '$CI_COMMIT_TAG == "gitlab-release-test-tag" || $CI_COMMIT_TAG == "gitlab-release-test-tag2"'
