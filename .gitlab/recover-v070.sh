@@ -59,8 +59,17 @@ for target, alias in aliases.items():
                 shutil.copyfileobj(src, dst)
 PY
 
-# The validated archive set is bound to the protected stable tag above.
-CI_COMMIT_TAG="$release_tag" bash var/publish_release_artifacts.sh
+# The versioned files have already been uploaded and verified.
+CI_COMMIT_TAG="$release_tag" sh var/login_gcp.sh
 for file in release-aliases/*/*; do
-    gsutil cp "$file" "gs://get.psono.com/$CI_PROJECT_PATH/\${file#release-aliases/}"
+    alias_path=${file#release-aliases/}
+    gsutil cp "$file" "gs://get.psono.com/$CI_PROJECT_PATH/$alias_path"
 done
+
+stray_path='${file#release-aliases/}'
+stray_object="gs://get.psono.com/$CI_PROJECT_PATH/$stray_path"
+if gsutil -q stat "$stray_object"; then
+    gsutil cp "$stray_object" /tmp/v070-stray-binary
+    cmp /tmp/v070-stray-binary release-aliases/x86_64-windows/psonoci.exe
+    gsutil rm "$stray_object"
+fi
