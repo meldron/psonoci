@@ -1,9 +1,6 @@
-# v0.7.0-rc.2 (`2026-11-07`)
+# v0.7.0 (`2026-11-08`)
 
 - Added: GitLab releases now include the static `armv7-unknown-linux-musleabihf` build, with its signed archive and SBOM, matching GitHub target coverage.
-
-# v0.7.0-rc.1 (`2026-11-06`)
-
 - Added: alpha, beta and release-candidate tags publish downloadable prereleases on GitLab and GitHub, including signed archives and SBOMs, without uploading to `get.psono.com`.
 - Added: `totp get-token`, `validate-token`, `get-url` and the `totp-*` secret fields now support website authenticators. They accept existing short seeds and period and digit settings stored as strings.
 - Added: each release archive has a signed CycloneDX 1.6 SBOM. It lists Rust dependencies, bundled native libraries and direct external runtime dependencies. Release jobs check signatures, schema, target coverage and archive hashes before publishing. GitHub releases also include artifact attestations.
@@ -19,7 +16,7 @@
 - Changed: vendored native TLS now uses pinned OpenSSL 3.5.9 LTS source. Initialize its Git submodule before building from source. See the README.
 - Changed: this release uses Rust `1.99.1` and updates dependencies and release tools.
 - Changed: GitLab is the primary repository for development and releases; GitHub remains a secondary repository.
-- Changed: security updates cover only the latest stable minor series. Once 0.7.0 is released, earlier versions are no longer supported.
+- Changed: security updates cover the 0.7.x series under the latest stable minor series policy.
 
 # v0.6.0 (`2026-04-06`)
 

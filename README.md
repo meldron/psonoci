@@ -20,10 +20,10 @@ own CI and [release builds](https://github.com/meldron/psonoci/releases).
 
 ## Prereleases
 
-Tags such as `v0.7.0-rc.1` create downloadable prereleases on both platforms
-from the same source commit. Supported tags are `vX.Y.Z-alpha.N`,
+Pushing the same prerelease tag to both remotes creates downloadable
+prereleases from the same source commit. Supported tags are `vX.Y.Z-alpha.N`,
 `vX.Y.Z-beta.N` and `vX.Y.Z-rc.N`; the Cargo package version must match the tag
-without its leading `v`. Push the same tag to both remotes to start both builds.
+without its leading `v`.
 
 Find downloads on the [GitLab releases page](https://gitlab.com/esaqa/psono/psono-ci/-/releases)
 or the secondary [GitHub releases page](https://github.com/meldron/psonoci/releases).
@@ -52,7 +52,7 @@ for the generation model, verification commands, and declared delivery boundary.
 `psonoci --help`
 
 ```
-psonoci 0.7.0-rc.2
+psonoci 0.7.0
 Bernd Kaiser
 Psono CI Client (https://gitlab.com/esaqa/psono/psono-ci)
 
@@ -531,8 +531,8 @@ The GitLab and GitHub release pipelines build archives for these eight targets:
 -   armv7-unknown-linux-gnueabihf
 -   armv7-unknown-linux-musleabihf
 
-GitLab includes the ARMv7 musl build starting with `v0.7.0-rc.2`. The musl build
-is statically linked, providing an alternative to the glibc ARMv7 build.
+The ARMv7 musl build is statically linked, providing an alternative to the
+glibc ARMv7 build.
 GitHub CI additionally tests `x86_64-unknown-linux-gnu`. Release archives use
 musl for Linux x86_64.
 

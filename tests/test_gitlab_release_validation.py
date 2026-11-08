@@ -126,8 +126,11 @@ class ReleaseValidationTests(unittest.TestCase):
     def test_validation_sboms_do_not_claim_download_server_urls(self):
         # Run the real packaging loop with inert substitutes for signing and
         # archiving; inspect the arguments passed to the real SBOM entry point.
-        for name in ('apt-get', 'gpg', 'tar', 'zip'):
+        for name in ('apt-get', 'tar', 'zip'):
             self.stub(name, 'exit 0\n')
+        # Drain the signing passphrase so the packaging script's pipefail
+        # does not turn a test stub closing stdin into a signing failure.
+        self.stub('gpg', 'if [[ " $* " == *" --detach-sign "* ]]; then cat >/dev/null; fi\n')
         (self.root / 'var').mkdir()
         shutil.copyfile(ROOT / 'var/release-mode.sh', self.root / 'var/release-mode.sh')
         scripts = self.root / 'scripts'

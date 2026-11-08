@@ -2,8 +2,7 @@
 
 ## Supported Versions
 
-Only the latest stable minor series receives security updates. After 0.7.0 is
-released, the supported versions are:
+Only the latest stable minor series receives security updates.
 
 | Version | Supported |
 | ------- | --------- |
